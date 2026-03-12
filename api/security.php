@@ -1,5 +1,53 @@
 <?php
 
+function api_bootstrap_env(): void {
+    static $loaded = false;
+    if ($loaded) {
+        return;
+    }
+    $loaded = true;
+
+    $envPath = dirname(__DIR__) . '/.env';
+    if (!is_file($envPath) || !is_readable($envPath)) {
+        return;
+    }
+
+    $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        return;
+    }
+
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+            continue;
+        }
+        $eqPos = strpos($trimmed, '=');
+        if ($eqPos === false) {
+            continue;
+        }
+        $key = trim(substr($trimmed, 0, $eqPos));
+        $value = trim(substr($trimmed, $eqPos + 1));
+        if ($key === '') {
+            continue;
+        }
+
+        $first = $value[0] ?? '';
+        $last = $value[strlen($value) - 1] ?? '';
+        if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+            $value = substr($value, 1, -1);
+        }
+
+        if (getenv($key) === false || getenv($key) === '') {
+            putenv($key . '=' . $value);
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+        }
+    }
+}
+
+api_bootstrap_env();
+
 function api_json_headers(): void {
     header('Content-Type: application/json');
     header('X-Content-Type-Options: nosniff');

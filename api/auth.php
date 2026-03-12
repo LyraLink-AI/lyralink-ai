@@ -15,7 +15,11 @@ $dbUser = $dbCfg['user'];
 $dbPass = $dbCfg['pass'];
 $dbName = $dbCfg['name'];
 
-$db     = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
+mysqli_report(MYSQLI_REPORT_OFF);
+$db = @new mysqli($dbHost, $dbUser, $dbPass, $dbName);
+if ($db->connect_error) {
+    api_fail('DB connection failed', 500);
+}
 $db->set_charset('utf8mb4');
 
 $db->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified TINYINT(1) NOT NULL DEFAULT 0");

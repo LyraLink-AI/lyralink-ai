@@ -1,11 +1,12 @@
 <?php
+require_once __DIR__ . '/../../api/security.php';
 if (file_exists(__DIR__ . '/../../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
 }
 $success   = isset($_GET['success']);
 $cancelled = isset($_GET['cancelled']);
 $tierParam = htmlspecialchars($_GET['tier'] ?? '');
-$paypalClientId = htmlspecialchars(getenv('PAYPAL_CLIENT_ID') ?: ($_ENV['PAYPAL_CLIENT_ID'] ?? ''), ENT_QUOTES, 'UTF-8');
+$paypalClientId = htmlspecialchars(api_get_secret('PAYPAL_CLIENT_ID', ''), ENT_QUOTES, 'UTF-8');
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
