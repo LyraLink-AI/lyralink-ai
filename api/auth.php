@@ -505,10 +505,118 @@ api_enforce_post_and_origin_for_actions([
     'revoke_api_key',
     'discord_sync',
     'discord_unlink',
+    'get_model_options',
     'save_msg',
     'delete_conv',
     'rename_conv',
 ]);
+
+if (!function_exists('auth_parse_model_list')) {
+    function auth_parse_model_list(string $raw, array $fallback): array {
+        $items = array_values(array_filter(array_map('trim', explode(',', $raw)), fn($v) => $v !== ''));
+        return $items ?: $fallback;
+    }
+}
+
+if (!function_exists('auth_parse_csv')) {
+    function auth_parse_csv(string $raw): array {
+        return array_values(array_filter(array_map('trim', explode(',', $raw)), fn($v) => $v !== ''));
+    }
+}
+
+if (!function_exists('auth_allowed_providers_for_plan')) {
+    function auth_allowed_providers_for_plan(string $plan): array {
+        return auth_parse_csv(api_get_secret('LLM_ALLOWED_PROVIDERS_' . strtoupper($plan ?: 'free'), ''));
+    }
+}
+
+if (!function_exists('auth_allowed_models_for_plan')) {
+    function auth_allowed_models_for_plan(string $plan): array {
+        return auth_parse_csv(api_get_secret('LLM_ALLOWED_MODELS_' . strtoupper($plan ?: 'free'), ''));
+    }
+}
+
+if ($action === 'get_model_options') {
+    $groqKey = api_get_secret('GROQ_API_KEY', '');
+    $openRouterKey = api_get_secret('OPENROUTER_API_KEY', '');
+    $openAiKey = api_get_secret('OPENAI_API_KEY', '');
+
+    $groqModels = auth_parse_model_list(api_get_secret('LLM_GROQ_MODELS', ''), [
+        'llama-3.1-8b-instant',
+        'llama-3.3-70b-versatile',
+    ]);
+    $openRouterModels = auth_parse_model_list(api_get_secret('LLM_OPENROUTER_MODELS', ''), [
+        api_get_secret('OPENROUTER_MODEL', 'openclaw/openclaw-7b') ?: 'openclaw/openclaw-7b',
+    ]);
+    $openAiModels = auth_parse_model_list(api_get_secret('LLM_OPENAI_MODELS', ''), [
+        api_get_secret('OPENAI_MODEL', 'gpt-4o-mini') ?: 'gpt-4o-mini',
+    ]);
+
+    $providers = [];
+    if ($groqKey !== '') {
+        $providers[] = ['id' => 'groq', 'label' => 'Groq', 'models' => $groqModels];
+    }
+    if ($openRouterKey !== '') {
+        $providers[] = ['id' => 'openrouter', 'label' => 'OpenRouter', 'models' => $openRouterModels];
+    }
+    if ($openAiKey !== '') {
+        $providers[] = ['id' => 'openai', 'label' => 'OpenAI Compatible', 'models' => $openAiModels];
+    }
+
+    $viewerPlan = 'free';
+    if (!empty($_SESSION['user_id'])) {
+        $uid = (int)$_SESSION['user_id'];
+        $planStmt = $db->prepare("SELECT plan FROM users WHERE id = ? LIMIT 1");
+        if ($planStmt) {
+            $planStmt->bind_param('i', $uid);
+            $planStmt->execute();
+            $row = $planStmt->get_result()->fetch_assoc();
+            $planStmt->close();
+            if (!empty($row['plan'])) {
+                $viewerPlan = (string)$row['plan'];
+            }
+        }
+    }
+
+    $allowedProviders = array_map('strtolower', auth_allowed_providers_for_plan($viewerPlan));
+    $allowedModels = auth_allowed_models_for_plan($viewerPlan);
+
+    if ($allowedProviders) {
+        $providers = array_values(array_filter($providers, fn($p) => in_array(strtolower((string)$p['id']), $allowedProviders, true)));
+    }
+    if ($allowedModels) {
+        $providers = array_values(array_map(function ($p) use ($allowedModels) {
+            $p['models'] = array_values(array_filter($p['models'], fn($m) => in_array($m, $allowedModels, true)));
+            return $p;
+        }, $providers));
+        $providers = array_values(array_filter($providers, fn($p) => !empty($p['models'])));
+    }
+
+    $defaultProvider = strtolower(trim(api_get_secret('LLM_PROVIDER', 'groq')));
+    $providerIds = array_map(fn($p) => $p['id'], $providers);
+    if (!in_array($defaultProvider, $providerIds, true)) {
+        $defaultProvider = $providerIds[0] ?? '';
+    }
+
+    $defaultModel = trim(api_get_secret('LLM_MODEL', ''));
+    if ($defaultModel === '' && $defaultProvider !== '') {
+        foreach ($providers as $p) {
+            if ($p['id'] === $defaultProvider) {
+                $defaultModel = $p['models'][0] ?? '';
+                break;
+            }
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'plan' => $viewerPlan,
+        'providers' => $providers,
+        'default_provider' => $defaultProvider,
+        'default_model' => $defaultModel,
+    ]);
+    exit;
+}
 
 // ── REGISTER ──
 if ($action === 'register') {

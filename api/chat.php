@@ -20,6 +20,119 @@ $groqApiKey     = api_get_secret('GROQ_API_KEY', '');
 $moltbookApiKey = api_get_secret('MOLTBOOK_API_KEY', '');
 $agentName      = 'lyralink';
 
+$llmProviderEnv = strtolower(trim(api_get_secret('LLM_PROVIDER', 'groq')));
+$llmModelEnv    = trim(api_get_secret('LLM_MODEL', ''));
+
+function llm_default_model(string $provider): string {
+    $openRouterModel = trim(api_get_secret('OPENROUTER_MODEL', 'openclaw/openclaw-7b'));
+    $openAiModel = trim(api_get_secret('OPENAI_MODEL', 'gpt-4o-mini'));
+    return match ($provider) {
+        'openrouter' => $openRouterModel !== '' ? $openRouterModel : 'openclaw/openclaw-7b',
+        'openai'     => $openAiModel !== '' ? $openAiModel : 'gpt-4o-mini',
+        default      => 'llama-3.1-8b-instant',
+    };
+}
+
+function llm_provider_available(string $provider): bool {
+    $provider = strtolower($provider);
+    if ($provider === 'openrouter') {
+        return api_get_secret('OPENROUTER_API_KEY', '') !== '';
+    }
+    if ($provider === 'openai') {
+        return api_get_secret('OPENAI_API_KEY', '') !== '';
+    }
+    // Groq is default provider and requires key.
+    return api_get_secret('GROQ_API_KEY', '') !== '';
+}
+
+function llm_first_available_provider(array $preferred = []): string {
+    $order = array_values(array_unique(array_merge($preferred, ['groq', 'openrouter', 'openai'])));
+    foreach ($order as $provider) {
+        if (llm_provider_available($provider)) {
+            return $provider;
+        }
+    }
+    return 'groq';
+}
+
+function llm_parse_csv(string $raw): array {
+    return array_values(array_filter(array_map('trim', explode(',', $raw)), fn($v) => $v !== ''));
+}
+
+function llm_provider_models(string $provider): array {
+    return match (strtolower($provider)) {
+        'openrouter' => llm_parse_csv(api_get_secret('LLM_OPENROUTER_MODELS', api_get_secret('OPENROUTER_MODEL', 'openclaw/openclaw-7b'))),
+        'openai' => llm_parse_csv(api_get_secret('LLM_OPENAI_MODELS', api_get_secret('OPENAI_MODEL', 'gpt-4o-mini'))),
+        default => llm_parse_csv(api_get_secret('LLM_GROQ_MODELS', 'llama-3.1-8b-instant,llama-3.3-70b-versatile')),
+    };
+}
+
+function llm_allowed_providers_for_plan(string $plan): array {
+    $key = 'LLM_ALLOWED_PROVIDERS_' . strtoupper($plan ?: 'free');
+    return llm_parse_csv(api_get_secret($key, ''));
+}
+
+function llm_allowed_models_for_plan(string $plan): array {
+    $key = 'LLM_ALLOWED_MODELS_' . strtoupper($plan ?: 'free');
+    return llm_parse_csv(api_get_secret($key, ''));
+}
+
+function llm_provider_allowed_for_plan(string $provider, string $plan): bool {
+    $allowedProviders = llm_allowed_providers_for_plan($plan);
+    if (!$allowedProviders) {
+        return true;
+    }
+    return in_array(strtolower($provider), array_map('strtolower', $allowedProviders), true);
+}
+
+function llm_model_allowed_for_plan(string $provider, string $model, string $plan): bool {
+    $providerModels = llm_provider_models($provider);
+    if ($providerModels && !in_array($model, $providerModels, true)) {
+        return false;
+    }
+    $allowedModels = llm_allowed_models_for_plan($plan);
+    if (!$allowedModels) {
+        return true;
+    }
+    return in_array($model, $allowedModels, true);
+}
+
+function llm_first_valid_provider_for_plan(string $plan, array $preferred = []): string {
+    $order = array_values(array_unique(array_merge($preferred, ['groq', 'openrouter', 'openai'])));
+    foreach ($order as $provider) {
+        if (llm_provider_available($provider) && llm_provider_allowed_for_plan($provider, $plan)) {
+            return $provider;
+        }
+    }
+    return llm_first_available_provider($preferred);
+}
+
+function llm_first_valid_model_for_plan(string $provider, string $plan): string {
+    $models = llm_provider_models($provider);
+    if (!$models) {
+        return llm_default_model($provider);
+    }
+    foreach ($models as $model) {
+        if (llm_model_allowed_for_plan($provider, $model, $plan)) {
+            return $model;
+        }
+    }
+    return $models[0];
+}
+
+if (!in_array($llmProviderEnv, ['groq', 'openrouter', 'openai'], true)) {
+    $llmProviderEnv = 'groq';
+}
+
+if (!llm_provider_available($llmProviderEnv)) {
+    $llmProviderEnv = llm_first_available_provider([$llmProviderEnv]);
+}
+
+$basePlanModel = $llmModelEnv !== '' ? $llmModelEnv : llm_default_model($llmProviderEnv);
+$enterpriseModel = ($llmProviderEnv === 'groq' && $llmModelEnv === '')
+    ? 'llama-3.3-70b-versatile'
+    : $basePlanModel;
+
 // ── DATABASE CONFIG ──
 $dbCfg = api_db_config([
     'host' => 'localhost',
@@ -36,16 +149,17 @@ $dbName = $dbCfg['name'];
 // PLAN LIMITS
 // ════════════════════════════════
 $planLimits = [
-    'free'       => ['messages' => 1500,  'model' => 'llama-3.1-8b-instant',    'unlimited' => false],
-    'basic'      => ['messages' => 2500,  'model' => 'llama-3.1-8b-instant',    'unlimited' => false],
-    'pro'        => ['messages' => 99999, 'model' => 'llama-3.1-8b-instant',    'unlimited' => true],
-    'enterprise' => ['messages' => 99999, 'model' => 'llama-3.3-70b-versatile', 'unlimited' => true],
+    'free'       => ['messages' => 1500,  'provider' => $llmProviderEnv, 'model' => $basePlanModel,   'unlimited' => false],
+    'basic'      => ['messages' => 2500,  'provider' => $llmProviderEnv, 'model' => $basePlanModel,   'unlimited' => false],
+    'pro'        => ['messages' => 99999, 'provider' => $llmProviderEnv, 'model' => $basePlanModel,   'unlimited' => true],
+    'enterprise' => ['messages' => 99999, 'provider' => $llmProviderEnv, 'model' => $enterpriseModel, 'unlimited' => true],
 ];
 
 // ════════════════════════════════
 // CHECK USER PLAN + ENFORCE LIMITS
 // ════════════════════════════════
 $userPlan    = 'free';
+$userProvider = $llmProviderEnv;
 $userModel   = 'llama-3.1-8b-instant';
 $userCredits = 0;
 $isLoggedIn  = !empty($_SESSION['user_id']);
@@ -74,6 +188,7 @@ if (!$db->connect_error && $isLoggedIn) {
         $userPlan    = $userData['plan'] ?? 'free';
         $userCredits = (int)($userData['credits'] ?? 0);
         $planConfig  = $planLimits[$userPlan] ?? $planLimits['free'];
+        $userProvider = $planConfig['provider'] ?? 'groq';
         $userModel   = $planConfig['model'];
 
         // Check if over limit
@@ -110,6 +225,10 @@ if (!$db->connect_error && $isLoggedIn) {
     }
 }
 
+if ($userModel === '' || $userModel === null) {
+    $userModel = llm_default_model($userProvider);
+}
+
 // ════════════════════════════════
 // LYRALINK PERSONALITY
 // ════════════════════════════════
@@ -137,23 +256,48 @@ STYLE:
 PROMPT;
 
 // ════════════════════════════════
-// HELPER: CALL GROQ
+// HELPER: CALL LLM
 // ════════════════════════════════
-function callGroq($apiKey, $messages, $maxTokens = 1024, $temperature = 0.75, $model = 'llama-3.1-8b-instant') {
+function callLlm(string $provider, array $messages, int $maxTokens = 1024, float $temperature = 0.75, string $model = 'llama-3.1-8b-instant') {
+    $provider = strtolower($provider ?: 'groq');
+    $groqApiKey = api_get_secret('GROQ_API_KEY', '');
+    $openRouterApiKey = api_get_secret('OPENROUTER_API_KEY', '');
+    $openAiApiKey = api_get_secret('OPENAI_API_KEY', '');
+    $openAiBaseUrl = rtrim(api_get_secret('OPENAI_BASE_URL', 'https://api.openai.com/v1'), '/');
+
+    $url = '';
+    $headers = ['Content-Type: application/json'];
+
+    if ($provider === 'openrouter' && $openRouterApiKey !== '') {
+        $url = 'https://openrouter.ai/api/v1/chat/completions';
+        $headers[] = 'Authorization: Bearer ' . $openRouterApiKey;
+        $headers[] = 'HTTP-Referer: https://ai.cloudhavenx.com';
+        $headers[] = 'X-Title: Lyralink AI';
+    } elseif ($provider === 'openai' && $openAiApiKey !== '') {
+        $url = $openAiBaseUrl . '/chat/completions';
+        $headers[] = 'Authorization: Bearer ' . $openAiApiKey;
+    } else {
+        $provider = 'groq';
+        if ($groqApiKey === '') {
+            return null;
+        }
+        $url = 'https://api.groq.com/openai/v1/chat/completions';
+        $headers[] = 'Authorization: Bearer ' . $groqApiKey;
+    }
+
     $data = [
         'model'       => $model,
         'messages'    => $messages,
         'max_tokens'  => $maxTokens,
         'temperature' => $temperature
     ];
-    $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
+
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $apiKey
-    ]);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 45);
     $response = curl_exec($ch);
     curl_close($ch);
     $result = json_decode($response, true);
@@ -264,7 +408,7 @@ function humanAgo($datetime) {
     return round($diff/86400) . 'd ago';
 }
 
-function solveMoltbookVerification($moltResult, $groqApiKey, $moltbookApiKey) {
+function solveMoltbookVerification($moltResult, $moltbookApiKey, $provider, $model) {
     $v = $moltResult['verification']
       ?? $moltResult['post']['verification']
       ?? $moltResult['comment']['verification']
@@ -275,10 +419,10 @@ function solveMoltbookVerification($moltResult, $groqApiKey, $moltbookApiKey) {
     $challenge = $v['challenge_text']    ?? null;
     if (!$code || !$challenge) return;
 
-    $raw = callGroq($groqApiKey, [
+    $raw = callLlm($provider, [
         ['role' => 'system', 'content' => 'You are a math solver. Reply with ONLY the final numeric answer. Just the number — no words, no units, no punctuation. Decimals rounded to 2 places.'],
         ['role' => 'user',   'content' => $challenge]
-    ], 30, 0.0);
+    ], 30, 0.0, $model);
 
     if (!$raw) return;
 
@@ -298,12 +442,42 @@ function solveMoltbookVerification($moltResult, $groqApiKey, $moltbookApiKey) {
 // GET USER MESSAGES + CONTEXT
 // ════════════════════════════════
 $input         = json_decode(file_get_contents('php://input'), true);
+$input         = is_array($input) ? $input : [];
 $messages      = $input['messages']   ?? [];
 $userId        = $input['user_id']    ?? session_id();
 $username      = $input['username']   ?? null;
 $userPlanInput = $input['user_plan']  ?? 'free';
 $moltPosts     = $input['molt_posts'] ?? [];
 $latestUserMsg = '';
+
+if (isset($input['provider']) && is_string($input['provider'])) {
+    $providerInput = strtolower(trim($input['provider']));
+    if (
+        in_array($providerInput, ['groq', 'openrouter', 'openai'], true)
+        && llm_provider_available($providerInput)
+        && llm_provider_allowed_for_plan($providerInput, $userPlan)
+    ) {
+        $userProvider = $providerInput;
+        if ($llmModelEnv === '') {
+            $userModel = llm_first_valid_model_for_plan($userProvider, $userPlan);
+        }
+    }
+}
+if (isset($input['model']) && is_string($input['model']) && trim($input['model']) !== '') {
+    $candidateModel = trim($input['model']);
+    if (llm_model_allowed_for_plan($userProvider, $candidateModel, $userPlan)) {
+        $userModel = $candidateModel;
+    }
+}
+
+if (!llm_provider_available($userProvider) || !llm_provider_allowed_for_plan($userProvider, $userPlan)) {
+    $userProvider = llm_first_valid_provider_for_plan($userPlan, [$llmProviderEnv, 'groq', 'openrouter', 'openai']);
+    $userModel = llm_first_valid_model_for_plan($userProvider, $userPlan);
+}
+
+if (!llm_model_allowed_for_plan($userProvider, $userModel, $userPlan)) {
+    $userModel = llm_first_valid_model_for_plan($userProvider, $userPlan);
+}
 
 // ════════════════════════════════
 // DATASET SEARCH — inject relevant past Q&As
@@ -396,15 +570,20 @@ $trimmedCount = $trimResult['trimmed'];
 // ════════════════════════════════
 $groqStart    = microtime(true);
 $fullMessages = array_merge([['role' => 'system', 'content' => $systemPrompt]], $trimmedMsgs);
-$reply        = callGroq($groqApiKey, $fullMessages, 1024, 0.75, $userModel);
+$reply        = callLlm($userProvider, $fullMessages, 1024, 0.75, $userModel);
 $groqMs       = round((microtime(true) - $groqStart) * 1000);
 
 if (!$reply) {
     // Retry with only the last 4 messages if it still fails
     $fallbackMsgs = array_slice($messages, -4);
     $fullMessages = array_merge([['role' => 'system', 'content' => $systemPrompt]], $fallbackMsgs);
-    $reply        = callGroq($groqApiKey, $fullMessages, 1024, 0.75, $userModel);
+    $reply        = callLlm($userProvider, $fullMessages, 1024, 0.75, $userModel);
     $groqMs       = round((microtime(true) - $groqStart) * 1000);
+}
+
+if (!$reply && $userProvider !== 'groq' && $groqApiKey !== '') {
+    // Provider fallback keeps chat available if selected provider is down/misconfigured.
+    $reply = callLlm('groq', $fullMessages, 1024, 0.75, 'llama-3.1-8b-instant');
 }
 
 if (!$reply) {
@@ -448,10 +627,10 @@ if (!empty($moltbookApiKey) && (time() - $lastComment) > (20 * 60)) {
         $postContent = $post['content'] ?? '';
 
         if ($postId) {
-            $commentText = callGroq($groqApiKey, [
+            $commentText = callLlm($userProvider, [
                 ['role' => 'system', 'content' => $personality . "\n\nWrite a short genuine comment (1-3 sentences) on this Moltbook post. Add real value. Respond with ONLY the comment text."],
                 ['role' => 'user',   'content' => "Post: \"$postTitle\"\n\"" . substr($postContent, 0, 400) . "\""]
-            ], 150, 0.85);
+            ], 150, 0.85, $userModel);
 
             if ($commentText) {
                 $ch2 = curl_init("https://www.moltbook.com/api/v1/posts/$postId/comments");
@@ -521,7 +700,7 @@ if ($keysSet && $enoughMessages && $cooldownPassed && $worthPosting) {
         $postedToMoltbook = true;
         $_SESSION['last_moltbook_post'] = time();
         // Auto-solve verification challenge
-        solveMoltbookVerification($moltResult, $groqApiKey, $moltbookApiKey);
+        solveMoltbookVerification($moltResult, $moltbookApiKey, $userProvider, $userModel);
     }
 }
 
@@ -529,10 +708,10 @@ if ($keysSet && $enoughMessages && $cooldownPassed && $worthPosting) {
 // LET LYRALINK MENTION MOLTBOOK IF POSTED
 // ════════════════════════════════
 if ($postedToMoltbook) {
-    $updated = callGroq($groqApiKey, [
+    $updated = callLlm($userProvider, [
         ['role' => 'system', 'content' => $personality . "\n\nAdd ONE short casual sentence at the very end of your reply mentioning you just shared this to Moltbook. Keep the full original reply intact."],
         ['role' => 'user',   'content' => 'Your reply was: "' . $reply . '". Add the Moltbook mention at the end.']
-    ], 1200, 0.6);
+    ], 1200, 0.6, $userModel);
     if ($updated) $reply = $updated;
 }
 
@@ -543,6 +722,7 @@ echo json_encode(array_filter([
     'posted_to_moltbook' => $postedToMoltbook,
     'debug'              => $devMode ? [
         'model'              => $userModel,
+        'provider'           => $userProvider,
         'groq_ms'            => $groqMs,
         'messages_sent'      => count($trimmedMsgs),
         'messages_trimmed'   => $trimmedCount,

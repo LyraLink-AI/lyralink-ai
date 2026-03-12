@@ -320,6 +320,16 @@ if ($isMaintenance && !$isDevCookie) {
                     <button class="btn-small btn-danger-small" onclick="disable2FA()">Disable 2FA</button>
                 </div>
             </div>
+            <div class="profile-block" style="grid-column:1/-1">
+                <h4>AI Model</h4>
+                <div class="profile-note">Only providers with configured API keys are shown.</div>
+                <div class="discord-sync-row" style="gap:6px">
+                    <select class="auth-input" id="modelProviderSelect" onchange="onModelProviderChange()"></select>
+                    <select class="auth-input" id="modelNameSelect"></select>
+                    <button class="btn-small" onclick="saveModelPreference()">Save Model Settings</button>
+                    <div id="modelSettingsMsg" style="font-size:11px;color:var(--text-muted)"></div>
+                </div>
+            </div>
         </div>
         <div class="auth-modal-actions" style="margin-top:14px">
             <button class="auth-modal-btn primary" onclick="closeProfileSettings()">Done</button>
@@ -333,6 +343,9 @@ let currentUser    = null;
 let currentMoltTab = 'hot';
 const DEV_USERNAME = 'developer';
 let devModeEnabled = true;
+let availableModelProviders = [];
+let selectedLlmProvider = null;
+let selectedLlmModel = null;
 
 // ════════════════════════════════
 // CONVERSATION STORAGE
@@ -825,6 +838,8 @@ async function sendMessage() {
                 username:   currentUser?.username || null,
                 user_plan:  currentUser?.plan     || 'free',
                 molt_posts: moltPosts,
+                provider:   selectedLlmProvider || undefined,
+                model:      selectedLlmModel || undefined,
                 dev_mode:   isDevUser() ? devModeEnabled : false
             })
         });
@@ -901,11 +916,120 @@ function openProfileSettings() {
     backdrop.style.display = 'flex';
     loadDiscordStatus();
     load2FAStatus();
+    loadModelOptions();
 }
 
 function closeProfileSettings() {
     const backdrop = document.getElementById('profileSettingsBackdrop');
     if (backdrop) backdrop.style.display = 'none';
+}
+
+function modelPrefKey(suffix) {
+    const userPart = currentUser?.username ? currentUser.username : 'guest';
+    return 'lyralink_model_' + suffix + '_' + userPart;
+}
+
+function getStoredModelPrefs() {
+    return {
+        provider: localStorage.getItem(modelPrefKey('provider')),
+        model: localStorage.getItem(modelPrefKey('name')),
+    };
+}
+
+function renderModelSelectors(defaultProvider = '', defaultModel = '') {
+    const providerSelect = document.getElementById('modelProviderSelect');
+    const modelSelect = document.getElementById('modelNameSelect');
+    const msg = document.getElementById('modelSettingsMsg');
+    if (!providerSelect || !modelSelect || !msg) return;
+
+    if (!availableModelProviders.length) {
+        providerSelect.innerHTML = '<option value="">No providers configured</option>';
+        modelSelect.innerHTML = '<option value="">No models available</option>';
+        providerSelect.disabled = true;
+        modelSelect.disabled = true;
+        selectedLlmProvider = null;
+        selectedLlmModel = null;
+        msg.style.color = 'var(--error)';
+        msg.textContent = 'No model providers are configured with API keys.';
+        return;
+    }
+
+    providerSelect.disabled = false;
+    modelSelect.disabled = false;
+
+    providerSelect.innerHTML = availableModelProviders
+        .map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`)
+        .join('');
+
+    const stored = getStoredModelPrefs();
+    const providerIds = availableModelProviders.map(p => p.id);
+    const preferredProvider = [stored.provider, selectedLlmProvider, defaultProvider, providerIds[0]].find(v => v && providerIds.includes(v));
+    providerSelect.value = preferredProvider || providerIds[0];
+
+    onModelProviderChange(defaultModel || stored.model || '');
+    msg.style.color = 'var(--text-muted)';
+    msg.textContent = 'Configured providers only are shown.';
+}
+
+function onModelProviderChange(preferredModel = '') {
+    const providerSelect = document.getElementById('modelProviderSelect');
+    const modelSelect = document.getElementById('modelNameSelect');
+    if (!providerSelect || !modelSelect) return;
+
+    const current = availableModelProviders.find(p => p.id === providerSelect.value) || availableModelProviders[0];
+    const models = Array.isArray(current?.models) ? current.models : [];
+
+    modelSelect.innerHTML = models.length
+        ? models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')
+        : '<option value="">No models available</option>';
+
+    const stored = getStoredModelPrefs();
+    const pick = [preferredModel, stored.model, models[0]].find(v => v && models.includes(v));
+    if (pick) modelSelect.value = pick;
+
+    selectedLlmProvider = current?.id || null;
+    selectedLlmModel = modelSelect.value || null;
+}
+
+function saveModelPreference() {
+    const providerSelect = document.getElementById('modelProviderSelect');
+    const modelSelect = document.getElementById('modelNameSelect');
+    const msg = document.getElementById('modelSettingsMsg');
+    if (!providerSelect || !modelSelect || !msg) return;
+
+    if (!providerSelect.value || !modelSelect.value) {
+        msg.style.color = 'var(--error)';
+        msg.textContent = 'Choose a valid provider and model.';
+        return;
+    }
+
+    selectedLlmProvider = providerSelect.value;
+    selectedLlmModel = modelSelect.value;
+    localStorage.setItem(modelPrefKey('provider'), selectedLlmProvider);
+    localStorage.setItem(modelPrefKey('name'), selectedLlmModel);
+    msg.style.color = 'var(--success)';
+    msg.textContent = 'Saved. New messages will use this model.';
+}
+
+async function loadModelOptions() {
+    const msg = document.getElementById('modelSettingsMsg');
+    try {
+        const fd = new FormData();
+        fd.append('action', 'get_model_options');
+        const data = await (await fetch('/api/auth.php', { method: 'POST', body: fd })).json();
+        if (!data?.success) {
+            throw new Error(data?.error || 'Failed to load model options');
+        }
+        availableModelProviders = Array.isArray(data.providers) ? data.providers : [];
+        renderModelSelectors(data.default_provider || '', data.default_model || '');
+    } catch (e) {
+        availableModelProviders = [];
+        renderModelSelectors('', '');
+        if (msg) {
+            msg.style.color = 'var(--error)';
+            msg.textContent = 'Could not load model options.';
+        }
+    }
 }
 
 function openAuthPrompt(config = {}) {
@@ -1133,6 +1257,7 @@ function showLoggedIn(username) {
     loadConvList();
     loadDiscordStatus();
     load2FAStatus();
+    loadModelOptions();
     // Show admin link for dev account
     if (username === DEV_USERNAME) {
         document.getElementById('adminLink').style.display = 'inline-block';
