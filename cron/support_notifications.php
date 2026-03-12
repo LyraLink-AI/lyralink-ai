@@ -1,9 +1,18 @@
 <?php
 
-$dbHost = getenv('DB_HOST') ?: 'localhost';
-$dbUser = getenv('DB_USER') ?: 'app_user';
-$dbPass = getenv('DB_PASS') ?: '';
-$dbName = getenv('DB_NAME') ?: 'aicloud';
+require_once __DIR__ . '/../api/security.php';
+
+$dbCfg = api_db_config([
+    'host' => 'localhost',
+    'user' => 'app_user',
+    'pass' => '',
+    'name' => 'aicloud',
+]);
+
+$dbHost = $dbCfg['host'];
+$dbUser = $dbCfg['user'];
+$dbPass = $dbCfg['pass'];
+$dbName = $dbCfg['name'];
 
 $db = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
 if ($db->connect_error) {
