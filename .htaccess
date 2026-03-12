@@ -1,0 +1,19 @@
+Options -Indexes
+RewriteEngine On
+
+# 301 redirect old .php URLs to clean versions (pages/)
+RewriteCond %{THE_REQUEST} /pages/([^.]+)\.php [NC]
+RewriteRule ^ /pages/%1/ [R=301,L]
+
+# /chat → index.php
+RewriteRule ^chat/?$ chat.php [L]
+
+# / → landing page
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^$ landing.php [L]
+
+# Clean URLs for pages/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^pages/([^/]+)/?$ pages/$1.php [L]

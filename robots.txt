@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /pages/admin
+Disallow: /pages/support_admin
+Disallow: /pages/maintenance
+Disallow: /cron/
+
+Sitemap: https://ai.cloudhavenx.com/sitemap.xml
