@@ -11,7 +11,7 @@ Please do not open public issues for security vulnerabilities.
 
 Report vulnerabilities privately to:
 
-- security@lyralink.ai
+- security@cloudhavenx.com
 
 If email is unavailable, open a private advisory in GitHub Security Advisories.
 
