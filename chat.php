@@ -38,6 +38,15 @@ if ($isMaintenance && !$isDevCookie) {
         .auth-modal-error{margin-top:8px;font-size:11px;color:#ef4444;min-height:16px}
         .auth-code-list{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
         .auth-code-item{background:#020617;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;text-align:center;letter-spacing:1px}
+        .profile-settings-wrap{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(124,58,237,0.06)}
+        .profile-settings-title{font-size:11px;color:var(--text-muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.6px}
+        .profile-settings-btn{width:100%}
+        .profile-modal-card{width:min(620px,100%);max-height:min(88vh,760px);overflow:auto}
+        .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+        .profile-block{background:#020617;border:1px solid #334155;border-radius:10px;padding:12px}
+        .profile-block h4{font-size:12px;color:#cbd5e1;margin-bottom:8px}
+        .profile-note{font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:8px}
+        @media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
@@ -48,7 +57,7 @@ if ($isMaintenance && !$isDevCookie) {
 <!-- MOBILE DRAWER: Conversations -->
 <div class="mobile-drawer" id="mobileDrawer">
     <div class="drawer-header">
-        <img src="/assets/lyralinklogo.png" alt="Lyralink" class="drawer-logo">
+        <img src="/assets/lyralogowide.png" alt="Lyralink" class="drawer-logo">
         <button class="drawer-close" onclick="closeDrawer()">✕</button>
     </div>
     <button class="drawer-new-btn" onclick="newConversation(); closeDrawer()">+ New Chat</button>
@@ -58,7 +67,7 @@ if ($isMaintenance && !$isDevCookie) {
 <!-- LEFT: CONVERSATIONS (desktop) -->
 <nav class="conv-panel">
     <div class="conv-header">
-        <img src="/assets/lyralinklogo.png" alt="Lyralink" class="conv-logo">
+        <img src="/assets/lyralogowide.png" alt="Lyralink" class="conv-logo">
     </div>
     <button class="new-chat-btn" onclick="newConversation()">+ New Chat</button>
     <div class="conv-list" id="convList"></div>
@@ -125,30 +134,9 @@ if ($isMaintenance && !$isDevCookie) {
                 <div class="user-name" id="userNameDisplay"></div>
                 <button class="btn-small" onclick="logout()">Logout</button>
             </div>
-            <div class="discord-sync-section" id="discordSyncSection">
-                <div class="discord-linked" id="discordLinked" style="display:none">
-                    <span class="discord-icon">🔗</span>
-                    <span class="discord-tag-display" id="discordTagDisplay"></span>
-                    <button class="btn-small btn-danger-small" onclick="discordUnlink()">Unlink</button>
-                </div>
-                <div class="discord-unlinked" id="discordUnlinked" style="display:none">
-                    <div class="discord-sync-label">Link Discord</div>
-                    <div class="discord-sync-row">
-                        <input class="auth-input" type="text" id="discordSyncToken" placeholder="Enter code from .sync" maxlength="10" style="text-transform:uppercase;letter-spacing:2px">
-                        <button class="auth-btn" onclick="redeemDiscordSync()" style="margin-top:4px">Link</button>
-                    </div>
-                    <div id="discordSyncMsg" style="font-size:11px;margin-top:4px"></div>
-                </div>
-            </div>
-            <div class="discord-sync-section" style="margin-top:10px">
-                <div class="discord-sync-label">Two-Factor Security</div>
-                <div id="twoFAStatusMsg" style="font-size:11px;color:var(--text-muted);margin:6px 0 8px">Loading 2FA status...</div>
-                <div class="discord-sync-row" style="gap:6px;display:flex;flex-wrap:wrap">
-                    <button class="btn-small" onclick="setupTotp2FA()">Enable Authenticator App</button>
-                    <button class="btn-small" onclick="registerYubiKey2FA()">Enable YubiKey</button>
-                    <button class="btn-small" onclick="regenerateRecoveryCodes()">New Recovery Codes</button>
-                    <button class="btn-small btn-danger-small" onclick="disable2FA()">Disable 2FA</button>
-                </div>
+            <div class="profile-settings-wrap">
+                <div class="profile-settings-title">Account Settings</div>
+                <button class="btn-small profile-settings-btn" onclick="openProfileSettings()">Open Profile Settings</button>
             </div>
         </div>
         <div id="userLoggedOut">
@@ -301,6 +289,44 @@ if ($isMaintenance && !$isDevCookie) {
     </div>
 </div>
 
+<div class="auth-modal-backdrop" id="profileSettingsBackdrop">
+    <div class="auth-modal-card profile-modal-card">
+        <div class="auth-modal-title">Profile Settings</div>
+        <div class="auth-modal-sub">Manage account security and integrations from one place.</div>
+        <div class="profile-grid">
+            <div class="profile-block" id="discordSyncSection">
+                <h4>Discord Link</h4>
+                <div class="profile-note">Connect your Discord account to sync support and identity features.</div>
+                <div class="discord-linked" id="discordLinked" style="display:none">
+                    <span class="discord-icon">🔗</span>
+                    <span class="discord-tag-display" id="discordTagDisplay"></span>
+                    <button class="btn-small btn-danger-small" onclick="discordUnlink()">Unlink</button>
+                </div>
+                <div class="discord-unlinked" id="discordUnlinked" style="display:none">
+                    <div class="discord-sync-row">
+                        <input class="auth-input" type="text" id="discordSyncToken" placeholder="Enter code from .sync" maxlength="10" style="text-transform:uppercase;letter-spacing:2px">
+                        <button class="auth-btn" onclick="redeemDiscordSync()" style="margin-top:4px">Link</button>
+                    </div>
+                    <div id="discordSyncMsg" style="font-size:11px;margin-top:4px"></div>
+                </div>
+            </div>
+            <div class="profile-block">
+                <h4>Two-Factor Authentication</h4>
+                <div id="twoFAStatusMsg" class="profile-note">Loading 2FA status...</div>
+                <div class="discord-sync-row" style="gap:6px;display:flex;flex-wrap:wrap">
+                    <button class="btn-small" onclick="setupTotp2FA()">Enable Authenticator App</button>
+                    <button class="btn-small" onclick="registerYubiKey2FA()">Enable YubiKey</button>
+                    <button class="btn-small" onclick="regenerateRecoveryCodes()">New Recovery Codes</button>
+                    <button class="btn-small btn-danger-small" onclick="disable2FA()">Disable 2FA</button>
+                </div>
+            </div>
+        </div>
+        <div class="auth-modal-actions" style="margin-top:14px">
+            <button class="auth-modal-btn primary" onclick="closeProfileSettings()">Done</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // ── GLOBALS ──
 let currentUser    = null;
@@ -320,8 +346,97 @@ let msgCache    = {};   // { conv_id: [{role, content}] }
 let activeConvId = null;
 let syncPending = {};   // conv_id → true while a save is in flight
 
+const ACTIVE_CONV_GLOBAL_KEY = 'lyralink_active_conv_global';
+const ACTIVE_CONV_BACKUP_KEY = 'lyralink_active_conv_backup';
+const SHADOW_CONVS_KEY = 'lyralink_convs_shadow';
+
 function genId() { return 'conv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
 function isLoggedIn() { return !!currentUser; }
+
+function backupStorageKey() {
+    if (isLoggedIn() && currentUser?.username) {
+        return 'lyralink_convs_backup_' + currentUser.username;
+    }
+    return 'lyralink_convs_backup_guest';
+}
+
+function backupLoad() {
+    try {
+        return JSON.parse(localStorage.getItem(backupStorageKey()) || '[]');
+    } catch (_) {
+        return [];
+    }
+}
+
+function shadowLoad() {
+    try {
+        return JSON.parse(localStorage.getItem(SHADOW_CONVS_KEY) || '[]');
+    } catch (_) {
+        return [];
+    }
+}
+
+function persistBackupFromCache() {
+    const rows = convCache.map(c => ({
+        id: c.conv_id,
+        title: c.title || 'New Chat',
+        createdAt: c.updated_at || Date.now(),
+        messages: msgCache[c.conv_id] || [],
+    }));
+    localStorage.setItem(backupStorageKey(), JSON.stringify(rows));
+    localStorage.setItem(SHADOW_CONVS_KEY, JSON.stringify(rows));
+}
+
+function hydrateCacheFromRows(rows) {
+    convCache = rows.map(c => ({
+        conv_id: c.id,
+        title: c.title,
+        msg_count: c.messages?.length || 0,
+        updated_at: c.createdAt || Date.now(),
+    }));
+    msgCache = {};
+    rows.forEach(c => { msgCache[c.id] = Array.isArray(c.messages) ? c.messages : []; });
+}
+
+function setActiveConvState(id) {
+    activeConvId = id || null;
+
+    if (isLoggedIn() && currentUser?.username && activeConvId) {
+        localStorage.setItem('lyralink_active_conv_' + currentUser.username, activeConvId);
+    } else if (!isLoggedIn()) {
+        guestSetActive(activeConvId || '');
+    }
+
+    if (activeConvId) {
+        localStorage.setItem(ACTIVE_CONV_GLOBAL_KEY, activeConvId);
+        localStorage.setItem(ACTIVE_CONV_BACKUP_KEY, activeConvId);
+        const next = new URL(window.location.href);
+        next.searchParams.set('c', activeConvId);
+        history.replaceState(null, '', next.pathname + next.search + next.hash);
+    } else {
+        localStorage.removeItem(ACTIVE_CONV_GLOBAL_KEY);
+        localStorage.removeItem(ACTIVE_CONV_BACKUP_KEY);
+        const next = new URL(window.location.href);
+        next.searchParams.delete('c');
+        history.replaceState(null, '', next.pathname + next.search + next.hash);
+    }
+}
+
+function resolvePreferredConvId() {
+    const urlId = new URLSearchParams(window.location.search).get('c');
+    const userId = isLoggedIn() && currentUser?.username
+        ? localStorage.getItem('lyralink_active_conv_' + currentUser.username)
+        : null;
+    const guestId = !isLoggedIn() ? guestGetActive() : null;
+    const globalId = localStorage.getItem(ACTIVE_CONV_GLOBAL_KEY);
+    const backupId = localStorage.getItem(ACTIVE_CONV_BACKUP_KEY);
+    const candidates = [urlId, userId, guestId, globalId, backupId].filter(Boolean);
+
+    for (const id of candidates) {
+        if (convCache.find(c => c.conv_id === id)) return id;
+    }
+    return convCache[0]?.conv_id ?? null;
+}
 
 // ── GUEST FALLBACK (localStorage) ──
 function guestLoad()       { return JSON.parse(localStorage.getItem('lyralink_convs') || '[]'); }
@@ -345,42 +460,66 @@ async function loadConvList() {
     if (!isLoggedIn()) {
         // Guest: build cache from localStorage
         const stored = guestLoad();
-        convCache    = stored.map(c => ({
-            conv_id:   c.id,
-            title:     c.title,
-            msg_count: c.messages?.length || 0,
-            updated_at: c.createdAt || 0
-        }));
-        msgCache = {};
-        stored.forEach(c => { msgCache[c.id] = c.messages || []; });
-        activeConvId = guestGetActive() || (convCache[0]?.conv_id ?? null);
+        if (stored.length) {
+            hydrateCacheFromRows(stored);
+        } else {
+            const backupRows = backupLoad();
+            if (backupRows.length) {
+                hydrateCacheFromRows(backupRows);
+            } else {
+                hydrateCacheFromRows(shadowLoad());
+            }
+        }
+        setActiveConvState(resolvePreferredConvId());
         renderConvList();
         renderConvList(true);
         renderChat();
+        persistBackupFromCache();
         return;
     }
 
     const data = await apiConv('list_convs');
+    if (!data.success || !Array.isArray(data.convs)) {
+        const fallbackRows = backupLoad().length ? backupLoad() : shadowLoad();
+        if (fallbackRows.length) {
+            hydrateCacheFromRows(fallbackRows);
+            setActiveConvState(resolvePreferredConvId());
+            renderConvList();
+            renderConvList(true);
+            renderChat();
+            persistBackupFromCache();
+            return;
+        }
+    }
+
     if (data.success) {
         convCache = data.convs;
         msgCache  = {};
 
         if (convCache.length === 0) {
+            const backupRows = backupLoad().length ? backupLoad() : shadowLoad();
+            if (backupRows.length > 0) {
+                hydrateCacheFromRows(backupRows);
+                setActiveConvState(resolvePreferredConvId());
+                renderConvList();
+                renderConvList(true);
+                renderChat();
+                return;
+            }
+
             // First login — create a fresh conversation
             await newConversation();
             return;
         }
 
-        // Restore last active conv
-        const lastId = localStorage.getItem('lyralink_active_conv_' + currentUser.username);
-        activeConvId = (lastId && convCache.find(c => c.conv_id === lastId))
-            ? lastId
-            : convCache[0].conv_id;
+        // Restore active conversation from URL/session/local fallback.
+        setActiveConvState(resolvePreferredConvId());
 
         renderConvList();
         renderConvList(true);
         await loadMessages(activeConvId);
         renderChat();
+        persistBackupFromCache();
     }
 }
 
@@ -395,7 +534,15 @@ async function loadMessages(convId) {
     }
 
     const data = await apiConv('get_conv', { conv_id: convId });
-    msgCache[convId] = data.success ? data.messages.map(m => ({ role: m.role, content: m.content })) : [];
+    if (data.success) {
+        msgCache[convId] = data.messages.map(m => ({ role: m.role, content: m.content }));
+        persistBackupFromCache();
+        return;
+    }
+
+    const backupRows = backupLoad();
+    const backup = (backupRows.find(c => c.id === convId) || shadowLoad().find(c => c.id === convId));
+    msgCache[convId] = backup?.messages || [];
 }
 
 // ── GET ACTIVE CONVERSATION MESSAGES ──
@@ -408,29 +555,26 @@ async function newConversation() {
     const newId = genId();
     convCache.unshift({ conv_id: newId, title: 'New Chat', msg_count: 0, updated_at: Date.now() });
     msgCache[newId] = [];
-    activeConvId    = newId;
+    setActiveConvState(newId);
 
     if (isLoggedIn()) {
-        localStorage.setItem('lyralink_active_conv_' + currentUser.username, newId);
         // Persist empty conv so it shows up on reload — saved properly when first message arrives
     } else {
         const stored = guestLoad();
         stored.push({ id: newId, title: 'New Chat', messages: [], createdAt: Date.now() });
         guestSave(stored);
-        guestSetActive(newId);
     }
 
     renderConvList();
     renderConvList(true);
     renderChat();
+    persistBackupFromCache();
     document.getElementById('userInput').focus();
 }
 
 // ── SWITCH CONVERSATION ──
 async function switchConversation(id) {
-    activeConvId = id;
-    if (isLoggedIn()) localStorage.setItem('lyralink_active_conv_' + currentUser.username, id);
-    else guestSetActive(id);
+    setActiveConvState(id);
 
     renderConvList();
     renderConvList(true);
@@ -458,16 +602,17 @@ async function deleteConversation(id) {
     }
 
     if (activeConvId === id) {
+        setActiveConvState(null);
         if (convCache.length > 0) {
             await switchConversation(convCache[0].conv_id);
         } else {
-            activeConvId = null;
             await newConversation();
         }
         return;
     }
     renderConvList();
     renderConvList(true);
+    persistBackupFromCache();
 }
 
 // ── CLEAR CURRENT CHAT ──
@@ -489,11 +634,15 @@ async function clearCurrentChat() {
     renderConvList();
     renderConvList(true);
     renderChat();
+    persistBackupFromCache();
 }
 
 // ── SAVE MESSAGE ──
 async function saveMessage(role, content) {
     if (!activeConvId) return;
+
+    // Keep current conversation pinned as active during refreshes.
+    setActiveConvState(activeConvId);
 
     // Update local cache
     if (!msgCache[activeConvId]) msgCache[activeConvId] = [];
@@ -510,14 +659,18 @@ async function saveMessage(role, content) {
 
     renderConvList();
     renderConvList(true);
+    persistBackupFromCache();
 
     if (isLoggedIn()) {
-        apiConv('save_msg', {
+        const saveResult = await apiConv('save_msg', {
             conv_id: activeConvId,
             role,
             content,
             title: conv?.title || 'New Chat'
         });
+        if (!saveResult?.success) {
+            console.warn('save_msg failed:', saveResult?.error || 'unknown error');
+        }
     } else {
         const stored = guestLoad();
         const idx    = stored.findIndex(c => c.id === activeConvId);
@@ -646,7 +799,7 @@ async function sendMessage() {
     clearInput();
     setInputDisabled(true);
     chatbox.scrollTop = chatbox.scrollHeight;
-    saveMessage('user', message);
+    await saveMessage('user', message);
 
     const messages = [
         ...getActiveMessages().slice(0, -1),
@@ -697,7 +850,7 @@ async function sendMessage() {
         const moltNotice = data.posted_to_moltbook ? `<div class="molt-notice">🦞 Shared to Moltbook!</div>` : '';
         chatbox.innerHTML += `<div class="msg ai"><div class="avatar">⚡</div><div class="bubble">${renderMarkdown(reply)}${moltNotice}</div></div>`;
 
-        saveMessage('assistant', reply);
+        await saveMessage('assistant', reply);
         const conv = convCache.find(c => c.conv_id === activeConvId);
         document.getElementById('chatTitle').textContent = conv?.title || 'Chat';
         document.getElementById('chatTitle').className   = 'chat-title has-msgs';
@@ -739,6 +892,19 @@ function showRecoveryCodesModal(codes) {
 
 function closeRecoveryCodesModal() {
     const backdrop = document.getElementById('recoveryCodesBackdrop');
+    if (backdrop) backdrop.style.display = 'none';
+}
+
+function openProfileSettings() {
+    const backdrop = document.getElementById('profileSettingsBackdrop');
+    if (!backdrop) return;
+    backdrop.style.display = 'flex';
+    loadDiscordStatus();
+    load2FAStatus();
+}
+
+function closeProfileSettings() {
+    const backdrop = document.getElementById('profileSettingsBackdrop');
     if (backdrop) backdrop.style.display = 'none';
 }
 

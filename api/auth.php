@@ -82,6 +82,28 @@ $db->query("CREATE TABLE IF NOT EXISTS auth_rate_limits (
     KEY idx_blocked_until (blocked_until)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+$db->query("CREATE TABLE IF NOT EXISTS user_convs (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    conv_id VARCHAR(80) NOT NULL,
+    user_id INT NOT NULL,
+    title VARCHAR(100) NOT NULL DEFAULT 'New Chat',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_conv_id (conv_id),
+    KEY idx_user_updated (user_id, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+$db->query("CREATE TABLE IF NOT EXISTS user_conv_messages (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    conv_id VARCHAR(80) NOT NULL,
+    role ENUM('user','assistant') NOT NULL,
+    content MEDIUMTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_conv_created (conv_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
 function auth_finalize_login(array $user): void {
     $_SESSION['user_id'] = (int)$user['id'];
     $_SESSION['username'] = $user['username'];
@@ -1100,10 +1122,14 @@ if ($action === 'list_convs') {
         FROM user_convs c
         LEFT JOIN user_conv_messages m ON m.conv_id = c.conv_id
         WHERE c.user_id = ?
-        GROUP BY c.conv_id
+        GROUP BY c.conv_id, c.title, c.updated_at
         ORDER BY c.updated_at DESC
         LIMIT 50
     ");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'convs' => [], 'error' => 'Failed to prepare conversation list']);
+        exit;
+    }
     $stmt->bind_param('i', $uid);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -1123,6 +1149,10 @@ if ($action === 'get_conv') {
 
     // Verify ownership
     $check = $db->prepare("SELECT id FROM user_convs WHERE conv_id = ? AND user_id = ?");
+    if (!$check) {
+        echo json_encode(['success' => false, 'error' => 'Failed to verify conversation ownership']);
+        exit;
+    }
     $check->bind_param('si', $convId, $uid);
     $check->execute();
     $checkResult = $check->get_result();
@@ -1134,6 +1164,10 @@ if ($action === 'get_conv') {
     $check->close();
 
     $stmt = $db->prepare("SELECT role, content FROM user_conv_messages WHERE conv_id = ? ORDER BY created_at ASC");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to load conversation']);
+        exit;
+    }
     $stmt->bind_param('s', $convId);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -1160,14 +1194,30 @@ if ($action === 'save_msg') {
     // Upsert conversation
     $stmt = $db->prepare("INSERT INTO user_convs (conv_id, user_id, title, updated_at) VALUES (?, ?, ?, NOW())
                 ON DUPLICATE KEY UPDATE title = VALUES(title), updated_at = NOW()");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to prepare conversation save']);
+        exit;
+    }
     $stmt->bind_param('sis', $convId, $uid, $title);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        $stmt->close();
+        echo json_encode(['success' => false, 'error' => 'Failed to save conversation']);
+        exit;
+    }
     $stmt->close();
 
     // Insert message
     $stmt = $db->prepare("INSERT INTO user_conv_messages (conv_id, role, content) VALUES (?, ?, ?)");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to prepare message save']);
+        exit;
+    }
     $stmt->bind_param('sss', $convId, $role, $content);
-    $stmt->execute();
+    if (!$stmt->execute()) {
+        $stmt->close();
+        echo json_encode(['success' => false, 'error' => 'Failed to save message']);
+        exit;
+    }
     $stmt->close();
 
     echo json_encode(['success' => true]);
@@ -1181,11 +1231,19 @@ if ($action === 'delete_conv') {
     $convId = trim($_POST['conv_id'] ?? '');
 
     $stmt = $db->prepare("DELETE FROM user_convs WHERE conv_id = ? AND user_id = ?");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to delete conversation']);
+        exit;
+    }
     $stmt->bind_param('si', $convId, $uid);
     $stmt->execute();
     $stmt->close();
 
     $stmt = $db->prepare("DELETE FROM user_conv_messages WHERE conv_id = ?");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to delete conversation messages']);
+        exit;
+    }
     $stmt->bind_param('s', $convId);
     $stmt->execute();
     $stmt->close();
@@ -1201,6 +1259,10 @@ if ($action === 'rename_conv') {
     $title  = substr($_POST['title'] ?? 'New Chat', 0, 100);
 
     $stmt = $db->prepare("UPDATE user_convs SET title = ? WHERE conv_id = ? AND user_id = ?");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'error' => 'Failed to rename conversation']);
+        exit;
+    }
     $stmt->bind_param('ssi', $title, $convId, $uid);
     $stmt->execute();
     $stmt->close();

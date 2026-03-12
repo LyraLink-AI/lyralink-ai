@@ -20,12 +20,14 @@
             background: var(--surface); display: flex; flex-direction: column; z-index: 1;
         }
         .conv-header {
-            padding: 14px 14px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+            padding: 16px 14px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+            background: linear-gradient(180deg, rgba(124,58,237,0.08) 0%, rgba(124,58,237,0.02) 65%, transparent 100%);
         }
         .conv-logo {
-            height: 32px; width: auto; display: block;
+            width: 100%; height: auto; max-height: 56px; object-fit: contain; display: block;
             /* logo has black bg — blend it out */
             mix-blend-mode: lighten;
+            filter: drop-shadow(0 0 10px rgba(124,58,237,0.28));
         }
         .new-chat-btn {
             margin: 10px; padding: 9px; background: var(--accent); color: white;
@@ -273,8 +275,12 @@
             .drawer-header {
                 padding: 20px 16px 14px; border-bottom: 1px solid var(--border);
                 display: flex; align-items: center; justify-content: space-between;
+                background: linear-gradient(180deg, rgba(124,58,237,0.1) 0%, rgba(124,58,237,0.03) 70%, transparent 100%);
             }
-            .drawer-logo { height: 28px; width: auto; mix-blend-mode: lighten; }
+            .drawer-logo {
+                width: 100%; height: auto; max-height: 46px; object-fit: contain; mix-blend-mode: lighten;
+                filter: drop-shadow(0 0 9px rgba(124,58,237,0.24));
+            }
             .drawer-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; }
             .drawer-title span { color: var(--accent-light); }
             .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; padding: 4px; }
