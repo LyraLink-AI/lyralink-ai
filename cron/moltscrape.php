@@ -1,4 +1,6 @@
 <?php
+require __DIR__ . '/../api/security.php';
+
 /**
  * cron/moltscrape.php
  * Scrapes Moltbook posts + comments and saves to DB for use in AI context.

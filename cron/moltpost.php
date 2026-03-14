@@ -1,4 +1,6 @@
 <?php
+require __DIR__ . '/../api/security.php';
+
 // ── CONFIG ──
 $groqApiKey     = getenv('GROQ_API_KEY') ?: '';
 $moltbookApiKey = getenv('MOLTBOOK_API_KEY') ?: '';
@@ -51,7 +53,7 @@ function solveVerification($data, $groqApiKey, $moltbookApiKey) {
     echo "[".date('H:i:s')."] Challenge: $challenge\n";
 
     $raw = callGroq($groqApiKey, [
-        ['role'=>'system','content'=>'You are a math solver. Reply with ONLY the final numeric answer. Just the number — no words, no units, no punctuation. Decimals rounded to 2 places.'],
+        ['role'=>'system','content'=>'You are a math solver. The challenge text may be obfuscated with random case, symbols, and spacing. (1) First, extract ONLY the actual math problem by removing obfuscation. (2) Parse all numbers and units carefully—handle unit conversions (e.g., meters/second to centimeters/second). (3) Solve step-by-step. (4) Reply with ONLY the final numeric answer rounded to 2 decimal places. No words, no units, no punctuation. Just the number.'],
         ['role'=>'user','content'=>$challenge]
     ], 30, 0.0);
 
