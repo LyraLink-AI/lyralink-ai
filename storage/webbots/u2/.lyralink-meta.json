@@ -1,0 +1,10 @@
+{
+    "created_at": "2026-03-14T01:09:04+00:00",
+    "sftp": {
+        "enabled": true,
+        "username": "wb2",
+        "password": "8826c7b68620457a",
+        "port": 22000,
+        "updated_at": "2026-03-14T01:09:04+00:00"
+    }
+}

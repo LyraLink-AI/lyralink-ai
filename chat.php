@@ -84,6 +84,7 @@ if ($isMaintenance && !$isDevCookie) {
             <a href="/pages/support" class="footer-link">Support</a>
             <a href="/pages/status" class="footer-link">Status</a>
             <a href="/pages/careers" class="footer-link">Careers</a>
+            <a href="/pages/webbot" class="footer-link">Discord Bot</a>
         </div>
         <div class="conv-footer-version">v1.0.0</div>
     </div>

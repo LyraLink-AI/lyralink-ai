@@ -226,6 +226,14 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
             </div>
             <span class="link-arrow">→</span>
         </a>
+        <a href="/pages/webbot_admin.php" class="link-card">
+            <span class="link-icon">🧩</span>
+            <div class="link-info">
+                <div class="link-name">Web Bot Instances</div>
+                <div class="link-desc">Inspect, restart, SFTP-enable, or delete every bot workspace</div>
+            </div>
+            <span class="link-arrow">→</span>
+        </a>
     </div>
 
 </div>
