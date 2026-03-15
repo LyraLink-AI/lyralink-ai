@@ -38,6 +38,8 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px; }
         .btn { background:var(--surface2); border:1px solid #303049; color:var(--text); border-radius:10px; font-family:'DM Mono', monospace; font-size:12px; padding:8px 11px; cursor:pointer; }
         .btn:hover { border-color:#ff8c5d; color:#fff; }
+        .btn:disabled { opacity:.48; cursor:not-allowed; border-color:#2a2a3c; color:#8a8fa1; }
+        .btn:disabled:hover { border-color:#2a2a3c; color:#8a8fa1; }
         .btn.accent { background:rgba(255,107,53,.17); border-color:#ff8c5d; color:#ffd9c8; }
         .btn.ok { border-color:rgba(34,197,94,.5); color:#9ef0bb; }
         .btn.bad { border-color:rgba(239,68,68,.45); color:#ffb4b4; }
@@ -62,6 +64,9 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .msg { margin-top:12px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--text-muted); min-height:38px; }
         .msg.ok { border-color:rgba(34,197,94,.5); color:#9ef0bb; }
         .msg.bad { border-color:rgba(239,68,68,.45); color:#ffb4b4; }
+        .diag { margin-top:10px; padding:10px 12px; border-radius:10px; border:1px solid rgba(239,68,68,.4); background:rgba(127,29,29,.12); color:#ffd3d3; font-size:11px; line-height:1.45; display:none; }
+        .diag-title { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; margin-bottom:4px; color:#ffb4b4; }
+        .diag pre { margin-top:8px; background:#120f15; border:1px solid #3a2b3b; border-radius:8px; padding:8px; color:#ffd9d9; font-family:'DM Mono',monospace; font-size:10px; max-height:150px; overflow:auto; white-space:pre-wrap; }
         @media (max-width: 1180px) { .grid { grid-template-columns:1fr; } .status-row { grid-template-columns:1fr 1fr; } }
     </style>
 </head>
@@ -89,38 +94,40 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         <div class="stat"><div class="stat-label">Watch</div><div class="stat-value" id="sWatch">-</div></div>
     </div>
     <div class="controls">
-        <button class="btn accent" onclick="createWorkspace()">Create Workspace</button>
-        <button class="btn ok" onclick="startBot()">Start Bot</button>
-        <button class="btn" onclick="restartBot()">Restart</button>
-        <button class="btn bad" onclick="stopBot()">Stop</button>
-        <button class="btn" onclick="connectTerminal()">Open Terminal</button>
-        <button class="btn" onclick="disconnectTerminal()">Close Terminal</button>
-        <button class="btn" onclick="enableSftp()">Enable SFTP</button>
-        <button class="btn bad" onclick="disableSftp()">Disable SFTP</button>
-        <button class="btn" onclick="refreshAll()">Refresh</button>
+        <button id="btnCreate" class="btn accent" onclick="createWorkspace()">Create Workspace</button>
+        <button id="btnStart" class="btn ok" onclick="startBot()">Start Bot</button>
+        <button id="btnRestart" class="btn" onclick="restartBot()">Restart</button>
+        <button id="btnStop" class="btn bad" onclick="stopBot()">Stop</button>
+        <button id="btnManualRestart" class="btn accent" onclick="manualRestart()">Manual Restart</button>
+        <button id="btnOpenTerminal" class="btn" onclick="connectTerminal()">Open Terminal</button>
+        <button id="btnCloseTerminal" class="btn" onclick="disconnectTerminal()">Close Terminal</button>
+        <button id="btnEnableSftp" class="btn" onclick="enableSftp()">Enable SFTP</button>
+        <button id="btnDisableSftp" class="btn bad" onclick="disableSftp()">Disable SFTP</button>
+        <button id="btnRefresh" class="btn" onclick="refreshAll()">Refresh</button>
     </div>
+    <div class="diag" id="stabilityDiag"></div>
     <div class="grid">
         <section class="panel">
             <div class="panel-head"><div class="panel-title">Live Terminal</div><div class="panel-sub" id="terminalState">offline</div></div>
             <pre class="terminal" id="terminalOut">Terminal not connected.</pre>
             <div class="terminal-row">
                 <input id="terminalInput" class="terminal-input" placeholder="Type a shell command and press Enter">
-                <button class="btn" onclick="sendTerminalLine()">Send</button>
+                <button id="btnSendTerminal" class="btn" onclick="sendTerminalLine()">Send</button>
             </div>
         </section>
         <section class="panel">
             <div class="panel-head"><div class="panel-title">Files</div><div class="panel-sub" id="openPath">no selection</div></div>
             <div class="file-tools">
-                <button class="btn" onclick="createEntry('file')">New File</button>
-                <button class="btn" onclick="createEntry('dir')">New Folder</button>
-                <button class="btn" onclick="renameEntry()">Rename</button>
-                <button class="btn bad" onclick="deleteEntry()">Delete</button>
-                <button class="btn" style="margin-left:auto" onclick="loadFiles()">Reload</button>
+                <button id="btnNewFile" class="btn" onclick="createEntry('file')">New File</button>
+                <button id="btnNewFolder" class="btn" onclick="createEntry('dir')">New Folder</button>
+                <button id="btnRename" class="btn" onclick="renameEntry()">Rename</button>
+                <button id="btnDelete" class="btn bad" onclick="deleteEntry()">Delete</button>
+                <button id="btnReloadFiles" class="btn" style="margin-left:auto" onclick="loadFiles()">Reload</button>
             </div>
             <div class="file-wrap">
                 <div class="file-list" id="fileList"></div>
                 <div class="editor-wrap">
-                    <div class="editor-meta"><span id="editorHint">Select a file to edit.</span><button class="btn" style="margin-left:auto" onclick="saveFile()">Save File</button></div>
+                    <div class="editor-meta"><span id="editorHint">Select a file to edit.</span><button id="btnSaveFile" class="btn" style="margin-left:auto" onclick="saveFile()">Save File</button></div>
                     <textarea id="editor" class="editor" spellcheck="false" placeholder="Select a file from the left."></textarea>
                 </div>
             </div>
@@ -157,6 +164,53 @@ let pollTimer = null;
 let terminalSocket = null;
 let watchSocket = null;
 let lastWatchHash = '';
+const pendingActions = new Set();
+
+function setDisabled(id, disabled) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !!disabled;
+}
+
+function withPending(action, run) {
+    pendingActions.add(action);
+    updateControlStates();
+    return Promise.resolve()
+        .then(run)
+        .finally(() => {
+            pendingActions.delete(action);
+            updateControlStates();
+        });
+}
+
+function updateControlStates() {
+    const hasState = !!state;
+    const workspaceExists = !!(state && state.workspace_exists);
+    const running = !!(state && state.running);
+    const restarting = !!(state && state.restarting);
+    const terminalConnected = !!(terminalSocket && terminalSocket.readyState === WebSocket.OPEN);
+    const sftpEnabled = !!(state && state.sftp && state.sftp.enabled);
+    const hasSelection = !!selectedPath;
+    const selectedFile = selectedType === 'file';
+
+    setDisabled('btnCreate', !hasState || workspaceExists || pendingActions.has('create'));
+    setDisabled('btnStart', !workspaceExists || running || restarting || pendingActions.has('start'));
+    setDisabled('btnRestart', !running || restarting || pendingActions.has('restart'));
+    setDisabled('btnStop', !running || restarting || pendingActions.has('stop'));
+    setDisabled('btnManualRestart', !workspaceExists || pendingActions.has('manual_restart'));
+    setDisabled('btnOpenTerminal', !running || restarting || terminalConnected || pendingActions.has('terminal_connect'));
+    setDisabled('btnCloseTerminal', !terminalConnected);
+    setDisabled('btnEnableSftp', !workspaceExists || sftpEnabled || pendingActions.has('sftp_enable'));
+    setDisabled('btnDisableSftp', !workspaceExists || !sftpEnabled || pendingActions.has('sftp_disable'));
+    setDisabled('btnRefresh', pendingActions.has('refresh'));
+    setDisabled('btnSendTerminal', !terminalConnected);
+
+    setDisabled('btnNewFile', !workspaceExists);
+    setDisabled('btnNewFolder', !workspaceExists);
+    setDisabled('btnRename', !workspaceExists || !hasSelection);
+    setDisabled('btnDelete', !workspaceExists || !hasSelection);
+    setDisabled('btnReloadFiles', !workspaceExists);
+    setDisabled('btnSaveFile', !workspaceExists || !selectedFile);
+}
 
 function setMsg(text, kind = '') {
     const el = document.getElementById('msgBox');
@@ -196,16 +250,54 @@ function renderSftp(sftp) {
     document.getElementById('sftpPass').textContent = sftp?.password || '-';
 }
 
+function renderStability(diag) {
+    const box = document.getElementById('stabilityDiag');
+    if (!diag) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const status = String(diag.status || 'unknown');
+    if (status === 'missing') {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const reason = String(diag.error || '').trim();
+    const unstable = !!reason || !!diag.restarting || !diag.running;
+    if (!unstable) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const exitCode = typeof diag.exit_code === 'number' ? diag.exit_code : 0;
+    const restartCount = typeof diag.restart_count === 'number' ? diag.restart_count : 0;
+    const details = reason !== '' ? reason : ('Container status: ' + status + ', exit code: ' + exitCode);
+    const logs = String(diag.logs_tail || '').trim();
+    box.style.display = 'block';
+    box.innerHTML = '<div class="diag-title">Container instability detected</div>'
+        + '<div><strong>Reason:</strong> ' + details.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>'
+        + '<div><strong>Status:</strong> ' + status.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        + ' | <strong>Exit:</strong> ' + exitCode
+        + ' | <strong>Restarts:</strong> ' + restartCount + '</div>'
+        + (logs !== '' ? '<pre>' + logs.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>' : '');
+}
+
 function renderStatus(s) {
     state = s;
+    const restarting = !!s.restarting;
     document.getElementById('sUser').textContent = (s.user?.username || 'guest') + ' (' + (s.user?.plan || '-') + ')';
     document.getElementById('sWorkspace').textContent = s.workspace_exists ? 'Created' : 'Missing';
-    document.getElementById('sContainer').textContent = s.running ? ('Running (' + s.container_name + ')') : (s.container_exists ? 'Stopped' : 'Not created');
+    document.getElementById('sContainer').textContent = restarting
+        ? ('Restarting (' + s.container_name + ')')
+        : (s.running ? ('Running (' + s.container_name + ')') : (s.container_exists ? 'Stopped' : 'Not created'));
     document.getElementById('sWatch').textContent = watchSocket && watchSocket.readyState === WebSocket.OPEN ? 'connected' : (s.workspace_exists ? 'ready' : 'offline');
     if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) {
-        setTerminalState(s.running ? 'ready' : 'offline');
+        setTerminalState(restarting ? 'restarting' : (s.running ? 'ready' : 'offline'));
     }
     renderSftp(s.sftp || {});
+    renderStability(s.stability || null);
+    updateControlStates();
 }
 
 async function loadStatus() {
@@ -225,6 +317,13 @@ async function loadStatus() {
 }
 
 async function loadFiles() {
+    if (!state || !state.workspace_exists) {
+        const list = document.getElementById('fileList');
+        list.innerHTML = '<div style="padding:10px;color:#7e8aa3;font-size:11px">Workspace not created yet.</div>';
+        document.getElementById('editor').value = '';
+        updateControlStates();
+        return;
+    }
     const data = await apiCall('list_files', {}, 'GET');
     if (!data.success) {
         setMsg(data.error || 'Failed to list files', 'bad');
@@ -235,6 +334,7 @@ async function loadFiles() {
     if (!files.length) {
         list.innerHTML = '<div style="padding:10px;color:#7e8aa3;font-size:11px">No files yet. Create workspace first.</div>';
         document.getElementById('editor').value = '';
+        updateControlStates();
         return;
     }
     list.innerHTML = files.map(entry => {
@@ -248,6 +348,7 @@ async function loadFiles() {
             await selectEntry(preferred.path, preferred.type);
         }
     }
+    updateControlStates();
 }
 
 async function selectEntry(path, type) {
@@ -257,6 +358,7 @@ async function selectEntry(path, type) {
     document.getElementById('editorHint').textContent = type === 'file' ? 'Editing file' : 'Folders cannot be edited directly';
     if (type !== 'file') {
         document.getElementById('editor').value = '';
+        updateControlStates();
         await loadFiles();
         return;
     }
@@ -268,6 +370,7 @@ async function selectEntry(path, type) {
     document.getElementById('editor').value = data.content || '';
     lastLoadedContent = data.content || '';
     lastLoadedMtime = data.mtime || 0;
+    updateControlStates();
     await loadFiles();
 }
 
@@ -363,89 +466,121 @@ async function deleteEntry() {
 }
 
 async function createWorkspace() {
-    const data = await apiCall('create');
-    if (!data.success) {
-        setMsg(data.error || 'Create workspace failed', 'bad');
-        return;
-    }
-    setMsg(data.message || 'Workspace created', 'ok');
-    await refreshAll();
-    await connectWatch();
+    await withPending('create', async () => {
+        const data = await apiCall('create');
+        if (!data.success) {
+            setMsg(data.error || 'Create workspace failed', 'bad');
+            return;
+        }
+        setMsg(data.message || 'Workspace created', 'ok');
+        await refreshAll();
+        await connectWatch();
+    });
 }
 
 async function startBot() {
-    setMsg('Starting bot container...', '');
-    const data = await apiCall('start');
-    if (!data.success) {
-        setMsg(data.error || 'Failed to start', 'bad');
-        return;
-    }
-    setMsg(data.message || 'Started', 'ok');
-    await refreshAll();
-    await connectTerminal();
+    await withPending('start', async () => {
+        setMsg('Starting bot container...', '');
+        const data = await apiCall('start');
+        if (!data.success) {
+            setMsg(data.error || 'Failed to start', 'bad');
+            return;
+        }
+        setMsg(data.message || 'Started', 'ok');
+        await refreshAll();
+        await connectTerminal();
+    });
 }
 
 async function stopBot() {
-    const data = await apiCall('stop');
-    if (!data.success) {
-        setMsg(data.error || 'Failed to stop', 'bad');
-        return;
-    }
-    disconnectTerminal(true);
-    setMsg(data.message || 'Stopped', 'ok');
-    await refreshAll();
+    await withPending('stop', async () => {
+        const data = await apiCall('stop');
+        if (!data.success) {
+            setMsg(data.error || 'Failed to stop', 'bad');
+            return;
+        }
+        disconnectTerminal(true);
+        setMsg(data.message || 'Stopped', 'ok');
+        await refreshAll();
+    });
 }
 
 async function restartBot() {
-    const data = await apiCall('restart');
-    if (!data.success) {
-        setMsg(data.error || 'Failed to restart', 'bad');
-        return;
-    }
-    disconnectTerminal(true);
-    setMsg(data.message || 'Restarted', 'ok');
-    await refreshAll();
-    await connectTerminal();
+    await withPending('restart', async () => {
+        const data = await apiCall('restart');
+        if (!data.success) {
+            setMsg(data.error || 'Failed to restart', 'bad');
+            return;
+        }
+        disconnectTerminal(true);
+        setMsg(data.message || 'Restarted', 'ok');
+        await refreshAll();
+        await connectTerminal();
+    });
+}
+
+async function manualRestart() {
+    await withPending('manual_restart', async () => {
+        setMsg('Manual restart in progress...', '');
+        const data = await apiCall('manual_restart');
+        if (!data.success) {
+            setMsg(data.error || 'Manual restart failed', 'bad');
+            await loadStatus();
+            return;
+        }
+        disconnectTerminal(true);
+        setMsg(data.message || 'Manual restart complete', 'ok');
+        await refreshAll();
+        await connectTerminal();
+    });
 }
 
 async function enableSftp() {
-    const data = await apiCall('sftp_enable');
-    if (!data.success) {
-        setMsg(data.error || 'Failed to enable SFTP', 'bad');
-        return;
-    }
-    renderSftp(data.sftp || {});
-    setMsg('SFTP enabled', 'ok');
-    await loadStatus();
+    await withPending('sftp_enable', async () => {
+        const data = await apiCall('sftp_enable');
+        if (!data.success) {
+            setMsg(data.error || 'Failed to enable SFTP', 'bad');
+            return;
+        }
+        renderSftp(data.sftp || {});
+        setMsg('SFTP enabled', 'ok');
+        await loadStatus();
+    });
 }
 
 async function disableSftp() {
-    const data = await apiCall('sftp_disable');
-    if (!data.success) {
-        setMsg(data.error || 'Failed to disable SFTP', 'bad');
-        return;
-    }
-    renderSftp(data.sftp || {});
-    setMsg('SFTP disabled', 'ok');
-    await loadStatus();
+    await withPending('sftp_disable', async () => {
+        const data = await apiCall('sftp_disable');
+        if (!data.success) {
+            setMsg(data.error || 'Failed to disable SFTP', 'bad');
+            return;
+        }
+        renderSftp(data.sftp || {});
+        setMsg('SFTP disabled', 'ok');
+        await loadStatus();
+    });
 }
 
 async function connectTerminal() {
     if (terminalSocket && terminalSocket.readyState === WebSocket.OPEN) {
         setMsg('Terminal already connected', 'ok');
+        updateControlStates();
         return;
     }
-    const auth = await apiCall('ws_auth', {}, 'GET');
-    if (!auth.success) {
-        setMsg(auth.error || 'Failed to authorize terminal', 'bad');
-        return;
-    }
-    terminalSocket = new WebSocket(auth.url + '?token=' + encodeURIComponent(auth.token));
-    setTerminalState('connecting');
-    terminalSocket.onopen = () => { document.getElementById('terminalOut').textContent = ''; setTerminalState('connected'); setMsg('Terminal connected', 'ok'); };
-    terminalSocket.onmessage = (event) => handleSocketMessage(event, 'terminal');
-    terminalSocket.onclose = () => { setTerminalState(state?.running ? 'ready' : 'offline'); terminalSocket = null; };
-    terminalSocket.onerror = () => { setTerminalState('error'); setMsg('Terminal websocket failed to connect', 'bad'); };
+    await withPending('terminal_connect', async () => {
+        const auth = await apiCall('ws_auth', {}, 'GET');
+        if (!auth.success) {
+            setMsg(auth.error || 'Failed to authorize terminal', 'bad');
+            return;
+        }
+        terminalSocket = new WebSocket(auth.url + '?token=' + encodeURIComponent(auth.token));
+        setTerminalState('connecting');
+        updateControlStates();
+        terminalSocket.onopen = () => { document.getElementById('terminalOut').textContent = ''; setTerminalState('connected'); setMsg('Terminal connected', 'ok'); updateControlStates(); };
+        terminalSocket.onmessage = (event) => handleSocketMessage(event, 'terminal');
+        terminalSocket.onclose = () => { setTerminalState(state?.restarting ? 'restarting' : (state?.running ? 'ready' : 'offline')); terminalSocket = null; updateControlStates(); };
+        terminalSocket.onerror = () => { setTerminalState('error'); setMsg('Terminal websocket failed to connect', 'bad'); updateControlStates(); };
+    });
 }
 
 async function connectWatch() {
@@ -488,8 +623,9 @@ function handleSocketMessage(event, kind) {
 
 function disconnectTerminal(silent = false) {
     if (terminalSocket) { terminalSocket.close(); terminalSocket = null; }
-    setTerminalState(state?.running ? 'ready' : 'offline');
+    setTerminalState(state?.restarting ? 'restarting' : (state?.running ? 'ready' : 'offline'));
     if (!silent) setMsg('Terminal disconnected', 'ok');
+    updateControlStates();
 }
 
 function sendTerminalLine() {
@@ -503,13 +639,16 @@ function sendTerminalLine() {
 }
 
 async function refreshAll() {
-    const ok = await loadStatus();
-    if (!ok) return;
-    await loadFiles();
-    await connectWatch();
+    await withPending('refresh', async () => {
+        const ok = await loadStatus();
+        if (!ok) return;
+        await loadFiles();
+        await connectWatch();
+    });
 }
 
 async function boot() {
+    updateControlStates();
     const ok = await loadStatus();
     if (!ok) return;
     await loadFiles();

@@ -6,6 +6,7 @@ api_json_headers();
 api_enforce_post_and_origin_for_actions([
     'create',
     'start',
+    'manual_restart',
     'stop',
     'restart',
     'save_file',
@@ -239,6 +240,96 @@ function webbot_is_running(string $containerName): bool {
     return $r['ok'] && strtolower(trim($r['out'])) === 'true';
 }
 
+function webbot_is_restarting(string $containerName): bool {
+    $cmd = 'docker inspect -f {{.State.Restarting}} ' . escapeshellarg($containerName) . ' 2>/dev/null';
+    $r = webbot_run($cmd);
+    return $r['ok'] && strtolower(trim($r['out'])) === 'true';
+}
+
+function webbot_container_status(string $containerName): string {
+    $cmd = 'docker inspect -f {{.State.Status}} ' . escapeshellarg($containerName) . ' 2>/dev/null';
+    $r = webbot_run($cmd);
+    return $r['ok'] ? strtolower(trim($r['out'])) : '';
+}
+
+function webbot_container_diagnostics(string $containerName): array {
+    if (!webbot_exists($containerName)) {
+        return [
+            'status' => 'missing',
+            'stable' => true,
+            'error' => '',
+            'logs_tail' => '',
+        ];
+    }
+
+    $inspect = webbot_run('docker inspect ' . escapeshellarg($containerName) . ' 2>/dev/null');
+    if (!$inspect['ok']) {
+        return [
+            'status' => 'unknown',
+            'stable' => false,
+            'error' => 'Failed to inspect container',
+            'logs_tail' => '',
+        ];
+    }
+
+    $decoded = json_decode($inspect['out'], true);
+    $state = is_array($decoded) && isset($decoded[0]['State']) && is_array($decoded[0]['State']) ? $decoded[0]['State'] : [];
+    $status = strtolower((string)($state['Status'] ?? 'unknown'));
+    $running = (bool)($state['Running'] ?? false);
+    $restarting = (bool)($state['Restarting'] ?? false);
+    $exitCode = (int)($state['ExitCode'] ?? 0);
+    $stateError = trim((string)($state['Error'] ?? ''));
+    $oomKilled = !empty($state['OOMKilled']);
+    $restartCount = (int)($state['RestartCount'] ?? 0);
+
+    $reason = '';
+    if ($stateError !== '') {
+        $reason = $stateError;
+    } elseif ($restarting) {
+        $reason = 'Container is restarting repeatedly';
+    } elseif ($oomKilled) {
+        $reason = 'Container was killed due to out-of-memory';
+    } elseif (!$running && $exitCode !== 0) {
+        $reason = 'Container exited with code ' . $exitCode;
+    }
+
+    $logsTail = '';
+    if (!$running || $restarting || $reason !== '') {
+        $logs = webbot_run('docker logs --tail 40 ' . escapeshellarg($containerName) . ' 2>&1');
+        if ($logs['ok'] || $logs['out'] !== '' || $logs['err'] !== '') {
+            $logsTail = trim($logs['out'] !== '' ? $logs['out'] : $logs['err']);
+        }
+    }
+
+    return [
+        'status' => $status,
+        'running' => $running,
+        'restarting' => $restarting,
+        'stable' => $running && !$restarting && $reason === '',
+        'error' => $reason,
+        'exit_code' => $exitCode,
+        'oom_killed' => $oomKilled,
+        'restart_count' => $restartCount,
+        'started_at' => (string)($state['StartedAt'] ?? ''),
+        'finished_at' => (string)($state['FinishedAt'] ?? ''),
+        'logs_tail' => $logsTail,
+    ];
+}
+
+function webbot_start_main_container(string $userDir, string $container): array {
+    $runInstall = webbot_run('docker run --rm -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('npm install --silent'));
+    if (!$runInstall['ok']) {
+        return ['success' => false, 'error' => 'Dependency install failed: ' . ($runInstall['err'] ?: $runInstall['out'])];
+    }
+    webbot_run('docker rm -f ' . escapeshellarg($container) . ' >/dev/null 2>&1');
+    $runCmd = 'docker run -d --name ' . escapeshellarg($container) . ' --restart unless-stopped -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('node index.js');
+    $run = webbot_run($runCmd);
+    if (!$run['ok']) {
+        return ['success' => false, 'error' => 'Failed to start container: ' . ($run['err'] ?: $run['out'])];
+    }
+    return ['success' => true];
+}
+
 function webbot_safe_rel_path(string $path): ?string {
     $path = trim(str_replace('\\', '/', $path));
     $path = ltrim($path, '/');
@@ -290,6 +381,9 @@ function webbot_list_entries(string $userDir): array {
 }
 
 function webbot_delete_recursive(string $path): bool {
+    if (!file_exists($path)) {
+        return true;
+    }
     if (is_file($path) || is_link($path)) {
         return unlink($path);
     }
@@ -311,6 +405,43 @@ function webbot_delete_recursive(string $path): bool {
     return rmdir($path);
 }
 
+function webbot_force_remove_workspace(int $userId): bool {
+    $dir = webbot_user_dir($userId);
+    if (!is_dir($dir)) {
+        return true;
+    }
+
+    if (webbot_delete_recursive($dir)) {
+        return true;
+    }
+
+    $root = webbot_root_dir();
+    $entry = 'u' . $userId;
+    $cmd = 'docker run --rm -v ' . escapeshellarg($root . ':/webbots') . ' node:20-alpine sh -lc ' . escapeshellarg('rm -rf -- /webbots/' . $entry);
+    webbot_run($cmd);
+
+    if (!is_dir($dir)) {
+        return true;
+    }
+
+    return webbot_delete_recursive($dir);
+}
+
+function webbot_container_user_ids(): array {
+    $r = webbot_run('docker ps -a --format {{.Names}}');
+    if (!$r['ok'] || trim($r['out']) === '') {
+        return [];
+    }
+    $ids = [];
+    foreach (preg_split('/\r?\n/', trim($r['out'])) as $name) {
+        $name = trim((string)$name);
+        if (preg_match('/^lyralink_webbot_u(\d+)$/', $name, $m) || preg_match('/^lyralink_webbot_sftp_u(\d+)$/', $name, $m)) {
+            $ids[(int)$m[1]] = true;
+        }
+    }
+    return array_map('intval', array_keys($ids));
+}
+
 function webbot_base64url_encode(string $value): string {
     return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
 }
@@ -323,6 +454,64 @@ function webbot_public_ws_url(): string {
 
 function webbot_secret(): string {
     return api_get_secret('BOT_SECRET_KEY', 'lyralink-webbot-secret') ?? 'lyralink-webbot-secret';
+}
+
+function webbot_logs_channel_id(): string {
+    return '1475657872862875727';
+}
+
+function webbot_send_install_embed(array $user, int $userId, string $workspace, string $container): bool {
+    $botToken = api_get_secret('BOT_SECRET_KEY', '');
+    if ($botToken === null || trim($botToken) === '') {
+        return false;
+    }
+
+    $channelId = webbot_logs_channel_id();
+    $endpoint = 'https://discord.com/api/v10/channels/' . rawurlencode($channelId) . '/messages';
+
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $username = (string)($user['username'] ?? ('user-' . $userId));
+    $email = (string)($user['email'] ?? '');
+    $plan = (string)($user['plan'] ?? 'free');
+
+    $payload = [
+        'embeds' => [[
+            'title' => 'New Discord Bot Installed',
+            'description' => 'A new web bot instance was installed from the panel.',
+            'color' => 0xFF6B35,
+            'fields' => [
+                ['name' => 'User', 'value' => $username . ' (`' . $userId . '`)', 'inline' => true],
+                ['name' => 'Plan', 'value' => $plan, 'inline' => true],
+                ['name' => 'IP', 'value' => $ip, 'inline' => true],
+                ['name' => 'Workspace', 'value' => $workspace, 'inline' => false],
+                ['name' => 'Container', 'value' => $container, 'inline' => false],
+                ['name' => 'Email', 'value' => ($email !== '' ? $email : 'n/a'), 'inline' => false],
+            ],
+            'timestamp' => gmdate('c'),
+        ]],
+    ];
+
+    $ch = curl_init($endpoint);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bot ' . $botToken,
+        'Content-Type: application/json',
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+
+    $response = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false || $httpCode < 200 || $httpCode >= 300) {
+        error_log('[webbot] Failed to send install embed. code=' . $httpCode . ' curl=' . $curlError);
+        return false;
+    }
+
+    return true;
 }
 
 function webbot_ws_token(array $user, int $userId, string $mode): string {
@@ -412,9 +601,8 @@ function webbot_disable_sftp(int $userId): array {
 function webbot_destroy_instance(int $userId): array {
     webbot_run('docker rm -f ' . escapeshellarg(webbot_container_name($userId)) . ' >/dev/null 2>&1');
     webbot_run('docker rm -f ' . escapeshellarg(webbot_sftp_container_name($userId)) . ' >/dev/null 2>&1');
-    $dir = webbot_user_dir($userId);
-    if (is_dir($dir) && !webbot_delete_recursive($dir)) {
-        return ['success' => false, 'error' => 'Failed to delete workspace'];
+    if (!webbot_force_remove_workspace($userId)) {
+        return ['success' => false, 'error' => 'Failed to delete workspace files for u' . $userId . '. Check filesystem permissions and retry.'];
     }
     return ['success' => true, 'message' => 'Instance deleted'];
 }
@@ -434,19 +622,27 @@ function webbot_user_by_id(mysqli $db, int $userId): ?array {
 
 function webbot_all_instances(mysqli $db): array {
     $root = webbot_root_dir();
-    if (!is_dir($root)) {
-        return [];
-    }
-    $entries = scandir($root);
-    if ($entries === false) {
-        return [];
-    }
-    $instances = [];
-    foreach ($entries as $entry) {
-        if (!preg_match('/^u(\d+)$/', $entry, $m)) {
-            continue;
+    $userIds = [];
+    if (is_dir($root)) {
+        $entries = scandir($root);
+        if ($entries !== false) {
+            foreach ($entries as $entry) {
+                if (preg_match('/^u(\d+)$/', $entry, $m)) {
+                    $userIds[(int)$m[1]] = true;
+                }
+            }
         }
-        $userId = (int)$m[1];
+    }
+    foreach (webbot_container_user_ids() as $id) {
+        $userIds[$id] = true;
+    }
+
+    if (empty($userIds)) {
+        return [];
+    }
+
+    $instances = [];
+    foreach (array_keys($userIds) as $userId) {
         $user = webbot_user_by_id($db, $userId);
         $dir = webbot_user_dir($userId);
         $main = webbot_container_name($userId);
@@ -482,6 +678,8 @@ $container = webbot_container_name($userId);
 $action = api_action();
 
 if ($action === 'status') {
+    $containerStatus = webbot_container_status($container);
+    $diagnostics = webbot_container_diagnostics($container);
     echo json_encode([
         'success' => true,
         'enabled' => true,
@@ -489,6 +687,9 @@ if ($action === 'status') {
         'workspace_exists' => is_dir($userDir),
         'container_exists' => webbot_exists($container),
         'running' => webbot_is_running($container),
+        'restarting' => webbot_is_restarting($container),
+        'container_status' => $containerStatus,
+        'stability' => $diagnostics,
         'container_name' => $container,
         'websocket_url' => webbot_public_ws_url(),
         'sftp' => webbot_sftp_info($userId),
@@ -502,6 +703,9 @@ if ($action === 'status') {
 }
 
 if ($action === 'ws_auth') {
+    if (webbot_is_restarting($container)) {
+        api_fail('Container is restarting. Wait until it is fully running.', 409);
+    }
     if (!webbot_is_running($container)) {
         api_fail('Container is not running', 400);
     }
@@ -533,6 +737,7 @@ if (!webbot_docker_available()) {
 }
 
 if ($action === 'create') {
+    $workspaceAlreadyExists = is_dir($userDir);
     if (!webbot_ensure_dir($userDir)) {
         api_fail('Failed to create workspace', 500);
     }
@@ -540,6 +745,11 @@ if ($action === 'create') {
     $meta = webbot_meta_read($userId);
     $meta['created_at'] = $meta['created_at'] ?? date(DATE_ATOM);
     webbot_meta_write($userId, $meta);
+
+    if (!$workspaceAlreadyExists) {
+        webbot_send_install_embed($user, $userId, basename($userDir), $container);
+    }
+
     echo json_encode(['success' => true, 'message' => 'Workspace created', 'workspace' => basename($userDir)]);
     exit;
 }
@@ -548,17 +758,23 @@ if ($action === 'start') {
     if (!is_dir($userDir)) {
         api_fail('Create workspace first', 400);
     }
-    $runInstall = webbot_run('docker run --rm -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('npm install --silent'));
-    if (!$runInstall['ok']) {
-        api_fail('Dependency install failed: ' . ($runInstall['err'] ?: $runInstall['out']), 500);
-    }
-    webbot_run('docker rm -f ' . escapeshellarg($container) . ' >/dev/null 2>&1');
-    $runCmd = 'docker run -d --name ' . escapeshellarg($container) . ' --restart unless-stopped -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('node index.js');
-    $run = webbot_run($runCmd);
-    if (!$run['ok']) {
-        api_fail('Failed to start container: ' . ($run['err'] ?: $run['out']), 500);
+    $started = webbot_start_main_container($userDir, $container);
+    if (empty($started['success'])) {
+        api_fail((string)($started['error'] ?? 'Failed to start container'), 500);
     }
     echo json_encode(['success' => true, 'message' => 'Container started']);
+    exit;
+}
+
+if ($action === 'manual_restart') {
+    if (!is_dir($userDir)) {
+        api_fail('Create workspace first', 400);
+    }
+    $started = webbot_start_main_container($userDir, $container);
+    if (empty($started['success'])) {
+        api_fail((string)($started['error'] ?? 'Failed to restart container'), 500);
+    }
+    echo json_encode(['success' => true, 'message' => 'Manual restart complete']);
     exit;
 }
 
@@ -598,6 +814,9 @@ if ($action === 'console_exec') {
     }
     if (strlen($cmd) > 300) {
         api_fail('Command too long');
+    }
+    if (webbot_is_restarting($container)) {
+        api_fail('Container is restarting. Wait until it is fully running.', 409);
     }
     if (!webbot_is_running($container)) {
         api_fail('Container is not running', 400);

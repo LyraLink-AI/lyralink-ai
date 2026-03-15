@@ -71,6 +71,34 @@ function webbot_ws_run_process(string $container): array {
     ];
 }
 
+function webbot_ws_container_flag(string $container, string $template): string {
+    $cmd = 'docker inspect -f ' . escapeshellarg($template) . ' ' . escapeshellarg($container) . ' 2>/dev/null';
+    $descriptors = [
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $proc = proc_open($cmd, $descriptors, $pipes, null, null, ['bypass_shell' => false]);
+    if (!is_resource($proc)) {
+        return '';
+    }
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $code = proc_close($proc);
+    if ($code !== 0) {
+        return '';
+    }
+    return strtolower(trim((string)$stdout));
+}
+
+function webbot_ws_is_restarting(string $container): bool {
+    return webbot_ws_container_flag($container, '{{.State.Restarting}}') === 'true';
+}
+
+function webbot_ws_is_running(string $container): bool {
+    return webbot_ws_container_flag($container, '{{.State.Running}}') === 'true';
+}
+
 function webbot_ws_workspace_snapshot(string $workspace): string {
     if (!is_dir($workspace)) {
         return sha1('missing');
@@ -125,6 +153,16 @@ final class WebbotTerminalServer implements MessageComponentInterface {
         ];
 
         if ($mode === 'terminal') {
+            if (webbot_ws_is_restarting($container)) {
+                $conn->send(json_encode(['type' => 'error', 'message' => 'Container is restarting. Wait until it is running.']));
+                $conn->close();
+                return;
+            }
+            if (!webbot_ws_is_running($container)) {
+                $conn->send(json_encode(['type' => 'error', 'message' => 'Container is not running. Start the bot first.']));
+                $conn->close();
+                return;
+            }
             $session = webbot_ws_run_process($container);
             if (!is_resource($session['proc'] ?? null)) {
                 $conn->send(json_encode(['type' => 'error', 'message' => 'Failed to open terminal process']));
