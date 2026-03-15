@@ -50,7 +50,24 @@ function webbot_ws_validate_token(string $token): ?array {
 }
 
 function webbot_ws_run_process(string $container): array {
-    $cmd = 'docker exec -i ' . escapeshellarg($container) . ' sh';
+    static $hasScript = null;
+    if ($hasScript === null) {
+        $check = proc_open('command -v script', [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $checkPipes, null, null, ['bypass_shell' => false]);
+        if (is_resource($check)) {
+            $stdout = stream_get_contents($checkPipes[1]);
+            fclose($checkPipes[1]);
+            fclose($checkPipes[2]);
+            $hasScript = proc_close($check) === 0 && trim((string)$stdout) !== '';
+        } else {
+            $hasScript = false;
+        }
+    }
+
+    $bootstrap = 'export PS1="webbot:/app$ "; printf "Connected successfully to /app\n"; exec sh -i';
+    $dockerCmd = 'docker exec -it -w /app -e TERM=xterm-256color ' . escapeshellarg($container) . ' sh -lc ' . escapeshellarg($bootstrap);
+    $cmd = $hasScript
+        ? 'script -qfc ' . escapeshellarg($dockerCmd) . ' /dev/null'
+        : 'docker exec -i -w /app -e TERM=xterm-256color ' . escapeshellarg($container) . ' sh -lc ' . escapeshellarg($bootstrap);
     $descriptors = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
@@ -213,7 +230,6 @@ final class WebbotTerminalServer implements MessageComponentInterface {
 
         if ($mode === 'terminal') {
             $conn->send(json_encode(['type' => 'status', 'message' => 'terminal connected']));
-            fwrite($this->clients[$resourceId]['stdin'], "export TERM=xterm\n");
         } else {
             $conn->send(json_encode(['type' => 'status', 'message' => 'watch connected']));
         }

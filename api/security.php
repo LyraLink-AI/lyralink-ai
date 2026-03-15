@@ -1,14 +1,17 @@
 <?php
 
 function api_bootstrap_env(): void {
-    static $loaded = false;
-    if ($loaded) {
-        return;
-    }
-    $loaded = true;
+    static $lastLoadedMtime = null;
+    static $dotenvKeys = [];
 
     $envPath = dirname(__DIR__) . '/.env';
     if (!is_file($envPath) || !is_readable($envPath)) {
+        return;
+    }
+
+    $mtime = filemtime($envPath);
+    $mtime = $mtime === false ? 0 : $mtime;
+    if ($lastLoadedMtime !== null && $lastLoadedMtime === $mtime) {
         return;
     }
 
@@ -16,6 +19,8 @@ function api_bootstrap_env(): void {
     if ($lines === false) {
         return;
     }
+
+    $parsed = [];
 
     foreach ($lines as $line) {
         $trimmed = trim($line);
@@ -38,12 +43,29 @@ function api_bootstrap_env(): void {
             $value = substr($value, 1, -1);
         }
 
-        if (getenv($key) === false || getenv($key) === '') {
+        $parsed[$key] = $value;
+    }
+
+    foreach (array_keys($dotenvKeys) as $key) {
+        if (array_key_exists($key, $parsed)) {
+            continue;
+        }
+        putenv($key);
+        unset($_ENV[$key], $_SERVER[$key], $dotenvKeys[$key]);
+    }
+
+    foreach ($parsed as $key => $value) {
+        $envValue = getenv($key);
+        $loadedFromDotenv = isset($dotenvKeys[$key]);
+        if ($loadedFromDotenv || $envValue === false || $envValue === '') {
             putenv($key . '=' . $value);
             $_ENV[$key] = $value;
             $_SERVER[$key] = $value;
+            $dotenvKeys[$key] = true;
         }
     }
+
+    $lastLoadedMtime = $mtime;
 }
 
 api_bootstrap_env();
@@ -117,6 +139,7 @@ function api_enforce_post_and_origin_for_actions(array $actions): void {
 }
 
 function api_get_secret(string $key, ?string $default = null): ?string {
+    api_bootstrap_env();
     $value = $_ENV[$key] ?? getenv($key);
     if ($value === false || $value === null || $value === '') {
         return $default;

@@ -234,7 +234,12 @@ async function apiCall(action, payload = {}, method = 'POST') {
 function appendTerminal(text) {
     const out = document.getElementById('terminalOut');
     const current = out.textContent === 'Terminal not connected.' ? '' : out.textContent;
-    out.textContent = current + text;
+    const cleaned = String(text || '')
+        .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+        .replace(/\u001b\][^\u0007]*(\u0007|\u001b\\)/g, '')
+        .replace(/\u001b[PX^_][\s\S]*?\u001b\\/g, '')
+        .replace(/\u001b[@-_]/g, '');
+    out.textContent = current + cleaned;
     out.scrollTop = out.scrollHeight;
 }
 
@@ -575,6 +580,7 @@ async function connectTerminal() {
         }
         terminalSocket = new WebSocket(auth.url + '?token=' + encodeURIComponent(auth.token));
         setTerminalState('connecting');
+        document.getElementById('terminalOut').textContent = 'Connecting to container shell...\n';
         updateControlStates();
         terminalSocket.onopen = () => { document.getElementById('terminalOut').textContent = ''; setTerminalState('connected'); setMsg('Terminal connected', 'ok'); updateControlStates(); };
         terminalSocket.onmessage = (event) => handleSocketMessage(event, 'terminal');
@@ -603,6 +609,16 @@ async function connectWatch() {
 function handleSocketMessage(event, kind) {
     let payload = null;
     try { payload = JSON.parse(event.data); } catch (_err) { if (kind === 'terminal') appendTerminal(String(event.data || '')); return; }
+    if (payload.type === 'status') {
+        if (kind === 'terminal') {
+            if ((payload.message || '') === 'terminal connected') {
+                appendTerminal('Connected successfully. Interactive shell ready.\n');
+            } else {
+                appendTerminal('[status] ' + (payload.message || 'ok') + '\n');
+            }
+        }
+        return;
+    }
     if (payload.type === 'output') {
         appendTerminal(payload.data || '');
         return;

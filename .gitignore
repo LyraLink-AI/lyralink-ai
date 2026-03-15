@@ -11,6 +11,7 @@ maintenance.info
 # Dependencies and tooling
 vendor/
 node_modules/
+storage/webbots/
 
 # OS / editor
 .DS_Store
