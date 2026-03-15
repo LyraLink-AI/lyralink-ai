@@ -34,6 +34,7 @@ api_enforce_post_and_origin_for_actions([
     'set_smtp',
     'delete_ticket',
     'retry_notification_job',
+    'webbot_instance_action',
 ]);
 
 function ensureSupportQueueTable($db) {
@@ -305,6 +306,349 @@ function requireRole($agent, $minRole) {
     if ($agentLevel < $minLevel) {
         echo json_encode(['success' => false, 'error' => 'Insufficient permissions']); exit;
     }
+}
+
+function support_webbot_root_dir(): string {
+    return dirname(__DIR__) . '/storage/webbots';
+}
+
+function support_webbot_user_dir(int $userId): string {
+    return support_webbot_root_dir() . '/u' . $userId;
+}
+
+function support_webbot_container_name(int $userId): string {
+    return 'lyralink_webbot_u' . $userId;
+}
+
+function support_webbot_sftp_container_name(int $userId): string {
+    return 'lyralink_webbot_sftp_u' . $userId;
+}
+
+function support_webbot_meta_path(int $userId): string {
+    return support_webbot_user_dir($userId) . '/.lyralink-meta.json';
+}
+
+function support_webbot_run(string $command): array {
+    $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    $proc = proc_open($command, $descriptors, $pipes);
+    if (!is_resource($proc)) {
+        return ['ok' => false, 'code' => 1, 'out' => '', 'err' => 'Failed to start process'];
+    }
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $code = proc_close($proc);
+    return ['ok' => $code === 0, 'code' => $code, 'out' => trim((string)$stdout), 'err' => trim((string)$stderr)];
+}
+
+function support_webbot_ensure_dir(string $path): bool {
+    return is_dir($path) || mkdir($path, 0755, true);
+}
+
+function support_webbot_exists(string $containerName): bool {
+    $cmd = 'docker ps -a --filter name=^/' . $containerName . '$ --format {{.Names}}';
+    $r = support_webbot_run($cmd);
+    return $r['ok'] && trim($r['out']) === $containerName;
+}
+
+function support_webbot_is_running(string $containerName): bool {
+    $cmd = 'docker inspect -f {{.State.Running}} ' . escapeshellarg($containerName) . ' 2>/dev/null';
+    $r = support_webbot_run($cmd);
+    return $r['ok'] && strtolower(trim($r['out'])) === 'true';
+}
+
+function support_webbot_is_restarting(string $containerName): bool {
+    $cmd = 'docker inspect -f {{.State.Restarting}} ' . escapeshellarg($containerName) . ' 2>/dev/null';
+    $r = support_webbot_run($cmd);
+    return $r['ok'] && strtolower(trim($r['out'])) === 'true';
+}
+
+function support_webbot_meta_read(int $userId): array {
+    $path = support_webbot_meta_path($userId);
+    if (!is_file($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function support_webbot_meta_write(int $userId, array $meta): bool {
+    $dir = support_webbot_user_dir($userId);
+    if (!support_webbot_ensure_dir($dir)) {
+        return false;
+    }
+    return file_put_contents(support_webbot_meta_path($userId), json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) !== false;
+}
+
+function support_webbot_random_secret(int $bytes = 12): string {
+    return bin2hex(random_bytes($bytes));
+}
+
+function support_webbot_find_free_port(int $min = 22000, int $max = 22999): ?int {
+    for ($port = $min; $port <= $max; $port++) {
+        $sock = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.05);
+        if (is_resource($sock)) {
+            fclose($sock);
+            continue;
+        }
+        return $port;
+    }
+    return null;
+}
+
+function support_webbot_list_entries(string $userDir): array {
+    if (!is_dir($userDir)) {
+        return [];
+    }
+    $rii = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($userDir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+    $out = [];
+    $base = str_replace('\\', '/', $userDir);
+    foreach ($rii as $file) {
+        $path = str_replace('\\', '/', $file->getPathname());
+        if (str_contains($path, '/node_modules/') || str_ends_with($path, '/.lyralink-meta.json')) {
+            continue;
+        }
+        $rel = substr($path, strlen($base) + 1);
+        if ($rel === false || $rel === '') {
+            continue;
+        }
+        $out[] = ['path' => $rel, 'type' => $file->isDir() ? 'dir' : 'file'];
+    }
+    return $out;
+}
+
+function support_webbot_delete_recursive(string $path): bool {
+    if (!file_exists($path)) {
+        return true;
+    }
+    if (is_file($path) || is_link($path)) {
+        return unlink($path);
+    }
+    if (!is_dir($path)) {
+        return false;
+    }
+    $items = scandir($path);
+    if ($items === false) {
+        return false;
+    }
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') {
+            continue;
+        }
+        if (!support_webbot_delete_recursive($path . '/' . $item)) {
+            return false;
+        }
+    }
+    return rmdir($path);
+}
+
+function support_webbot_force_remove_workspace(int $userId): bool {
+    $dir = support_webbot_user_dir($userId);
+    if (!is_dir($dir)) {
+        return true;
+    }
+    if (support_webbot_delete_recursive($dir)) {
+        return true;
+    }
+    $root = support_webbot_root_dir();
+    $entry = 'u' . $userId;
+    $cmd = 'docker run --rm -v ' . escapeshellarg($root . ':/webbots') . ' node:20-alpine sh -lc ' . escapeshellarg('rm -rf -- /webbots/' . $entry);
+    support_webbot_run($cmd);
+    return !is_dir($dir) || support_webbot_delete_recursive($dir);
+}
+
+function support_webbot_container_diagnostics(string $containerName): array {
+    if (!support_webbot_exists($containerName)) {
+        return ['status' => 'missing', 'running' => false, 'restarting' => false, 'stable' => true, 'error' => '', 'exit_code' => 0, 'restart_count' => 0, 'logs_tail' => ''];
+    }
+    $inspect = support_webbot_run('docker inspect ' . escapeshellarg($containerName) . ' 2>/dev/null');
+    if (!$inspect['ok']) {
+        return ['status' => 'unknown', 'running' => false, 'restarting' => false, 'stable' => false, 'error' => 'Failed to inspect container', 'exit_code' => 0, 'restart_count' => 0, 'logs_tail' => ''];
+    }
+    $decoded = json_decode($inspect['out'], true);
+    $state = is_array($decoded) && isset($decoded[0]['State']) && is_array($decoded[0]['State']) ? $decoded[0]['State'] : [];
+    $status = strtolower((string)($state['Status'] ?? 'unknown'));
+    $running = (bool)($state['Running'] ?? false);
+    $restarting = (bool)($state['Restarting'] ?? false);
+    $exitCode = (int)($state['ExitCode'] ?? 0);
+    $restartCount = (int)($state['RestartCount'] ?? 0);
+    $stateError = trim((string)($state['Error'] ?? ''));
+    $oomKilled = !empty($state['OOMKilled']);
+    $reason = '';
+    if ($stateError !== '') {
+        $reason = $stateError;
+    } elseif ($restarting) {
+        $reason = 'Container is restarting repeatedly';
+    } elseif ($oomKilled) {
+        $reason = 'Container was killed due to out-of-memory';
+    } elseif (!$running && $exitCode !== 0) {
+        $reason = 'Container exited with code ' . $exitCode;
+    }
+    $logsTail = '';
+    if (!$running || $restarting || $reason !== '') {
+        $logs = support_webbot_run('docker logs --tail 40 ' . escapeshellarg($containerName) . ' 2>&1');
+        if ($logs['ok'] || $logs['out'] !== '' || $logs['err'] !== '') {
+            $logsTail = trim($logs['out'] !== '' ? $logs['out'] : $logs['err']);
+        }
+    }
+    return ['status' => $status, 'running' => $running, 'restarting' => $restarting, 'stable' => $running && !$restarting && $reason === '', 'error' => $reason, 'exit_code' => $exitCode, 'restart_count' => $restartCount, 'logs_tail' => $logsTail];
+}
+
+function support_webbot_sftp_info(int $userId): array {
+    $meta = support_webbot_meta_read($userId);
+    $container = support_webbot_sftp_container_name($userId);
+    return [
+        'enabled' => !empty($meta['sftp']['enabled']),
+        'host' => $_SERVER['HTTP_HOST'] ?? 'ai.cloudhavenx.com',
+        'port' => (int)($meta['sftp']['port'] ?? 0),
+        'username' => (string)($meta['sftp']['username'] ?? ''),
+        'password' => (string)($meta['sftp']['password'] ?? ''),
+        'container_exists' => support_webbot_exists($container),
+        'running' => support_webbot_is_running($container),
+    ];
+}
+
+function support_webbot_enable_sftp(int $userId): array {
+    $userDir = support_webbot_user_dir($userId);
+    if (!is_dir($userDir)) {
+        return ['success' => false, 'error' => 'Workspace not found'];
+    }
+    $meta = support_webbot_meta_read($userId);
+    $username = $meta['sftp']['username'] ?? ('wb' . $userId);
+    $password = $meta['sftp']['password'] ?? support_webbot_random_secret(8);
+    $port = (int)($meta['sftp']['port'] ?? 0);
+    if ($port <= 0) {
+        $port = support_webbot_find_free_port() ?? 0;
+        if ($port <= 0) {
+            return ['success' => false, 'error' => 'No free SFTP port available'];
+        }
+    }
+    $container = support_webbot_sftp_container_name($userId);
+    support_webbot_run('docker rm -f ' . escapeshellarg($container) . ' >/dev/null 2>&1');
+    $cmd = 'docker run -d --name ' . escapeshellarg($container)
+        . ' --restart unless-stopped -p ' . escapeshellarg((string)$port . ':22')
+        . ' -v ' . escapeshellarg($userDir . ':/home/' . $username . '/work')
+        . ' atmoz/sftp ' . escapeshellarg($username . ':' . $password . ':1001:1001:work');
+    $r = support_webbot_run($cmd);
+    if (!$r['ok']) {
+        return ['success' => false, 'error' => 'Failed to start SFTP container: ' . ($r['err'] ?: $r['out'])];
+    }
+    $meta['created_at'] = $meta['created_at'] ?? date(DATE_ATOM);
+    $meta['sftp'] = ['enabled' => true, 'username' => $username, 'password' => $password, 'port' => $port, 'updated_at' => date(DATE_ATOM)];
+    support_webbot_meta_write($userId, $meta);
+    return ['success' => true, 'sftp' => support_webbot_sftp_info($userId)];
+}
+
+function support_webbot_disable_sftp(int $userId): array {
+    support_webbot_run('docker rm -f ' . escapeshellarg(support_webbot_sftp_container_name($userId)) . ' >/dev/null 2>&1');
+    $meta = support_webbot_meta_read($userId);
+    if (!empty($meta['sftp'])) {
+        $meta['sftp']['enabled'] = false;
+        $meta['sftp']['updated_at'] = date(DATE_ATOM);
+        support_webbot_meta_write($userId, $meta);
+    }
+    return ['success' => true, 'sftp' => support_webbot_sftp_info($userId)];
+}
+
+function support_webbot_start_main_container(int $userId): array {
+    $userDir = support_webbot_user_dir($userId);
+    $container = support_webbot_container_name($userId);
+    if (!is_dir($userDir)) {
+        return ['success' => false, 'error' => 'Workspace not found'];
+    }
+    $runInstall = support_webbot_run('docker run --rm -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('npm install --silent'));
+    if (!$runInstall['ok']) {
+        return ['success' => false, 'error' => 'Dependency install failed: ' . ($runInstall['err'] ?: $runInstall['out'])];
+    }
+    support_webbot_run('docker rm -f ' . escapeshellarg($container) . ' >/dev/null 2>&1');
+    $run = support_webbot_run('docker run -d --name ' . escapeshellarg($container) . ' --restart unless-stopped -v ' . escapeshellarg($userDir . ':/app') . ' -w /app node:20-alpine sh -lc ' . escapeshellarg('node index.js'));
+    if (!$run['ok']) {
+        return ['success' => false, 'error' => 'Failed to start instance: ' . ($run['err'] ?: $run['out'])];
+    }
+    return ['success' => true, 'message' => 'Instance started'];
+}
+
+function support_webbot_destroy_instance(int $userId): array {
+    support_webbot_run('docker rm -f ' . escapeshellarg(support_webbot_container_name($userId)) . ' >/dev/null 2>&1');
+    support_webbot_run('docker rm -f ' . escapeshellarg(support_webbot_sftp_container_name($userId)) . ' >/dev/null 2>&1');
+    if (!support_webbot_force_remove_workspace($userId)) {
+        return ['success' => false, 'error' => 'Failed to delete workspace files for u' . $userId];
+    }
+    return ['success' => true, 'message' => 'Instance deleted'];
+}
+
+function support_webbot_container_user_ids(): array {
+    $r = support_webbot_run('docker ps -a --format {{.Names}}');
+    if (!$r['ok'] || trim($r['out']) === '') {
+        return [];
+    }
+    $ids = [];
+    foreach (preg_split('/\r?\n/', trim($r['out'])) as $name) {
+        if (preg_match('/^lyralink_webbot_u(\d+)$/', trim($name), $m) || preg_match('/^lyralink_webbot_sftp_u(\d+)$/', trim($name), $m)) {
+            $ids[(int)$m[1]] = true;
+        }
+    }
+    return array_map('intval', array_keys($ids));
+}
+
+function support_webbot_user_by_id(mysqli $db, int $userId): ?array {
+    $stmt = $db->prepare('SELECT id, username, email, plan FROM users WHERE id = ? LIMIT 1');
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $user = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+    return $user ?: null;
+}
+
+function support_webbot_all_instances(mysqli $db): array {
+    $userIds = [];
+    $root = support_webbot_root_dir();
+    if (is_dir($root)) {
+        $entries = scandir($root);
+        if ($entries !== false) {
+            foreach ($entries as $entry) {
+                if (preg_match('/^u(\d+)$/', $entry, $m)) {
+                    $userIds[(int)$m[1]] = true;
+                }
+            }
+        }
+    }
+    foreach (support_webbot_container_user_ids() as $id) {
+        $userIds[$id] = true;
+    }
+    $instances = [];
+    foreach (array_keys($userIds) as $userId) {
+        $user = support_webbot_user_by_id($db, $userId);
+        $dir = support_webbot_user_dir($userId);
+        $main = support_webbot_container_name($userId);
+        $diag = support_webbot_container_diagnostics($main);
+        $instances[] = [
+            'user_id' => $userId,
+            'username' => $user['username'] ?? ('user-' . $userId),
+            'email' => $user['email'] ?? '',
+            'plan' => $user['plan'] ?? '',
+            'workspace_exists' => is_dir($dir),
+            'workspace' => basename($dir),
+            'file_count' => count(support_webbot_list_entries($dir)),
+            'container_exists' => support_webbot_exists($main),
+            'running' => support_webbot_is_running($main),
+            'restarting' => support_webbot_is_restarting($main),
+            'container_name' => $main,
+            'sftp' => support_webbot_sftp_info($userId),
+            'stability' => $diag,
+        ];
+    }
+    usort($instances, static fn($a, $b) => strcmp($a['username'], $b['username']));
+    return $instances;
 }
 
 // ════════════════════════════════
@@ -998,6 +1342,73 @@ if ($action === 'retry_notification_job') {
     $stmt->close();
     triggerNotificationWorker();
     echo json_encode(['success' => true]);
+    exit;
+}
+
+if ($action === 'webbot_list_instances') {
+    $agent = requireAgent($db);
+    requireRole($agent, 'senior_agent');
+    echo json_encode(['success' => true, 'instances' => support_webbot_all_instances($db)]);
+    exit;
+}
+
+if ($action === 'webbot_instance_action') {
+    $agent = requireAgent($db);
+    requireRole($agent, 'senior_agent');
+
+    $userId = (int)($_POST['user_id'] ?? 0);
+    $instanceAction = trim((string)($_POST['instance_action'] ?? ''));
+    if ($userId <= 0 || $instanceAction === '') {
+        echo json_encode(['success' => false, 'error' => 'Invalid instance request']);
+        exit;
+    }
+
+    $result = null;
+    if ($instanceAction === 'start') {
+        $result = support_webbot_start_main_container($userId);
+    } elseif ($instanceAction === 'manual_restart') {
+        $result = support_webbot_start_main_container($userId);
+        if (!empty($result['success'])) {
+            $result['message'] = 'Manual restart complete';
+        }
+    } elseif ($instanceAction === 'restart') {
+        $restart = support_webbot_run('docker restart ' . escapeshellarg(support_webbot_container_name($userId)));
+        $result = $restart['ok'] ? ['success' => true, 'message' => 'Instance restarted'] : ['success' => false, 'error' => 'Failed to restart instance: ' . ($restart['err'] ?: $restart['out'])];
+    } elseif ($instanceAction === 'stop') {
+        $stop = support_webbot_run('docker stop ' . escapeshellarg(support_webbot_container_name($userId)));
+        $result = $stop['ok'] ? ['success' => true, 'message' => 'Instance stopped'] : ['success' => false, 'error' => 'Failed to stop instance: ' . ($stop['err'] ?: $stop['out'])];
+    } elseif ($instanceAction === 'delete') {
+        $result = support_webbot_destroy_instance($userId);
+    } elseif ($instanceAction === 'sftp_enable') {
+        $result = support_webbot_enable_sftp($userId);
+        if (!empty($result['success'])) {
+            $result['message'] = 'SFTP enabled';
+        }
+    } elseif ($instanceAction === 'sftp_disable') {
+        $result = support_webbot_disable_sftp($userId);
+        if (!empty($result['success'])) {
+            $result['message'] = 'SFTP disabled';
+        }
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Unknown instance action']);
+        exit;
+    }
+
+    if (empty($result['success'])) {
+        echo json_encode(['success' => false, 'error' => (string)($result['error'] ?? 'Instance action failed')]);
+        exit;
+    }
+
+    $instances = support_webbot_all_instances($db);
+    $updated = null;
+    foreach ($instances as $instance) {
+        if ((int)$instance['user_id'] === $userId) {
+            $updated = $instance;
+            break;
+        }
+    }
+
+    echo json_encode(['success' => true, 'message' => $result['message'] ?? 'Updated', 'instance' => $updated, 'sftp' => $result['sftp'] ?? null]);
     exit;
 }
 

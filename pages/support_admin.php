@@ -132,8 +132,18 @@
         .toast.show{opacity:1}
         .toast.success{border-color:var(--success);color:var(--success)}
         .toast.error{border-color:var(--error);color:var(--error)}
+        .dock-table{display:flex;flex-direction:column;gap:8px}
+        .dock-row{display:grid;grid-template-columns:1.1fr 1fr .85fr .95fr 1.4fr;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface);align-items:start}
+        .dock-head{background:rgba(124,58,237,0.08);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
+        .dock-actions{display:flex;flex-wrap:wrap;gap:6px}
+        .dock-pill{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:10px;border:1px solid var(--border)}
+        .dock-pill.ok{color:var(--success);border-color:rgba(34,197,94,0.35)}
+        .dock-pill.bad{color:var(--error);border-color:rgba(239,68,68,0.35)}
+        .dock-pill.warn{color:var(--warn);border-color:rgba(245,158,11,0.35)}
+        .dock-diag{margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.06);font-size:10px;color:#fecaca;line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto}
 
         @media(max-width:768px){.sidebar{width:100%;height:auto}.layout{flex-direction:column}}
+        @media(max-width:1100px){.dock-row{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
@@ -150,6 +160,7 @@
         <button class="btn-sm" id="transcriptsBtn" style="display:none" onclick="showTranscripts()">📋 Transcripts</button>
         <button class="btn-sm" id="statusBtn" style="display:none" onclick="showStatusManager()">🟢 Status</button>
         <button class="btn-sm" id="careersBtn" style="display:none" onclick="showCareers()">💼 Careers</button>
+        <button class="btn-sm" id="dockerBtn" style="display:none" onclick="showDockerInstances()">🐳 Docker</button>
         <button class="btn-sm" id="backToChatBtn" style="display:none" onclick="window.location.href='/chat'">← Back to Chat</button>
         <button class="btn-sm" id="logoutBtn" style="display:none" onclick="agentLogout()">Logout</button>
     </div>
@@ -490,6 +501,21 @@
     </div>
 </div>
 
+    <!-- DOCKER INSTANCES MODAL -->
+    <div id="dockerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:210;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:1220px;width:100%;margin:auto">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap">
+                <h3 style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">🐳 Docker Instances</h3>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <input type="text" id="dockerSearch" placeholder="Search username, email, workspace, plan" class="search-input" style="min-width:260px" oninput="renderDockerInstances()">
+                    <button onclick="loadDockerInstances()" class="btn-sm">↻ Refresh</button>
+                    <button onclick="closeModal('dockerModal')" class="btn-sm">✕ Close</button>
+                </div>
+            </div>
+            <div id="dockerInstancesWrap"><div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">Loading instances...</div></div>
+        </div>
+    </div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -497,6 +523,7 @@ let agentSession = null;
 let filters = { status: 'open', priority: '', search: '' };
 let activeTicketRef = null;
 let searchTimer = null;
+    let dockerInstances = [];
 
 async function api(action, body = {}, method = 'POST') {
     const fd = new FormData();
@@ -534,6 +561,7 @@ function showDash() {
         document.getElementById('configBtn').style.display    = 'inline-block';
         document.getElementById('statusBtn').style.display    = 'inline-block';
         document.getElementById('careersBtn').style.display   = 'inline-block';
+        document.getElementById('dockerBtn').style.display    = 'inline-block';
     }
     if (agentSession.role === 'admin') {
         document.getElementById('queueBtn').style.display     = 'inline-block';
@@ -763,6 +791,79 @@ async function saveDiscordConfig() {
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function dockerPill(text, kind) {
+    return `<span class="dock-pill ${kind}">${escHtml(text)}</span>`;
+}
+
+async function showDockerInstances() {
+    document.getElementById('dockerModal').style.display = 'flex';
+    await loadDockerInstances();
+}
+
+async function loadDockerInstances() {
+    const data = await apiGet('webbot_list_instances').catch(() => null);
+    const wrap = document.getElementById('dockerInstancesWrap');
+    if (!data?.success) {
+        wrap.innerHTML = `<div style="padding:20px;text-align:center;color:var(--error);font-size:12px">${escHtml(data?.error || 'Failed to load Docker instances')}</div>`;
+        return;
+    }
+    dockerInstances = data.instances || [];
+    renderDockerInstances();
+}
+
+function renderDockerInstances() {
+    const wrap = document.getElementById('dockerInstancesWrap');
+    const query = (document.getElementById('dockerSearch')?.value || '').toLowerCase();
+    const filtered = dockerInstances.filter(i => !query || [i.username, i.email, i.workspace, i.plan, i.container_name].join(' ').toLowerCase().includes(query));
+    if (!filtered.length) {
+        wrap.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">No matching Docker instances.</div>';
+        return;
+    }
+    wrap.innerHTML = '<div class="dock-table">'
+        + '<div class="dock-row dock-head"><div>User</div><div>Workspace</div><div>Bot</div><div>SFTP</div><div>Actions</div></div>'
+        + filtered.map(i => {
+            const bot = i.restarting
+                ? dockerPill('restarting', 'bad')
+                : (i.running ? dockerPill('running', 'ok') : (i.container_exists ? dockerPill('stopped', 'warn') : dockerPill('not created', 'warn')));
+            const sftp = i.sftp?.enabled
+                ? (i.sftp.running ? dockerPill('enabled:' + i.sftp.port, 'ok') : dockerPill('configured', 'warn'))
+                : dockerPill('disabled', 'bad');
+            const diagNeeded = i.stability && i.stability.status !== 'missing' && (i.stability.error || i.stability.restarting || !i.stability.running);
+            const diag = diagNeeded
+                ? `<div class="dock-diag"><strong>Reason:</strong> ${escHtml(i.stability.error || ('Container status: ' + (i.stability.status || 'unknown')))}${i.stability.logs_tail ? '\n' + escHtml(i.stability.logs_tail) : ''}</div>`
+                : '';
+            const username = i.username || ('user-' + i.user_id);
+            return '<div class="dock-row">'
+                + `<div><div style="font-size:12px;font-weight:600">${escHtml(username)}</div><div style="font-size:10px;color:var(--text-muted)">${escHtml(i.email || '')}</div><div style="font-size:10px;color:var(--text-muted)">#${i.user_id} · ${escHtml(i.plan || '-')}</div></div>`
+                + `<div><div style="font-size:12px">${escHtml(i.workspace || ('u' + i.user_id))}</div><div style="font-size:10px;color:var(--text-muted)">${i.workspace_exists ? i.file_count + ' entries' : 'Workspace missing'}</div><div style="font-size:10px;color:var(--text-muted)">${escHtml(i.container_name || '')}</div>${diag}</div>`
+                + `<div>${bot}</div>`
+                + `<div>${sftp}${i.sftp?.enabled ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">${escHtml(i.sftp.username || '')}@${escHtml(i.sftp.host || '')}</div>` : ''}</div>`
+                + '<div class="dock-actions">'
+                + `<button class="btn-sm" onclick="dockerInstanceAction(${i.user_id},'start')">Start</button>`
+                + `<button class="btn-sm" onclick="dockerInstanceAction(${i.user_id},'manual_restart')">Manual Restart</button>`
+                + `<button class="btn-sm" onclick="dockerInstanceAction(${i.user_id},'restart')">Restart</button>`
+                + `<button class="btn-sm" onclick="dockerInstanceAction(${i.user_id},'stop')">Stop</button>`
+                + `<button class="btn-sm" onclick="dockerInstanceAction(${i.user_id},'${i.sftp?.enabled ? 'sftp_disable' : 'sftp_enable'}')">${i.sftp?.enabled ? 'Disable SFTP' : 'Enable SFTP'}</button>`
+                + '</div></div>';
+        }).join('')
+        + '</div>';
+}
+
+async function dockerInstanceAction(userId, instanceAction) {
+    const data = await api('webbot_instance_action', { user_id: userId, instance_action: instanceAction }).catch(() => null);
+    if (!data?.success) {
+        showToast(data?.error || 'Docker action failed', 'error');
+        return;
+    }
+    showToast(data.message || 'Updated', 'success');
+    await loadDockerInstances();
+}
+
+async function dockerDeleteInstance(userId, username) {
+    if (!confirm(`Delete ${username}'s Docker instance? This removes containers and workspace files.`)) return;
+    await dockerInstanceAction(userId, 'delete');
+}
 
 // ── QUEUE MONITOR ──
 async function showQueueMonitor() {
