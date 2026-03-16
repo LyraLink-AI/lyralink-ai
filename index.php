@@ -365,6 +365,7 @@ if ($isForkMode) {
     <div class="nav-links">
         <a href="#features" class="nav-link">Features</a>
         <a href="#faq" class="nav-link">FAQ</a>
+        <a href="/pages/vscode_extension/" class="nav-link">VS Code Extension</a>
         <a href="/pages/webbot.php" class="nav-link">Web Bot Panel</a>
         <a href="/pages/pricing/" class="nav-link">Pricing</a>
         <a href="/chat" class="nav-link nav-cta">Start Chatting →</a>
@@ -665,6 +666,7 @@ if ($isForkMode) {
             <h4>Product</h4>
             <a href="/chat">Chat</a>
             <a href="/pages/pricing/">Pricing</a>
+            <a href="/pages/vscode_extension/">VS Code Extension</a>
             <a href="/pages/api_docs/">API Docs</a>
             <a href="/pages/api_keys/">API Keys</a>
         </div>

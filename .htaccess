@@ -1,6 +1,21 @@
 Options -Indexes
 RewriteEngine On
 
+# Block direct access to dotfiles and sensitive config/artifact files.
+# Keep ACME/Let's Encrypt challenge paths reachable.
+RewriteCond %{REQUEST_URI} !^/\.well-known/ [NC]
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|phpunit\.xml(\.dist)?|\.git|\.gitignore|\.gitattributes|\.htaccess|\.php-version|\.php-ini|.*\.(ini|log|sql|sqlite|bak|old|dist))$">
+	<IfModule mod_authz_core.c>
+		Require all denied
+	</IfModule>
+	<IfModule !mod_authz_core.c>
+		Order allow,deny
+		Deny from all
+	</IfModule>
+</FilesMatch>
+
 # 301 redirect old .php URLs to clean versions (pages/)
 RewriteCond %{THE_REQUEST} /pages/([^.]+)\.php [NC]
 RewriteRule ^ /pages/%1/ [R=301,L]

@@ -22,6 +22,7 @@ api_enforce_post_and_origin_for_actions([
     'admin_restart_instance',
     'admin_sftp_enable',
     'admin_sftp_disable',
+    'ai_help',
 ]);
 
 $dbCfg = api_db_config([
@@ -542,6 +543,111 @@ function webbot_sftp_info(int $userId): array {
     ];
 }
 
+function webbot_allowed_code_file(string $path): bool {
+    return (bool)preg_match('/\.(js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|php|sh|css|html|env|yml|yaml|ini|toml)$/i', $path);
+}
+
+function webbot_ai_model(): string {
+    $configured = trim((string)api_get_secret('WEBBOT_AI_MODEL', ''));
+    if ($configured !== '') {
+        return $configured;
+    }
+    return trim((string)api_get_secret('LLM_MODEL', 'llama-3.3-70b-versatile')) ?: 'llama-3.3-70b-versatile';
+}
+
+function webbot_ai_call(array $messages, int $maxTokens = 2200, float $temperature = 0.2): ?string {
+    $apiKey = trim((string)api_get_secret('GROQ_API_KEY', ''));
+    if ($apiKey === '') {
+        return null;
+    }
+
+    $payload = [
+        'model' => webbot_ai_model(),
+        'messages' => $messages,
+        'max_tokens' => max(256, min(4096, $maxTokens)),
+        'temperature' => $temperature,
+    ];
+
+    $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Authorization: Bearer ' . $apiKey,
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 75);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    if (!is_string($raw) || $raw === '') {
+        return null;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+    return $decoded['choices'][0]['message']['content'] ?? null;
+}
+
+function webbot_extract_json(string $raw): ?array {
+    $raw = trim($raw);
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        return $decoded;
+    }
+    $start = strpos($raw, '{');
+    $end = strrpos($raw, '}');
+    if ($start === false || $end === false || $end <= $start) {
+        return null;
+    }
+    $slice = substr($raw, $start, $end - $start + 1);
+    $decoded = json_decode($slice, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function webbot_collect_ai_files(string $userDir, array $requestedPaths, int $maxFiles = 8, int $maxBytes = 180000): array {
+    $out = [];
+    $seen = [];
+    $used = 0;
+
+    foreach ($requestedPaths as $candidate) {
+        if (count($out) >= $maxFiles) {
+            break;
+        }
+        if (!is_string($candidate)) {
+            continue;
+        }
+        $path = webbot_safe_rel_path($candidate);
+        if ($path === null || isset($seen[$path]) || !webbot_allowed_code_file($path)) {
+            continue;
+        }
+        $full = $userDir . '/' . $path;
+        if (!is_file($full)) {
+            continue;
+        }
+        $raw = file_get_contents($full);
+        if ($raw === false) {
+            continue;
+        }
+        $bytes = strlen($raw);
+        if ($bytes > 60000) {
+            continue;
+        }
+        if ($used + $bytes > $maxBytes && !empty($out)) {
+            break;
+        }
+        $used += $bytes;
+        $seen[$path] = true;
+        $out[] = [
+            'path' => $path,
+            'content' => $raw,
+            'bytes' => $bytes,
+        ];
+    }
+
+    return $out;
+}
+
 function webbot_enable_sftp(int $userId): array {
     $userDir = webbot_user_dir($userId);
     if (!is_dir($userDir)) {
@@ -870,6 +976,147 @@ if ($action === 'save_file') {
         api_fail('Failed to save file', 500);
     }
     echo json_encode(['success' => true, 'message' => 'File saved', 'bytes' => strlen($content), 'mtime' => filemtime($target)]);
+    exit;
+}
+
+if ($action === 'ai_help') {
+    if (!is_dir($userDir)) {
+        api_fail('Create workspace first', 400);
+    }
+
+    $apiKey = trim((string)api_get_secret('GROQ_API_KEY', ''));
+    if ($apiKey === '') {
+        api_fail('AI helper is not configured (missing GROQ_API_KEY)', 500);
+    }
+
+    $mode = strtolower(trim((string)($_POST['mode'] ?? 'scan')));
+    if (!in_array($mode, ['scan', 'fix'], true)) {
+        api_fail('Invalid AI helper mode');
+    }
+
+    $prompt = trim((string)($_POST['prompt'] ?? ''));
+    if (strlen($prompt) > 1800) {
+        api_fail('Prompt is too long (max 1800 chars)');
+    }
+
+    $pathsRaw = json_decode((string)($_POST['paths'] ?? '[]'), true);
+    if (!is_array($pathsRaw) || empty($pathsRaw)) {
+        api_fail('Select at least one file');
+    }
+
+    $files = webbot_collect_ai_files($userDir, $pathsRaw, 8, 180000);
+    if (empty($files)) {
+        api_fail('No readable code files matched your selection');
+    }
+
+    $fileChunks = [];
+    foreach ($files as $f) {
+        $fileChunks[] = "FILE: " . $f['path'] . "\n```\n" . $f['content'] . "\n```";
+    }
+
+    $task = $mode === 'fix'
+        ? 'Find likely bugs and produce corrected file contents for changed files.'
+        : 'Find likely bugs and explain fixes without changing files.';
+
+    $jsonSchema = '{"summary":"string","findings":[{"path":"string","severity":"high|medium|low","issue":"string","why":"string","fix":"string","line_hint":"string"}],"proposed_files":[{"path":"string","reason":"string","content":"string"}]}';
+
+    $system = 'You are a senior code reviewer for Discord bots. Return strict JSON only, no markdown. JSON shape: ' . $jsonSchema;
+    $userMsg = "Task: {$task}\n"
+        . ($prompt !== '' ? "User focus: {$prompt}\n" : '')
+        . "Rules:\n"
+        . "- Keep findings concise and actionable.\n"
+        . "- Only include proposed_files when mode is fix.\n"
+        . "- Never include paths not present in the provided files.\n"
+        . "- Proposed file content must be full file contents.\n\n"
+        . "FILES TO REVIEW:\n" . implode("\n\n", $fileChunks);
+
+    $raw = webbot_ai_call([
+        ['role' => 'system', 'content' => $system],
+        ['role' => 'user', 'content' => $userMsg],
+    ], $mode === 'fix' ? 3200 : 2000, 0.2);
+
+    if (!$raw) {
+        api_fail('AI helper failed to generate a response', 502);
+    }
+
+    $parsed = webbot_extract_json($raw);
+    if (!is_array($parsed)) {
+        api_fail('AI helper returned invalid JSON', 502);
+    }
+
+    $allowedPaths = [];
+    foreach ($files as $f) {
+        $allowedPaths[$f['path']] = true;
+    }
+
+    $findings = [];
+    foreach ((array)($parsed['findings'] ?? []) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $path = webbot_safe_rel_path((string)($row['path'] ?? ''));
+        if ($path === null || !isset($allowedPaths[$path])) {
+            continue;
+        }
+        $sev = strtolower((string)($row['severity'] ?? 'medium'));
+        if (!in_array($sev, ['high', 'medium', 'low'], true)) {
+            $sev = 'medium';
+        }
+        $findings[] = [
+            'path' => $path,
+            'severity' => $sev,
+            'issue' => (string)($row['issue'] ?? ''),
+            'why' => (string)($row['why'] ?? ''),
+            'fix' => (string)($row['fix'] ?? ''),
+            'line_hint' => (string)($row['line_hint'] ?? ''),
+        ];
+        if (count($findings) >= 30) {
+            break;
+        }
+    }
+
+    $proposedFiles = [];
+    if ($mode === 'fix') {
+        foreach ((array)($parsed['proposed_files'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $path = webbot_safe_rel_path((string)($row['path'] ?? ''));
+            $content = (string)($row['content'] ?? '');
+            if ($path === null || !isset($allowedPaths[$path])) {
+                continue;
+            }
+            if (strlen($content) === 0 || strlen($content) > 300000) {
+                continue;
+            }
+            $proposedFiles[] = [
+                'path' => $path,
+                'reason' => (string)($row['reason'] ?? ''),
+                'content' => $content,
+            ];
+            if (count($proposedFiles) >= 8) {
+                break;
+            }
+        }
+    }
+
+    $summary = trim((string)($parsed['summary'] ?? ''));
+    if ($summary === '') {
+        $summary = $mode === 'fix'
+            ? 'AI helper reviewed files and prepared suggested fixes.'
+            : 'AI helper reviewed files and found potential issues.';
+    }
+
+    echo json_encode([
+        'success' => true,
+        'assistance' => [
+            'mode' => $mode,
+            'summary' => $summary,
+            'reviewed_files' => array_map(static fn($f) => ['path' => $f['path'], 'bytes' => $f['bytes']], $files),
+            'findings' => $findings,
+            'proposed_files' => $proposedFiles,
+        ],
+    ]);
     exit;
 }
 

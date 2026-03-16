@@ -1,0 +1,112 @@
+{
+  "name": "lyralink-ai",
+  "displayName": "Lyralink AI",
+  "description": "Run code, catch errors, and let Lyralink AI fix them instantly.",
+  "version": "1.0.0",
+  "publisher": "lyralink",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["AI", "Programming Languages", "Debuggers"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "lyralink.runAndFix",
+        "title": "Lyralink: Run & Auto-Fix",
+        "icon": "$(play)"
+      },
+      {
+        "command": "lyralink.fixSelection",
+        "title": "Lyralink: Fix Selected Code"
+      },
+      {
+        "command": "lyralink.explainError",
+        "title": "Lyralink: Explain Error"
+      },
+      {
+        "command": "lyralink.setApiKey",
+        "title": "Lyralink: Set API Key"
+      },
+      {
+        "command": "lyralink.showOutput",
+        "title": "Lyralink: Show Output Panel"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "lyralink.runAndFix",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "lyralink.fixSelection",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "lyralink.runAndFix",
+          "group": "lyralink@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "lyralink.fixSelection",
+          "group": "lyralink@2",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "lyralink.explainError",
+          "group": "lyralink@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "lyralink.runAndFix",
+          "group": "navigation",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Lyralink AI",
+      "properties": {
+        "lyralink.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Lyralink API key. Get one at ai.cloudhavenx.com/pages/api_keys.php"
+        },
+        "lyralink.apiUrl": {
+          "type": "string",
+          "default": "https://ai.cloudhavenx.com/api/public_api.php",
+          "description": "Lyralink API endpoint (leave as default)"
+        },
+        "lyralink.autoFix": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically apply AI fix when an error is detected"
+        },
+        "lyralink.showDiff": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a diff before applying fixes"
+        },
+        "lyralink.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum number of fix attempts before giving up"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

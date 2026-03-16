@@ -46,6 +46,23 @@ if ($isMaintenance && !$isDevCookie) {
         .profile-block{background:#020617;border:1px solid #334155;border-radius:10px;padding:12px}
         .profile-block h4{font-size:12px;color:#cbd5e1;margin-bottom:8px}
         .profile-note{font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:8px}
+        .ai-tools-row{display:flex;gap:12px;align-items:center;padding:6px 2px 2px;color:#94a3b8;font-size:11px;font-family:'DM Mono',monospace;flex-wrap:wrap}
+        .ai-tool-toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+        .ai-tool-toggle input{accent-color:#7c3aed;cursor:pointer}
+        .live-trace-panel{display:none;margin:8px 0 4px;padding:10px;border:1px solid #273449;border-radius:10px;background:rgba(15,23,42,0.78);font-family:'DM Mono',monospace}
+        .live-trace-title{font-size:11px;color:#a78bfa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
+        .live-trace-list{display:flex;flex-direction:column;gap:5px;max-height:180px;overflow:auto}
+        .live-trace-item{font-size:11px;color:#cbd5e1;line-height:1.4}
+        .live-trace-time{color:#64748b;margin-right:6px}
+        .code-test-card{margin-top:10px;padding:10px;border-radius:10px;border:1px solid #334155;background:#0b1220}
+        .code-test-card.pass{border-color:rgba(34,197,94,0.35)}
+        .code-test-card.fail{border-color:rgba(239,68,68,0.35)}
+        .code-test-title{font-size:11px;color:#93c5fd;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;font-family:'DM Mono',monospace}
+        .code-test-summary{font-size:12px;color:#cbd5e1;margin-bottom:6px}
+        .code-test-line{font-size:11px;color:#94a3b8;white-space:pre-wrap;line-height:1.45;margin-top:4px}
+        .code-test-actions{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+        .code-test-fix-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.45);background:rgba(124,58,237,0.16);color:#c4b5fd;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer}
+        .code-test-fix-btn:hover{background:rgba(124,58,237,0.28)}
         @media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
     </style>
 </head>
@@ -85,6 +102,7 @@ if ($isMaintenance && !$isDevCookie) {
             <a href="/pages/status" class="footer-link">Status</a>
             <a href="/pages/careers" class="footer-link">Careers</a>
             <a href="/pages/webbot" class="footer-link">Discord Bot</a>
+            <a href="/pages/vscode_extension/" class="footer-link">Code Extension</a>
         </div>
         <div class="conv-footer-version">v1.0.0</div>
     </div>
@@ -111,7 +129,19 @@ if ($isMaintenance && !$isDevCookie) {
         </div>
     </div>
 
+    <div id="liveTracePanel" class="live-trace-panel"></div>
+
     <div class="input-area">
+        <div class="ai-tools-row">
+            <label class="ai-tool-toggle">
+                <input type="checkbox" id="codeTestToggle">
+                Auto-test generated code
+            </label>
+            <label class="ai-tool-toggle">
+                <input type="checkbox" id="liveTraceToggle">
+                Live trace
+            </label>
+        </div>
         <div
             id="userInput"
             contenteditable="true"
@@ -347,6 +377,11 @@ let devModeEnabled = true;
 let availableModelProviders = [];
 let selectedLlmProvider = null;
 let selectedLlmModel = null;
+let aiAssistOptions = {
+    codeTest: true,
+    liveTrace: false,
+};
+const validationReportStore = {};
 
 // ════════════════════════════════
 // CONVERSATION STORAGE
@@ -363,6 +398,7 @@ let syncPending = {};   // conv_id → true while a save is in flight
 const ACTIVE_CONV_GLOBAL_KEY = 'lyralink_active_conv_global';
 const ACTIVE_CONV_BACKUP_KEY = 'lyralink_active_conv_backup';
 const SHADOW_CONVS_KEY = 'lyralink_convs_shadow';
+const AI_ASSIST_PREFS_KEY = 'lyralink_ai_assist_prefs';
 
 function genId() { return 'conv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
 function isLoggedIn() { return !!currentUser; }
@@ -759,6 +795,84 @@ function setInputDisabled(disabled) {
     el.contentEditable = disabled ? 'false' : 'true';
     el.style.opacity   = disabled ? '0.5' : '1';
     document.getElementById('sendBtn').disabled = disabled;
+    const testToggle = document.getElementById('codeTestToggle');
+    const traceToggle = document.getElementById('liveTraceToggle');
+    if (testToggle) testToggle.disabled = disabled;
+    if (traceToggle) traceToggle.disabled = disabled;
+}
+
+function loadAiAssistPrefs() {
+    try {
+        const raw = localStorage.getItem(AI_ASSIST_PREFS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        aiAssistOptions.codeTest = parsed?.codeTest !== false;
+        aiAssistOptions.liveTrace = !!parsed?.liveTrace;
+    } catch (_) {}
+}
+
+function saveAiAssistPrefs() {
+    localStorage.setItem(AI_ASSIST_PREFS_KEY, JSON.stringify(aiAssistOptions));
+}
+
+function renderTracePanel(items, title = 'Live Trace') {
+    const panel = document.getElementById('liveTracePanel');
+    if (!panel) return;
+    if (!aiAssistOptions.liveTrace) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+    const rows = (items || []).map(item => {
+        const ts = item.time || item.ts || '';
+        const msg = item.message || item.msg || '';
+        return `<div class="live-trace-item"><span class="live-trace-time">${escapeHtml(String(ts))}</span>${escapeHtml(String(msg))}</div>`;
+    }).join('');
+    panel.style.display = 'block';
+    panel.innerHTML = `
+        <div class="live-trace-title">${escapeHtml(title)}</div>
+        <div class="live-trace-list">${rows || '<div class="live-trace-item">No trace events.</div>'}</div>
+    `;
+}
+
+function renderClientTrace(message) {
+    const now = new Date();
+    const time = now.toLocaleTimeString([], { hour12: false });
+    renderTracePanel([{ time, message }], 'Live Trace (In Progress)');
+}
+
+function formatServerTrace(trace) {
+    if (!Array.isArray(trace)) return [];
+    return trace.map(t => {
+        let time = '';
+        if (typeof t.ts === 'number') {
+            const d = new Date(t.ts * 1000);
+            time = d.toLocaleTimeString([], { hour12: false });
+        }
+        const prefix = t.stage ? `[${t.stage}] ` : '';
+        return { time, message: prefix + (t.message || '') };
+    });
+}
+
+function initAiAssistControls() {
+    loadAiAssistPrefs();
+    const codeTestToggle = document.getElementById('codeTestToggle');
+    const liveTraceToggle = document.getElementById('liveTraceToggle');
+    if (codeTestToggle) {
+        codeTestToggle.checked = aiAssistOptions.codeTest;
+        codeTestToggle.addEventListener('change', () => {
+            aiAssistOptions.codeTest = !!codeTestToggle.checked;
+            saveAiAssistPrefs();
+        });
+    }
+    if (liveTraceToggle) {
+        liveTraceToggle.checked = aiAssistOptions.liveTrace;
+        liveTraceToggle.addEventListener('change', () => {
+            aiAssistOptions.liveTrace = !!liveTraceToggle.checked;
+            saveAiAssistPrefs();
+            if (!aiAssistOptions.liveTrace) renderTracePanel([]);
+        });
+    }
 }
 
 document.getElementById('userInput').addEventListener('keydown', function(e) {
@@ -812,6 +926,7 @@ async function sendMessage() {
 
     clearInput();
     setInputDisabled(true);
+    if (aiAssistOptions.liveTrace) renderClientTrace('Preparing request');
     chatbox.scrollTop = chatbox.scrollHeight;
     await saveMessage('user', message);
 
@@ -823,6 +938,7 @@ async function sendMessage() {
     // Fetch recent moltbook posts to give AI context
     let moltPosts = [];
     try {
+        if (aiAssistOptions.liveTrace) renderClientTrace('Loading context');
         const moltData = await (await fetch('/moltbook.php?sort=new&limit=5')).json();
         moltPosts = (moltData.posts || []).slice(0, 5).map(p =>
             `- "${p.title}" by ${p.author?.name || '?'} (▲${p.upvotes || 0})`
@@ -830,6 +946,7 @@ async function sendMessage() {
     } catch(e) {}
 
     try {
+        if (aiAssistOptions.liveTrace) renderClientTrace('Generating and validating response');
         const response = await fetch('/api/chat.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -841,7 +958,9 @@ async function sendMessage() {
                 molt_posts: moltPosts,
                 provider:   selectedLlmProvider || undefined,
                 model:      selectedLlmModel || undefined,
-                dev_mode:   isDevUser() ? devModeEnabled : false
+                dev_mode:   isDevUser() ? devModeEnabled : false,
+                run_code_tests: aiAssistOptions.codeTest,
+                live_trace: aiAssistOptions.liveTrace
             })
         });
         const data  = await response.json();
@@ -863,8 +982,14 @@ async function sendMessage() {
         }
 
         const reply = data.reply || 'Something went wrong.';
+        const codeTestCard = renderCodeTestCard(data.code_test);
         const moltNotice = data.posted_to_moltbook ? `<div class="molt-notice">🦞 Shared to Moltbook!</div>` : '';
-        chatbox.innerHTML += `<div class="msg ai"><div class="avatar">⚡</div><div class="bubble">${renderMarkdown(reply)}${moltNotice}</div></div>`;
+        chatbox.innerHTML += `<div class="msg ai"><div class="avatar">⚡</div><div class="bubble">${renderMarkdown(reply)}${codeTestCard}${moltNotice}</div></div>`;
+
+        if (aiAssistOptions.liveTrace) {
+            const items = formatServerTrace(data.trace);
+            renderTracePanel(items, 'Live Trace');
+        }
 
         await saveMessage('assistant', reply);
         const conv = convCache.find(c => c.conv_id === activeConvId);
@@ -878,6 +1003,7 @@ async function sendMessage() {
     } catch (e) {
         document.getElementById(thinkingId)?.remove();
         chatbox.innerHTML += `<div class="msg ai"><div class="avatar">⚡</div><div class="bubble">Connection error. Please try again.</div></div>`;
+        if (aiAssistOptions.liveTrace) renderClientTrace('Request failed');
     }
 
     chatbox.scrollTop = chatbox.scrollHeight;
@@ -1505,6 +1631,58 @@ function renderMarkdown(text) {
     return marked.parse(text || '');
 }
 
+function renderCodeTestCard(report) {
+    if (!report || !report.enabled) return '';
+    const rows = Array.isArray(report.results) ? report.results : [];
+    const hasFailure = rows.some(r => ['failed', 'error'].includes(r.status));
+    const statusClass = hasFailure ? 'fail' : 'pass';
+    const reportId = 'vrep_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+    validationReportStore[reportId] = report;
+    const lines = rows.map(r => {
+        const runtime = r.runtime ? ` (${r.runtime})` : '';
+        const title = `${r.lang || 'code'}: ${r.status || 'unknown'}${runtime}`;
+        const note = r.note ? `<div class="code-test-line">${escapeHtml(r.note)}</div>` : '';
+        return `<div class="code-test-line"><strong>${escapeHtml(title)}</strong>${note}<div>${escapeHtml(r.output || '')}</div></div>`;
+    }).join('');
+    const summary = escapeHtml(report.summary || 'Validation completed.');
+    const action = hasFailure
+        ? `<div class="code-test-actions"><button class="code-test-fix-btn" onclick="requestValidationFix('${reportId}')">Fix failing code</button></div>`
+        : '';
+    return `<div class="code-test-card ${statusClass}"><div class="code-test-title">Sandbox Validation</div><div class="code-test-summary">${summary}</div>${lines}${action}</div>`;
+}
+
+function buildValidationFixPrompt(report) {
+    const rows = Array.isArray(report?.results) ? report.results : [];
+    const failed = rows.filter(r => ['failed', 'error'].includes(r.status));
+    const details = failed.map(r => {
+        const runtime = r.runtime ? ` (${r.runtime})` : '';
+        const output = String(r.output || '').slice(0, 1200);
+        return `- ${r.lang || 'code'}: ${r.status || 'failed'}${runtime}\n${output}`;
+    }).join('\n\n');
+
+    return [
+        'Fix the code from your previous answer so it passes validation.',
+        'Return complete corrected code blocks only, with proper language fences.',
+        'Do not include explanations before or after the code.',
+        '',
+        'Validation errors:',
+        details || '- Validation failed, but no details were captured.',
+    ].join('\n');
+}
+
+async function requestValidationFix(reportId) {
+    const report = validationReportStore[reportId];
+    if (!report) {
+        showToast('Validation details are no longer available', 'error');
+        return;
+    }
+    const prompt = buildValidationFixPrompt(report);
+    const input = document.getElementById('userInput');
+    if (!input) return;
+    input.innerText = prompt;
+    await sendMessage();
+}
+
 function copyCode(blockId, btn) {
     const block = document.getElementById(blockId);
     const code  = block ? block.querySelector('code') : null;
@@ -1723,6 +1901,7 @@ async function checkApiStatus() {
 
 // ── INIT ──
 (async function init() {
+    initAiAssistControls();
     // checkSession handles conv loading via loadConvList internally
     await checkSession();
     loadMoltbook();

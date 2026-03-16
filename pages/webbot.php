@@ -60,6 +60,22 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .editor-meta { border-bottom:1px solid var(--border); padding:8px 10px; font-size:10px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
         .editor { flex:1; width:100%; resize:none; border:0; outline:none; background:#0c1017; color:#dbe8ff; padding:11px; font-family:'DM Mono', monospace; font-size:12px; line-height:1.5; }
         .side-box { padding:12px; font-size:11px; line-height:1.8; color:var(--text-muted); }
+        .side-tab-row { display:flex; gap:8px; padding:9px 11px; border-bottom:1px solid var(--border); background:#0f1320; }
+        .side-tab-btn { flex:1; border:1px solid #2f3650; background:#131929; color:#b6c0d8; border-radius:8px; padding:7px 9px; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; }
+        .side-tab-btn.active { background:rgba(255,107,53,.14); border-color:#ff8c5d; color:#fff; }
+        .side-tab { display:none; }
+        .side-tab.active { display:block; }
+        .ai-helper-controls { display:grid; gap:8px; }
+        .ai-input, .ai-select { width:100%; background:#0b0f18; border:1px solid #2d3448; color:#dbe8ff; border-radius:8px; padding:8px 9px; font-family:'DM Mono',monospace; font-size:11px; }
+        .ai-row { display:flex; gap:8px; }
+        .ai-row .btn { flex:1; }
+        .ai-result { margin-top:10px; border:1px solid #2b3247; border-radius:10px; background:#0d1220; padding:10px; max-height:360px; overflow:auto; }
+        .ai-title { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; color:#ffd4c2; margin-bottom:6px; }
+        .ai-find { border:1px solid #2f3851; border-radius:8px; padding:8px; margin-top:6px; background:#0a101c; }
+        .ai-sev { display:inline-block; padding:1px 7px; border-radius:999px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; }
+        .ai-sev.high { background:rgba(239,68,68,.2); color:#ffc2c2; border:1px solid rgba(239,68,68,.45); }
+        .ai-sev.medium { background:rgba(245,158,11,.2); color:#ffe6b2; border:1px solid rgba(245,158,11,.45); }
+        .ai-sev.low { background:rgba(34,197,94,.2); color:#c1f3d3; border:1px solid rgba(34,197,94,.45); }
         .code-line { display:block; background:#0b0f18; border:1px solid #242b3c; border-radius:8px; padding:7px 9px; color:#dbe8ff; margin-top:6px; word-break:break-all; }
         .msg { margin-top:12px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--text-muted); min-height:38px; }
         .msg.ok { border-color:rgba(34,197,94,.5); color:#9ef0bb; }
@@ -134,7 +150,11 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         </section>
         <section class="panel">
             <div class="panel-head"><div class="panel-title">SFTP + Notes</div></div>
-            <div class="side-box">
+            <div class="side-tab-row">
+                <button id="sideTabBtnSftp" class="side-tab-btn active" onclick="showSideTab('sftp')">SFTP + Notes</button>
+                <button id="sideTabBtnAi" class="side-tab-btn" onclick="showSideTab('ai')">AI Helper</button>
+            </div>
+            <div id="sideTabSftp" class="side-tab side-box active">
                 <p>SFTP host:</p>
                 <span class="code-line" id="sftpHost">-</span>
                 <p style="margin-top:10px">SFTP port:</p>
@@ -148,6 +168,29 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
                 <p>- File list refreshes when workspace contents change</p>
                 <p>- If you are editing and the file changes externally, the panel warns instead of overwriting your buffer</p>
                 <p>- If the current file is unchanged locally, it auto-reloads from disk</p>
+            </div>
+            <div id="sideTabAi" class="side-tab side-box">
+                <div class="ai-helper-controls">
+                    <label>Scope
+                        <select id="aiScope" class="ai-select">
+                            <option value="current">Current file</option>
+                            <option value="all">All code files</option>
+                            <option value="custom">Custom list</option>
+                        </select>
+                    </label>
+                    <label id="aiCustomWrap" style="display:none">Custom paths (one per line)
+                        <textarea id="aiCustomPaths" class="ai-input" rows="4" placeholder="index.js\nsrc/commands/ping.js"></textarea>
+                    </label>
+                    <label>Focus
+                        <textarea id="aiPrompt" class="ai-input" rows="3" placeholder="Example: focus on crash causes, async errors, and token validation."></textarea>
+                    </label>
+                    <div class="ai-row">
+                        <button id="btnAiScan" class="btn" onclick="runAiHelper('scan')">Find Issues</button>
+                        <button id="btnAiFix" class="btn accent" onclick="runAiHelper('fix')">Find + Fix</button>
+                    </div>
+                    <button id="btnAiApply" class="btn ok" onclick="applyAiFixes()" disabled>Apply Suggested Fixes</button>
+                </div>
+                <div id="aiResult" class="ai-result" style="display:none"></div>
             </div>
         </section>
     </div>
@@ -165,6 +208,12 @@ let terminalSocket = null;
 let watchSocket = null;
 let lastWatchHash = '';
 const pendingActions = new Set();
+let workspaceFiles = [];
+let lastAiAssistance = null;
+
+function escHtml(value) {
+    return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 function setDisabled(id, disabled) {
     const el = document.getElementById(id);
@@ -191,6 +240,7 @@ function updateControlStates() {
     const sftpEnabled = !!(state && state.sftp && state.sftp.enabled);
     const hasSelection = !!selectedPath;
     const selectedFile = selectedType === 'file';
+    const hasAiFixes = !!(lastAiAssistance && Array.isArray(lastAiAssistance.proposed_files) && lastAiAssistance.proposed_files.length > 0);
 
     setDisabled('btnCreate', !hasState || workspaceExists || pendingActions.has('create'));
     setDisabled('btnStart', !workspaceExists || running || restarting || pendingActions.has('start'));
@@ -210,6 +260,9 @@ function updateControlStates() {
     setDisabled('btnDelete', !workspaceExists || !hasSelection);
     setDisabled('btnReloadFiles', !workspaceExists);
     setDisabled('btnSaveFile', !workspaceExists || !selectedFile);
+    setDisabled('btnAiScan', !workspaceExists || pendingActions.has('ai_help'));
+    setDisabled('btnAiFix', !workspaceExists || pendingActions.has('ai_help'));
+    setDisabled('btnAiApply', !workspaceExists || pendingActions.has('ai_apply') || !hasAiFixes);
 }
 
 function setMsg(text, kind = '') {
@@ -336,6 +389,7 @@ async function loadFiles() {
     }
     const list = document.getElementById('fileList');
     const files = data.files || [];
+    workspaceFiles = files;
     if (!files.length) {
         list.innerHTML = '<div style="padding:10px;color:#7e8aa3;font-size:11px">No files yet. Create workspace first.</div>';
         document.getElementById('editor').value = '';
@@ -354,6 +408,128 @@ async function loadFiles() {
         }
     }
     updateControlStates();
+}
+
+function showSideTab(tab) {
+    const sftpBtn = document.getElementById('sideTabBtnSftp');
+    const aiBtn = document.getElementById('sideTabBtnAi');
+    const sftpTab = document.getElementById('sideTabSftp');
+    const aiTab = document.getElementById('sideTabAi');
+    const isAi = tab === 'ai';
+    sftpBtn.classList.toggle('active', !isAi);
+    aiBtn.classList.toggle('active', isAi);
+    sftpTab.classList.toggle('active', !isAi);
+    aiTab.classList.toggle('active', isAi);
+}
+
+function listAiPathsByScope() {
+    const scope = document.getElementById('aiScope').value;
+    if (scope === 'current') {
+        if (selectedType === 'file' && selectedPath) {
+            return [selectedPath];
+        }
+        return [];
+    }
+    if (scope === 'all') {
+        return workspaceFiles
+            .filter((f) => f.type === 'file')
+            .map((f) => f.path)
+            .filter((path) => /\.(js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|php|sh|css|html|env|yml|yaml|ini|toml)$/i.test(path))
+            .slice(0, 12);
+    }
+    const raw = document.getElementById('aiCustomPaths').value || '';
+    return raw.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean).slice(0, 12);
+}
+
+function renderAiAssistance(assistance) {
+    const box = document.getElementById('aiResult');
+    const findings = Array.isArray(assistance?.findings) ? assistance.findings : [];
+    const proposed = Array.isArray(assistance?.proposed_files) ? assistance.proposed_files : [];
+
+    const fileList = (assistance?.reviewed_files || []).map((f) => '<span class="code-line">' + escHtml(f.path + ' (' + f.bytes + ' bytes)') + '</span>').join('');
+    const findingList = findings.length
+        ? findings.map((f) => '<div class="ai-find">'
+            + '<div><span class="ai-sev ' + escHtml(f.severity || 'medium') + '">' + escHtml(f.severity || 'medium') + '</span> '
+            + '<strong>' + escHtml(f.path || '') + '</strong>'
+            + (f.line_hint ? ' <span style="color:#8fa1c7">@ ' + escHtml(f.line_hint) + '</span>' : '')
+            + '</div>'
+            + '<div style="margin-top:4px"><strong>Issue:</strong> ' + escHtml(f.issue || '') + '</div>'
+            + '<div><strong>Why:</strong> ' + escHtml(f.why || '') + '</div>'
+            + '<div><strong>Fix:</strong> ' + escHtml(f.fix || '') + '</div>'
+            + '</div>').join('')
+        : '<div class="ai-find">No issues detected.</div>';
+
+    const fixList = proposed.length
+        ? '<div class="ai-title" style="margin-top:10px">Proposed File Updates</div>'
+            + proposed.map((p) => '<div class="ai-find"><strong>' + escHtml(p.path || '') + '</strong>'
+            + (p.reason ? '<div style="margin-top:4px"><strong>Reason:</strong> ' + escHtml(p.reason) + '</div>' : '')
+            + '</div>').join('')
+        : '';
+
+    box.style.display = 'block';
+    box.innerHTML = '<div class="ai-title">AI Review Summary</div>'
+        + '<div>' + escHtml(assistance?.summary || 'AI helper completed.') + '</div>'
+        + '<div class="ai-title" style="margin-top:10px">Reviewed Files</div>'
+        + (fileList || '<div class="ai-find">None</div>')
+        + '<div class="ai-title" style="margin-top:10px">Findings</div>'
+        + findingList
+        + fixList;
+}
+
+async function runAiHelper(mode) {
+    const paths = listAiPathsByScope();
+    if (!paths.length) {
+        setMsg('Select at least one file for AI helper', 'bad');
+        return;
+    }
+    await withPending('ai_help', async () => {
+        setMsg(mode === 'fix' ? 'AI helper reviewing and preparing fixes...' : 'AI helper reviewing files...', '');
+        const prompt = document.getElementById('aiPrompt').value || '';
+        const data = await apiCall('ai_help', {
+            mode,
+            prompt,
+            paths: JSON.stringify(paths),
+        });
+        if (!data.success) {
+            setMsg(data.error || 'AI helper failed', 'bad');
+            return;
+        }
+        lastAiAssistance = data.assistance || null;
+        renderAiAssistance(lastAiAssistance || {});
+        const proposedCount = (lastAiAssistance?.proposed_files || []).length;
+        setMsg(proposedCount > 0 ? ('AI helper prepared ' + proposedCount + ' file fix(es).') : 'AI helper review complete.', 'ok');
+        updateControlStates();
+        showSideTab('ai');
+    });
+}
+
+async function applyAiFixes() {
+    const proposed = (lastAiAssistance && Array.isArray(lastAiAssistance.proposed_files)) ? lastAiAssistance.proposed_files : [];
+    if (!proposed.length) {
+        setMsg('No suggested fixes to apply', 'bad');
+        return;
+    }
+    await withPending('ai_apply', async () => {
+        let okCount = 0;
+        let failCount = 0;
+        for (const file of proposed) {
+            const data = await apiCall('save_file', { path: file.path, content: file.content || '' });
+            if (data.success) {
+                okCount += 1;
+            } else {
+                failCount += 1;
+            }
+        }
+        await loadFiles();
+        if (selectedPath && selectedType === 'file' && proposed.some((p) => p.path === selectedPath)) {
+            await selectEntry(selectedPath, 'file');
+        }
+        setMsg('Applied fixes: ' + okCount + ' success, ' + failCount + ' failed.', failCount ? 'bad' : 'ok');
+        if (failCount === 0) {
+            lastAiAssistance.proposed_files = [];
+        }
+        updateControlStates();
+    });
 }
 
 async function selectEntry(path, type) {
@@ -674,6 +850,10 @@ async function boot() {
 }
 
 document.getElementById('terminalInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTerminalLine(); });
+document.getElementById('aiScope').addEventListener('change', () => {
+    const custom = document.getElementById('aiScope').value === 'custom';
+    document.getElementById('aiCustomWrap').style.display = custom ? 'block' : 'none';
+});
 boot();
 </script>
 </body>
