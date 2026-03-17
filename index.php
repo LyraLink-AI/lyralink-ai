@@ -352,6 +352,7 @@ if ($isForkMode) {
         .reveal-delay-4 { transition-delay: 0.4s; }
         .reveal-delay-5 { transition-delay: 0.5s; }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

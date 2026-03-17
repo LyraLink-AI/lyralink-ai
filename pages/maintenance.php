@@ -106,6 +106,7 @@ $eta = file_exists($infoFile) ? trim(file_get_contents($infoFile)) : '';
         }
         .discord-link:hover { border-color: #5865f2; color: #7289da; }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <div class="card">

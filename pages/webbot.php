@@ -24,6 +24,8 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .nav-logo { height:27px; mix-blend-mode:lighten; }
         .nav-title { font-family:'Syne', sans-serif; font-weight:800; font-size:13px; color:#ffb08e; }
         .nav-right { margin-left:auto; display:flex; gap:8px; }
+        .nav-menu-toggle { display:none; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:none; color:var(--text-muted); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; }
+        .nav-menu-toggle:hover { border-color:#ff8c5d; color:#fff; }
         .nav-link { font-size:11px; color:var(--text-muted); text-decoration:none; border:1px solid var(--border); border-radius:999px; padding:5px 10px; }
         .nav-link:hover { color:#fff; border-color:#ff8c5d; }
         .page { max-width:1480px; margin:0 auto; padding:22px; }
@@ -84,13 +86,26 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .diag-title { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; margin-bottom:4px; color:#ffb4b4; }
         .diag pre { margin-top:8px; background:#120f15; border:1px solid #3a2b3b; border-radius:8px; padding:8px; color:#ffd9d9; font-family:'DM Mono',monospace; font-size:10px; max-height:150px; overflow:auto; white-space:pre-wrap; }
         @media (max-width: 1180px) { .grid { grid-template-columns:1fr; } .status-row { grid-template-columns:1fr 1fr; } }
+        @media (max-width: 760px) {
+            nav { padding:10px 14px; flex-wrap:wrap; }
+            .nav-menu-toggle { display:inline-flex; margin-left:auto; }
+            .nav-right { display:none; width:100%; margin-left:0; padding-top:8px; flex-wrap:wrap; }
+            .nav-right.open { display:flex; }
+            .nav-link { flex:1 1 calc(50% - 8px); text-align:center; }
+
+            .file-wrap { flex-direction:column; }
+            .file-list { width:100%; max-width:none; min-width:0; max-height:220px; border-right:0; border-bottom:1px solid var(--border); }
+            .controls .btn { flex:1 1 calc(50% - 8px); }
+        }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <nav>
     <img src="/assets/lyralinklogo.png" alt="Lyralink" class="nav-logo">
     <span style="color:#3c3f52">/</span>
     <span class="nav-title">Web Bot Panel</span>
+    <button class="nav-menu-toggle" id="navMenuToggle" onclick="toggleNavMenu()">Menu</button>
     <div class="nav-right">
         <a href="/pages/deploy/" class="nav-link">Deploy</a>
         <a href="/chat.php" class="nav-link">Chat</a>
@@ -210,6 +225,18 @@ let lastWatchHash = '';
 const pendingActions = new Set();
 let workspaceFiles = [];
 let lastAiAssistance = null;
+
+function toggleNavMenu() {
+    const nav = document.querySelector('.nav-right');
+    if (!nav) return;
+    nav.classList.toggle('open');
+}
+
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 760) {
+        document.querySelector('.nav-right')?.classList.remove('open');
+    }
+});
 
 function escHtml(value) {
     return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

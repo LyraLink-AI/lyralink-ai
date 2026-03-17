@@ -194,6 +194,7 @@ $extensionId = $publisher . '.' . $name;
             .cards { grid-template-columns:1fr; }
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <nav>

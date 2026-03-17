@@ -1,0 +1,138 @@
+/* Global mobile optimization overrides */
+
+* {
+    box-sizing: border-box;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+    height: auto;
+}
+
+pre,
+code {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+    html,
+    body {
+        overflow-x: hidden;
+    }
+
+    .container,
+    .page,
+    .page-wrap,
+    .doc-content {
+        width: 100%;
+        max-width: 100%;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+
+    .grid,
+    .grid-2,
+    .grid-3,
+    .content-grid,
+    .dock-row,
+    .plans,
+    .features-grid,
+    .steps,
+    .usecases-grid,
+    .status-row,
+    .footer-inner {
+        grid-template-columns: 1fr !important;
+    }
+
+    .toolbar,
+    .topbar,
+    .nav,
+    .nav-right,
+    .actions,
+    .header,
+    .header-actions,
+    .status-banner,
+    .search-row,
+    .controls,
+    .button-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+        max-width: 100%;
+    }
+
+    /* Override inline min-width declarations commonly used on desktop */
+    [style*="min-width:260px"],
+    [style*="min-width:240px"],
+    [style*="min-width:220px"],
+    [style*="min-width:200px"],
+    [style*="min-width:180px"],
+    [style*="min-width:160px"],
+    [style*="min-width:140px"] {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    .drawer,
+    .sidebar,
+    .modal,
+    .card,
+    .panel,
+    .login-card {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
+
+    .chat-panel,
+    .main,
+    .main-panel {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    html {
+        font-size: 15px;
+    }
+
+    .hero h1,
+    h1 {
+        font-size: clamp(1.5rem, 7vw, 2rem) !important;
+        line-height: 1.2;
+    }
+
+    h2 {
+        font-size: clamp(1.25rem, 5.8vw, 1.6rem) !important;
+        line-height: 1.25;
+    }
+
+    .bubble,
+    .msg-bubble {
+        max-width: 94% !important;
+    }
+
+    .btn,
+    .btn-sm,
+    .btn-small,
+    .auth-btn,
+    .nav-cta {
+        min-height: 42px;
+    }
+}

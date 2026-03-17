@@ -72,6 +72,7 @@ if (!empty($_SESSION['user_id'])) {
         .auth-modal-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer}
         .auth-modal-btn.primary{background:var(--accent);color:white;border-color:var(--accent)}
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

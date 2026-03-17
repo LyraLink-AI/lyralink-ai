@@ -260,6 +260,8 @@ PROMPT;
 // ════════════════════════════════
 function callLlm(string $provider, array $messages, int $maxTokens = 1024, float $temperature = 0.75, string $model = 'llama-3.1-8b-instant', ?array &$meta = null) {
     $provider = strtolower($provider ?: 'groq');
+    $requestedProvider = $provider;
+    $requestedModel = $model;
     $groqApiKey = api_get_secret('GROQ_API_KEY', '');
     $openRouterApiKey = api_get_secret('OPENROUTER_API_KEY', '');
     $openAiApiKey = api_get_secret('OPENAI_API_KEY', '');
@@ -299,14 +301,23 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_TIMEOUT, 90);
     $response = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     $result = json_decode($response, true);
     $choice = $result['choices'][0] ?? [];
     if ($meta !== null) {
+        $usage = is_array($result['usage'] ?? null) ? $result['usage'] : [];
         $meta = [
             'finish_reason' => $choice['finish_reason'] ?? null,
             'error' => $result['error']['message'] ?? null,
             'provider' => $provider,
+            'requested_provider' => $requestedProvider,
+            'model' => $result['model'] ?? $requestedModel,
+            'requested_model' => $requestedModel,
+            'http_code' => $httpCode,
+            'prompt_tokens' => isset($usage['prompt_tokens']) ? (int)$usage['prompt_tokens'] : null,
+            'completion_tokens' => isset($usage['completion_tokens']) ? (int)$usage['completion_tokens'] : null,
+            'total_tokens' => isset($usage['total_tokens']) ? (int)$usage['total_tokens'] : null,
         ];
     }
     return $choice['message']['content'] ?? null;
@@ -758,6 +769,10 @@ trace_add($trace, $liveTrace, 'routing', 'Model routing selected', [
     'plan' => $userPlan,
 ]);
 
+$requestedProvider = $userProvider;
+$requestedModel = $userModel;
+$providerFallbackUsed = false;
+
 // ════════════════════════════════
 // DATASET SEARCH — inject relevant past Q&As
 // ════════════════════════════════
@@ -867,6 +882,16 @@ $traceTokens  = [
 trace_add($trace, $liveTrace, 'llm', 'Generating reply', $traceTokens);
 $reply        = callLlm($userProvider, $fullMessages, $replyMaxTokens, 0.75, $userModel, $mainMeta);
 $groqMs       = round((microtime(true) - $groqStart) * 1000);
+$requestedMeta = $mainMeta;
+
+if (!empty($mainMeta['error'])) {
+    trace_add($trace, $liveTrace, 'llm', 'Primary provider returned an error', [
+        'provider' => $mainMeta['provider'] ?? $userProvider,
+        'model' => $mainMeta['model'] ?? $userModel,
+        'http_code' => $mainMeta['http_code'] ?? null,
+        'error' => $mainMeta['error'],
+    ]);
+}
 
 if (!$reply) {
     // Retry with only the last 4 messages if it still fails
@@ -897,8 +922,13 @@ if (!$reply && $userProvider !== 'groq' && $groqApiKey !== '') {
     $fallbackMeta = [];
     $reply = callLlm('groq', $fullMessages, $replyMaxTokens, 0.75, 'llama-3.1-8b-instant', $fallbackMeta);
     if ($reply) {
+        $providerFallbackUsed = true;
         $mainMeta = $fallbackMeta;
-        trace_add($trace, $liveTrace, 'llm', 'Fallback provider succeeded', ['provider' => 'groq']);
+        trace_add($trace, $liveTrace, 'llm', 'Fallback provider succeeded', [
+            'provider' => $fallbackMeta['provider'] ?? 'groq',
+            'model' => $fallbackMeta['model'] ?? 'llama-3.1-8b-instant',
+            'http_code' => $fallbackMeta['http_code'] ?? null,
+        ]);
     }
 }
 
@@ -908,8 +938,11 @@ if (!$reply) {
 }
 
 trace_add($trace, $liveTrace, 'llm', 'Reply generated', [
+    'provider' => $mainMeta['provider'] ?? $requestedProvider,
+    'model' => $mainMeta['model'] ?? $requestedModel,
     'finish_reason' => $mainMeta['finish_reason'] ?? null,
     'latency_ms' => $groqMs,
+    'total_tokens' => $mainMeta['total_tokens'] ?? null,
 ]);
 
 $codeTestResult = null;
@@ -1057,8 +1090,12 @@ echo json_encode(array_filter([
     'code_test'          => $codeTestResult,
     'trace'              => $liveTrace ? $trace : null,
     'debug'              => $devMode ? [
-        'model'              => $userModel,
-        'provider'           => $userProvider,
+        'model'              => $mainMeta['model'] ?? $requestedModel,
+        'provider'           => $mainMeta['provider'] ?? $requestedProvider,
+        'requested_model'    => $requestedModel,
+        'requested_provider' => $requestedProvider,
+        'requested_http_code'=> $requestedMeta['http_code'] ?? null,
+        'fallback_used'      => $providerFallbackUsed,
         'groq_ms'            => $groqMs,
         'messages_sent'      => count($trimmedMsgs),
         'messages_trimmed'   => $trimmedCount,
@@ -1081,6 +1118,12 @@ echo json_encode(array_filter([
             'q'      => substr($m['question'], 0, 80)
         ], $datasetMatches),
         'finish_reason'      => $mainMeta['finish_reason'] ?? null,
+        'http_code'          => $mainMeta['http_code'] ?? null,
+        'requested_error'    => $requestedMeta['error'] ?? null,
+        'prompt_tokens'      => $mainMeta['prompt_tokens'] ?? null,
+        'completion_tokens'  => $mainMeta['completion_tokens'] ?? null,
+        'total_tokens'       => $mainMeta['total_tokens'] ?? null,
+        'llm_error'          => $mainMeta['error'] ?? null,
         'reply_token_budget' => $replyMaxTokens,
         'dev_user'           => true,
     ] : null

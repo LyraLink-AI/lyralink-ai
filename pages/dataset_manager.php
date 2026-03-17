@@ -108,6 +108,7 @@ if (($_SESSION['username'] ?? '') !== 'developer') {
 
         .empty { text-align:center; padding:40px; color:var(--text-muted); font-size:13px; }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

@@ -28,6 +28,8 @@ if (empty($_SESSION['is_admin'])) {
         .nav-sep{color:var(--border)}
         .nav-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text-muted)}
         .nav-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+        .nav-menu-toggle{display:none;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer}
+        .nav-menu-toggle:hover{border-color:var(--accent);color:var(--accent-light)}
         .nav-link{font-size:11px;color:var(--text-muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:20px;transition:all 0.2s}
         .nav-link:hover{border-color:var(--accent);color:var(--accent-light)}
 
@@ -131,7 +133,15 @@ if (empty($_SESSION['is_admin'])) {
             nav{padding:10px 14px}
             .page{padding:20px 12px 60px}
         }
+        @media(max-width:760px){
+            nav{flex-wrap:wrap}
+            .nav-menu-toggle{display:inline-flex;margin-left:auto}
+            .nav-right{display:none;width:100%;margin-left:0;padding-top:8px;gap:6px;flex-wrap:wrap}
+            .nav-right.open{display:flex}
+            .nav-link{flex:1 1 calc(50% - 6px);text-align:center}
+        }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 
@@ -139,6 +149,7 @@ if (empty($_SESSION['is_admin'])) {
     <img src="/assets/lyralinklogo.png" alt="Lyralink" class="nav-logo">
     <span class="nav-sep">/</span>
     <span class="nav-title">Hosting Admin</span>
+    <button class="nav-menu-toggle" id="navMenuToggle" onclick="toggleNavMenu()">Menu</button>
     <div class="nav-right">
         <a href="/pages/admin.php" class="nav-link">← Admin</a>
         <a href="/pages/deploy/" class="nav-link">Deploy Page</a>
@@ -207,6 +218,18 @@ let allDeps      = [];
 let pleskDomain  = 'cloudhavenx.com';
 let panelUrl     = 'https://panel.cloudhavenx.com';
 let activeFilter = 'all';
+
+function toggleNavMenu() {
+    const nav = document.querySelector('.nav-right');
+    if (!nav) return;
+    nav.classList.toggle('open');
+}
+
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 760) {
+        document.querySelector('.nav-right')?.classList.remove('open');
+    }
+});
 
 const TIER_PRICES = { small:5, medium:12, large:25 };
 

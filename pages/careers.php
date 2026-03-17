@@ -184,6 +184,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
             .modal{border-radius:0;height:100%;overflow-y:auto}
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <div class="grid-bg"></div>

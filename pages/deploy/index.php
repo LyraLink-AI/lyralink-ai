@@ -184,6 +184,7 @@ $paypalClientId = htmlspecialchars(api_get_secret('PAYPAL_CLIENT_ID', ''), ENT_Q
         .dev-btn.danger{border-color:rgba(239,68,68,0.4);color:#ef4444}
         .dev-btn.danger:hover{background:rgba(239,68,68,0.1)}
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

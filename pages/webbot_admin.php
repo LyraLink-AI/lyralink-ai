@@ -27,6 +27,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
         .actions{display:flex;gap:6px;flex-wrap:wrap}.empty{padding:30px;color:var(--muted);text-align:center}.toast{position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;opacity:0;transform:translateY(12px);transition:all .2s}.toast.show{opacity:1;transform:translateY(0)}
         @media(max-width:1100px){.row{grid-template-columns:1fr}.head{display:none}.cell{padding:2px 0}.cell::before{content:attr(data-label);display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}}
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <nav>

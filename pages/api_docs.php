@@ -128,6 +128,7 @@
             table th, table td { padding: 8px 10px; }
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

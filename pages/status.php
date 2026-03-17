@@ -180,6 +180,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
             .legend { flex-wrap: wrap; gap: 8px; padding: 10px 14px; font-size: 10px; }
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <div class="orb orb1"></div>

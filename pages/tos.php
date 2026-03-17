@@ -101,6 +101,7 @@
             .contact-card a { margin-left: 0; width: 100%; text-align: center; }
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

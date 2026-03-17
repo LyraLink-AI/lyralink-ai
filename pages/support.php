@@ -115,6 +115,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         #ticketView,.screen{display:none}
         #ticketView.active,.screen.active{display:block}
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <nav>

@@ -62,6 +62,7 @@ if (empty($_SESSION['is_admin'])) { header('Location: /'); exit; }
         .btn-unblock{background:none;border:1px solid rgba(239,68,68,0.3);color:var(--error);border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Mono',monospace}
         .btn-unblock:hover{background:rgba(239,68,68,0.1)}
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 <nav>

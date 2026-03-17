@@ -110,6 +110,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
         .section-label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px; margin-top:24px; }
         .section-label:first-child { margin-top:0; }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 
@@ -231,6 +232,14 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
             <div class="link-info">
                 <div class="link-name">Web Bot Instances</div>
                 <div class="link-desc">Inspect, restart, SFTP-enable, or delete every bot workspace</div>
+            </div>
+            <span class="link-arrow">→</span>
+        </a>
+        <a href="/pages/mail_admin.php" class="link-card">
+            <span class="link-icon">📬</span>
+            <div class="link-info">
+                <div class="link-name">Mail Admin + SSO</div>
+                <div class="link-desc">Manage Plesk mailboxes and launch Roundcube one-click SSO</div>
             </div>
             <span class="link-arrow">→</span>
         </a>

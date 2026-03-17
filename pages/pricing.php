@@ -125,6 +125,7 @@ $paypalClientId = htmlspecialchars(api_get_secret('PAYPAL_CLIENT_ID', ''), ENT_Q
             .faq-section { padding: 0 16px 60px; }
         }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 

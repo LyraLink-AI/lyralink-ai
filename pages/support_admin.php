@@ -18,9 +18,13 @@
         .nav-logo{height:26px;width:auto;mix-blend-mode:lighten}
         .nav-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text-muted)}
         .nav-right{display:flex;gap:8px;margin-left:auto;align-items:center}
+        .nav-menu-toggle{display:none;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer}
+        .nav-menu-toggle:hover{border-color:var(--accent);color:var(--accent-light)}
         .agent-badge{font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(124,58,237,0.15);color:var(--accent-light);border:1px solid rgba(124,58,237,0.3)}
         .btn-sm{padding:5px 12px;border-radius:20px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;border:1px solid var(--border);color:var(--text-muted);background:none;transition:all 0.2s}
         .btn-sm:hover{border-color:var(--accent);color:var(--accent-light)}
+
+        .mobile-pane-toggle{display:none}
 
         /* LOGIN */
         #loginScreen{display:flex;align-items:center;justify-content:center;min-height:80vh}
@@ -144,7 +148,25 @@
 
         @media(max-width:768px){.sidebar{width:100%;height:auto}.layout{flex-direction:column}}
         @media(max-width:1100px){.dock-row{grid-template-columns:1fr}}
+        @media(max-width:900px){
+            nav{padding:10px 14px;flex-wrap:wrap}
+            .nav-title{font-size:12px}
+            .nav-menu-toggle{display:inline-flex;margin-left:auto}
+            .nav-right{display:none;width:100%;margin-left:0;padding-top:8px;flex-wrap:wrap;gap:6px}
+            .nav-right.open{display:flex}
+            .nav-right .btn-sm,.nav-right .agent-badge{flex:1 1 calc(50% - 6px);text-align:center;justify-content:center}
+
+            .mobile-pane-toggle{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.95)}
+            .pane-btn{flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer}
+            .pane-btn.active{border-color:var(--accent);color:var(--accent-light);background:rgba(124,58,237,0.1)}
+
+            #dashScreen.dash-pane-list .main-panel{display:none}
+            #dashScreen.dash-pane-list .sidebar{display:flex;width:100%;height:calc(100vh - 150px)}
+            #dashScreen.dash-pane-detail .sidebar{display:none}
+            #dashScreen.dash-pane-detail .main-panel{display:flex;height:calc(100vh - 150px)}
+        }
     </style>
+    <link rel="stylesheet" href="/assets/css/mobile.css">
 </head>
 <body>
 
@@ -152,6 +174,7 @@
 <nav>
     <img src="/assets/lyralinklogo.png" alt="Lyralink" class="nav-logo">
     <span class="nav-title">/ Support Dashboard</span>
+    <button class="nav-menu-toggle" id="navMenuToggle" onclick="toggleNavMenu()">Menu</button>
     <div class="nav-right">
         <span class="agent-badge" id="agentBadge" style="display:none"></span>
         <button class="btn-sm" id="agentMgrBtn" style="display:none" onclick="showAgentManager()">👥 Agents</button>
@@ -162,6 +185,7 @@
         <button class="btn-sm" id="careersBtn" style="display:none" onclick="showCareers()">💼 Careers</button>
         <button class="btn-sm" id="dockerBtn" style="display:none" onclick="showDockerInstances()">🐳 Docker</button>
         <button class="btn-sm" id="backToChatBtn" style="display:none" onclick="window.location.href='/chat'">← Back to Chat</button>
+        <button class="btn-sm" id="myMailBtn" style="display:none" onclick="window.location.href='/pages/my_mail.php'">✉ My Email</button>
         <button class="btn-sm" id="logoutBtn" style="display:none" onclick="agentLogout()">Logout</button>
     </div>
 </nav>
@@ -178,7 +202,11 @@
 </div>
 
 <!-- DASHBOARD -->
-<div id="dashScreen">
+<div id="dashScreen" class="dash-pane-list">
+<div class="mobile-pane-toggle" id="mobilePaneToggle">
+    <button class="pane-btn active" id="paneListBtn" onclick="setMobilePane('list')">Tickets</button>
+    <button class="pane-btn" id="paneDetailBtn" onclick="setMobilePane('detail')">Detail</button>
+</div>
 <div class="layout">
 
     <!-- SIDEBAR -->
@@ -524,6 +552,7 @@ let filters = { status: 'open', priority: '', search: '' };
 let activeTicketRef = null;
 let searchTimer = null;
     let dockerInstances = [];
+let mobilePane = 'list';
 
 async function api(action, body = {}, method = 'POST') {
     const fd = new FormData();
@@ -556,6 +585,7 @@ function showDash() {
     document.getElementById('agentBadge').textContent    = agentSession.username + ' · ' + agentSession.role.replace('_',' ');
     document.getElementById('agentBadge').style.display  = 'inline-block';
     document.getElementById('logoutBtn').style.display   = 'inline-block';
+    document.getElementById('myMailBtn').style.display   = 'inline-block';
     if (['admin','senior_agent'].includes(agentSession.role)) {
         document.getElementById('agentMgrBtn').style.display  = 'inline-block';
         document.getElementById('configBtn').style.display    = 'inline-block';
@@ -568,10 +598,41 @@ function showDash() {
         document.getElementById('backToChatBtn').style.display = 'inline-block';
         document.getElementById('transcriptsBtn').style.display = 'inline-block';
     }
+    setMobilePane(window.innerWidth <= 900 ? 'list' : 'detail');
     loadTickets();
     loadStats();
     startHeartbeat();
 }
+
+function toggleNavMenu() {
+    const navRight = document.querySelector('.nav-right');
+    if (!navRight) return;
+    navRight.classList.toggle('open');
+}
+
+function setMobilePane(pane) {
+    const dash = document.getElementById('dashScreen');
+    if (!dash) return;
+    if (window.innerWidth > 900) {
+        dash.classList.remove('dash-pane-list', 'dash-pane-detail');
+        document.getElementById('paneListBtn')?.classList.remove('active');
+        document.getElementById('paneDetailBtn')?.classList.remove('active');
+        return;
+    }
+
+    mobilePane = pane === 'detail' ? 'detail' : 'list';
+    dash.classList.remove('dash-pane-list', 'dash-pane-detail');
+    dash.classList.add(mobilePane === 'detail' ? 'dash-pane-detail' : 'dash-pane-list');
+    document.getElementById('paneListBtn')?.classList.toggle('active', mobilePane === 'list');
+    document.getElementById('paneDetailBtn')?.classList.toggle('active', mobilePane === 'detail');
+}
+
+window.addEventListener('resize', () => {
+    setMobilePane(mobilePane);
+    if (window.innerWidth > 900) {
+        document.querySelector('.nav-right')?.classList.remove('open');
+    }
+});
 
 async function agentLogout() { await api('agent_logout'); location.reload(); }
 
@@ -648,6 +709,7 @@ async function openTicket(ref) {
     const detail = document.getElementById('ticketDetail');
     document.getElementById('emptyPanel').style.display = 'none';
     detail.style.display = 'flex';
+    if (window.innerWidth <= 900) setMobilePane('detail');
     detail.innerHTML = `
         <div class="ticket-header">
             <div class="ticket-header-info">
@@ -729,6 +791,7 @@ async function deleteActiveTicket() {
     activeTicketRef = null;
     document.getElementById('ticketDetail').style.display = 'none';
     document.getElementById('emptyPanel').style.display = 'flex';
+    if (window.innerWidth <= 900) setMobilePane('list');
     showToast(`Deleted ${ref}`, 'success');
     loadTickets();
 }

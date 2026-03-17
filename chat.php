@@ -11,7 +11,7 @@ if ($isMaintenance && !$isDevCookie) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -46,9 +46,12 @@ if ($isMaintenance && !$isDevCookie) {
         .profile-block{background:#020617;border:1px solid #334155;border-radius:10px;padding:12px}
         .profile-block h4{font-size:12px;color:#cbd5e1;margin-bottom:8px}
         .profile-note{font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:8px}
+        .ai-tools-wrap{display:contents}
+        .ai-tools-toggle-btn{display:none}
         .ai-tools-row{display:flex;gap:12px;align-items:center;padding:6px 2px 2px;color:#94a3b8;font-size:11px;font-family:'DM Mono',monospace;flex-wrap:wrap}
         .ai-tool-toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
         .ai-tool-toggle input{accent-color:#7c3aed;cursor:pointer}
+        .tool-label-short{display:none}
         .live-trace-panel{display:none;margin:8px 0 4px;padding:10px;border:1px solid #273449;border-radius:10px;background:rgba(15,23,42,0.78);font-family:'DM Mono',monospace}
         .live-trace-title{font-size:11px;color:#a78bfa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
         .live-trace-list{display:flex;flex-direction:column;gap:5px;max-height:180px;overflow:auto}
@@ -63,6 +66,21 @@ if ($isMaintenance && !$isDevCookie) {
         .code-test-actions{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
         .code-test-fix-btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.45);background:rgba(124,58,237,0.16);color:#c4b5fd;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer}
         .code-test-fix-btn:hover{background:rgba(124,58,237,0.28)}
+        @media(max-width:767px){
+            .input-area{position:relative}
+            .ai-tools-wrap{display:flex;flex-direction:column;order:3;flex:0 0 auto;width:auto;position:relative}
+            .ai-tools-toggle-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:40px;padding:0 9px;border-radius:10px;border:1px solid #273449;background:rgba(15,23,42,0.55);color:#94a3b8;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer}
+            .ai-tools-wrap.open .ai-tools-toggle-btn{border-color:#7c3aed;color:#c4b5fd}
+            .ai-tools-row{display:none;position:absolute;right:0;bottom:calc(100% + 8px);z-index:40;gap:6px;padding:8px;border:1px solid #273449;border-radius:10px;background:#0f172a;box-shadow:0 10px 26px rgba(2,6,23,.5);font-size:10px;max-width:calc(100vw - 36px)}
+            .ai-tools-wrap.open .ai-tools-row{display:flex;flex-wrap:wrap;justify-content:flex-end}
+            .ai-tool-toggle{gap:4px;padding:2px 7px;border:1px solid #273449;border-radius:999px;background:rgba(15,23,42,0.55)}
+            .ai-tool-toggle input{width:12px;height:12px}
+            .tool-label-full{display:none}
+            .tool-label-short{display:inline}
+            #userInput{order:1}
+            #sendBtn{order:2}
+            .dev-fab,.dev-panel{display:none !important}
+        }
         @media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
     </style>
 </head>
@@ -132,15 +150,20 @@ if ($isMaintenance && !$isDevCookie) {
     <div id="liveTracePanel" class="live-trace-panel"></div>
 
     <div class="input-area">
-        <div class="ai-tools-row">
-            <label class="ai-tool-toggle">
-                <input type="checkbox" id="codeTestToggle">
-                Auto-test generated code
-            </label>
-            <label class="ai-tool-toggle">
-                <input type="checkbox" id="liveTraceToggle">
-                Live trace
-            </label>
+        <div class="ai-tools-wrap" id="aiToolsWrap">
+            <button type="button" class="ai-tools-toggle-btn" id="aiToolsToggleBtn" onclick="toggleAiTools()" aria-expanded="false">AI Tools</button>
+            <div class="ai-tools-row">
+                <label class="ai-tool-toggle">
+                    <input type="checkbox" id="codeTestToggle">
+                    <span class="tool-label-full">Auto-test generated code</span>
+                    <span class="tool-label-short">Auto-test</span>
+                </label>
+                <label class="ai-tool-toggle">
+                    <input type="checkbox" id="liveTraceToggle">
+                    <span class="tool-label-full">Live trace</span>
+                    <span class="tool-label-short">Trace</span>
+                </label>
+            </div>
         </div>
         <div
             id="userInput"
@@ -237,6 +260,10 @@ if ($isMaintenance && !$isDevCookie) {
                         <div class="user-avatar">👤</div>
                         <div class="user-name" id="mobileUserNameDisplay"></div>
                         <button class="btn-small" onclick="logout()">Logout</button>
+                    </div>
+                    <div class="profile-settings-wrap" style="margin-top:12px;">
+                        <div class="profile-settings-title">Account Settings</div>
+                        <button class="btn-small profile-settings-btn" onclick="openProfileSettings()">Open Profile Settings</button>
                     </div>
                 </div>
                 <div id="mobileUserLoggedOut">
@@ -854,6 +881,20 @@ function formatServerTrace(trace) {
     });
 }
 
+function setAiToolsOpen(open) {
+    const wrap = document.getElementById('aiToolsWrap');
+    const btn = document.getElementById('aiToolsToggleBtn');
+    if (!wrap || !btn) return;
+    wrap.classList.toggle('open', !!open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function toggleAiTools() {
+    const wrap = document.getElementById('aiToolsWrap');
+    if (!wrap) return;
+    setAiToolsOpen(!wrap.classList.contains('open'));
+}
+
 function initAiAssistControls() {
     loadAiAssistPrefs();
     const codeTestToggle = document.getElementById('codeTestToggle');
@@ -925,6 +966,9 @@ async function sendMessage() {
     chatbox.innerHTML += `<div class="msg ai" id="${thinkingId}"><div class="avatar">⚡</div><div class="bubble"><div class="thinking-dots"><span></span><span></span><span></span></div></div></div>`;
 
     clearInput();
+    if (window.matchMedia('(max-width: 767px)').matches) {
+        setAiToolsOpen(false);
+    }
     setInputDisabled(true);
     if (aiAssistOptions.liveTrace) renderClientTrace('Preparing request');
     chatbox.scrollTop = chatbox.scrollHeight;
@@ -1487,18 +1531,61 @@ function renderDebug(debug) {
     const scoreColor = debug.post_score >= 4 ? 'good' : debug.post_score >= 2 ? 'warn' : 'bad';
     const msColor    = debug.groq_ms < 1000 ? 'good' : debug.groq_ms < 3000 ? 'warn' : 'bad';
     const cooldownMin = Math.ceil(debug.cooldown_left / 60);
+    const actualProvider = debug.provider || 'unknown';
+    const actualModel = debug.model || 'unknown';
+    const requestedProvider = debug.requested_provider || actualProvider;
+    const requestedModel = debug.requested_model || actualModel;
+    const requestedHttpCode = debug.requested_http_code || null;
+    const providerChanged = requestedProvider !== actualProvider || requestedModel !== actualModel;
+    const promptTokens = Number.isFinite(Number(debug.prompt_tokens)) ? Number(debug.prompt_tokens) : null;
+    const completionTokens = Number.isFinite(Number(debug.completion_tokens)) ? Number(debug.completion_tokens) : null;
+    const totalTokens = Number.isFinite(Number(debug.total_tokens)) ? Number(debug.total_tokens) : null;
 
     document.getElementById('devBody').innerHTML = `
         <div class="dev-section">
             <div class="dev-section-title">Model</div>
             <div class="dev-row">
-                <span class="dev-label">Active model</span>
-                <span class="dev-value accent">${debug.model}</span>
+                <span class="dev-label">Actual model</span>
+                <span class="dev-value accent">${escapeHtml(actualModel)}</span>
+            </div>
+            <div class="dev-row">
+                <span class="dev-label">Actual provider</span>
+                <span class="dev-value accent">${escapeHtml(actualProvider)}</span>
+            </div>
+            <div class="dev-row">
+                <span class="dev-label">Requested route</span>
+                <span class="dev-value ${providerChanged ? 'warn' : ''}">${escapeHtml(requestedProvider)} / ${escapeHtml(requestedModel)}</span>
+            </div>
+            <div class="dev-row">
+                <span class="dev-label">Requested status</span>
+                <span class="dev-value ${(requestedHttpCode && requestedHttpCode >= 400) ? 'bad' : ''}">${requestedHttpCode || 'n/a'}</span>
             </div>
             <div class="dev-row">
                 <span class="dev-label">Response time</span>
                 <span class="dev-value ${msColor}">${debug.groq_ms}ms</span>
             </div>
+            <div class="dev-row">
+                <span class="dev-label">Provider fallback</span>
+                <span class="dev-value ${debug.fallback_used ? 'warn' : 'good'}">${debug.fallback_used ? 'Yes' : 'No'}</span>
+            </div>
+            <div class="dev-row">
+                <span class="dev-label">HTTP status</span>
+                <span class="dev-value ${debug.http_code && debug.http_code >= 400 ? 'bad' : ''}">${debug.http_code || 'n/a'}</span>
+            </div>
+            ${debug.requested_error ? `
+            <div class="dev-row">
+                <span class="dev-label">Requested error</span>
+                <span class="dev-value bad">${escapeHtml(debug.requested_error)}</span>
+            </div>` : ''}
+            <div class="dev-row">
+                <span class="dev-label">Provider tokens</span>
+                <span class="dev-value">${totalTokens !== null ? `${promptTokens ?? 0} in / ${completionTokens ?? 0} out / ${totalTokens} total` : 'Not returned by provider'}</span>
+            </div>
+            ${debug.llm_error ? `
+            <div class="dev-row">
+                <span class="dev-label">Provider error</span>
+                <span class="dev-value bad">${escapeHtml(debug.llm_error)}</span>
+            </div>` : ''}
             <div class="dev-row">
                 <span class="dev-label">Messages sent</span>
                 <span class="dev-value">${debug.messages_sent}</span>
@@ -1570,10 +1657,10 @@ function renderDebug(debug) {
         </div>
     `;
 
-    // Auto-open panel when new debug data arrives
+    // Auto-open panel when new debug data arrives on desktop only.
     const panel = document.getElementById('devPanel');
     const fab   = document.getElementById('devFab');
-    if (!panel.classList.contains('open')) {
+    if (window.matchMedia('(min-width: 768px)').matches && !panel.classList.contains('open')) {
         panel.classList.add('open');
         fab.classList.add('panel-open');
     }
