@@ -1,0 +1,36 @@
+{
+    "repo_id": "gokuls/glue_augmented_cola",
+    "downloaded_at": "2026-09-17T07:50:46+00:00",
+    "downloaded": [
+        {
+            "path": "dataset_infos.json",
+            "bytes": 1043,
+            "local_path": "storage/hf_datasets/gokuls__glue_augmented_cola/dataset_infos.json"
+        },
+        {
+            "path": "data/validation-00000-of-00001-38ce6ce31ded9f7e.parquet",
+            "bytes": 36112,
+            "local_path": "storage/hf_datasets/gokuls__glue_augmented_cola/data/validation-00000-of-00001-38ce6ce31ded9f7e.parquet"
+        },
+        {
+            "path": "data/test-00000-of-00001-af139ac4dc3be82d.parquet",
+            "bytes": 36252,
+            "local_path": "storage/hf_datasets/gokuls__glue_augmented_cola/data/test-00000-of-00001-af139ac4dc3be82d.parquet"
+        }
+    ],
+    "skipped": [
+        {
+            "path": "README.md",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": ".gitattributes",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "data/train-00000-of-00001-c310d78a488cf74a.parquet",
+            "reason": "max_files_reached"
+        }
+    ],
+    "total_bytes": 73407
+}

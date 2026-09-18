@@ -1,0 +1,27 @@
+{
+    "repo_id": "rajpurkar/squad",
+    "downloaded_at": "2026-09-17T08:55:10+00:00",
+    "downloaded": [
+        {
+            "path": "plain_text/validation-00000-of-00001.parquet",
+            "bytes": 1819889,
+            "local_path": "storage/hf_datasets/rajpurkar__squad/plain_text/validation-00000-of-00001.parquet"
+        },
+        {
+            "path": "plain_text/train-00000-of-00001.parquet",
+            "bytes": 14458314,
+            "local_path": "storage/hf_datasets/rajpurkar__squad/plain_text/train-00000-of-00001.parquet"
+        }
+    ],
+    "skipped": [
+        {
+            "path": ".gitattributes",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "README.md",
+            "reason": "ext_not_allowed"
+        }
+    ],
+    "total_bytes": 16278203
+}

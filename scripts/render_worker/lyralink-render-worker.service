@@ -1,0 +1,15 @@
+[Unit]
+Description=Lyralink GPU Render Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/lyralink-render-worker
+ExecStart=%h/lyralink-render-worker/start_worker.sh
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

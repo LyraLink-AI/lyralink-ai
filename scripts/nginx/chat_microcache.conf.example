@@ -1,0 +1,53 @@
+# Lyralink chat microcache example for anonymous POST /api/chat.php traffic.
+#
+# This expects clients to send a deterministic X-Chat-Cache-Key header.
+# The app now supports this and only emits cache-friendly headers for guest traffic.
+#
+# IMPORTANT:
+# - Replace PHP_UPSTREAM with your upstream (Apache proxy or php-fpm backend).
+# - Keep bypass rules strict to avoid caching authenticated/private responses.
+
+proxy_cache_path /var/cache/nginx/lyralink_chat levels=1:2 keys_zone=lyralink_chat_cache:32m inactive=2m max_size=1g use_temp_path=off;
+
+map $http_authorization $chat_has_auth_header {
+    default 1;
+    "" 0;
+}
+
+map $http_cookie $chat_has_session_cookie {
+    default 0;
+    ~*(PHPSESSID|lyralink_|remember_token) 1;
+}
+
+map $http_x_chat_cache_key $chat_cache_key_valid {
+    default "";
+    ~^[A-Fa-f0-9]{16,128}$ $http_x_chat_cache_key;
+}
+
+map "$request_method:$uri:$chat_has_auth_header:$chat_has_session_cookie:$chat_cache_key_valid" $chat_cache_bypass {
+    default 1;
+    ~^POST:/api/chat\.php:0:0:[A-Fa-f0-9]{16,128}$ 0;
+}
+
+# Add this inside the server block handling lyralinkai.com.
+location = /api/chat.php {
+    proxy_cache lyralink_chat_cache;
+    proxy_cache_methods POST;
+    proxy_cache_key "$scheme|$host|$request_uri|$chat_cache_key_valid";
+    proxy_cache_lock on;
+    proxy_cache_lock_timeout 10s;
+    proxy_cache_background_update on;
+
+    proxy_no_cache $chat_cache_bypass;
+    proxy_cache_bypass $chat_cache_bypass;
+    proxy_ignore_headers Set-Cookie;
+
+    proxy_cache_valid 200 30s;
+    proxy_cache_valid 429 0s;
+    proxy_cache_valid 500 0s;
+
+    add_header X-Cache-Status $upstream_cache_status always;
+
+    include proxy_params;
+    proxy_pass PHP_UPSTREAM;
+}

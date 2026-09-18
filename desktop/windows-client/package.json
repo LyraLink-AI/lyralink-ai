@@ -1,0 +1,37 @@
+{
+  "name": "lyralink-desktop",
+  "version": "1.0.2",
+  "private": true,
+  "description": "Desktop wrapper for Lyralink AI",
+  "main": "main.js",
+  "files": [
+    "main.js",
+    "preload.js",
+    "assets/**",
+    "local/**",
+    "updates/**"
+  ],
+  "author": "LyralinkAI",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "start:local": "LYRALINK_MODE=local electron .",
+    "build:win": "node build_win.js",
+    "build:linux": "node build_linux.js",
+    "build:installer:win": "(npm run build:win || true) && test -f dist/Lyralink-win32-x64/Lyralink.exe && makensis installer.nsi",
+    "build:zip:win": "rm -f dist/Lyralink-win32-x64.zip && cd dist/Lyralink-win32-x64 && zip -r ../Lyralink-win32-x64.zip .",
+    "build:tar:linux": "rm -f dist/Lyralink-linux-x64.tar.gz && cd dist/Lyralink-linux-x64 && tar -czf ../Lyralink-linux-x64.tar.gz .",
+    "build:deb:linux": "test -d dist/Lyralink-linux-x64 && bash ./build_deb.sh",
+    "build:appimage:linux": "test -d dist/Lyralink-linux-x64 && bash ./build_appimage.sh",
+    "build:bundle:linux": "npm run build:linux && npm run build:tar:linux && npm run build:deb:linux && npm run build:appimage:linux",
+    "build:web-installer:win": "npm run build:win && test -f dist/Lyralink-win32-x64/Lyralink.exe && npm run build:zip:win && makensis installer_web.nsi",
+    "build:portable:win": "npm run build:win"
+  },
+  "dependencies": {
+    "electron-log": "^4.4.8"
+  },
+  "devDependencies": {
+    "electron": "^19.1.9",
+    "electron-packager": "^15.5.2"
+  }
+}

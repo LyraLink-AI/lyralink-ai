@@ -1,0 +1,19 @@
+{
+  "name": "lyralink-tauri-desktop",
+  "version": "1.0.2",
+  "private": true,
+  "description": "Tauri desktop wrapper for Lyralink AI",
+  "scripts": {
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "build:mac": "tauri build --target universal-apple-darwin",
+    "build:mac:aarch64": "tauri build --target aarch64-apple-darwin",
+    "build:mac:x64": "tauri build --target x86_64-apple-darwin",
+    "build:mac:signed": "APPLE_CERTIFICATE=$APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY tauri build --target universal-apple-darwin",
+    "build:mac:signed:aarch64": "APPLE_CERTIFICATE=$APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY tauri build --target aarch64-apple-darwin",
+    "build:mac:signed:x64": "APPLE_CERTIFICATE=$APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY tauri build --target x86_64-apple-darwin"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6.2"
+  }
+}

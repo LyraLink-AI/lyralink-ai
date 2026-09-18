@@ -1,0 +1,156 @@
+{
+    "repo_id": "nyu-mll/glue",
+    "downloaded_at": "2026-09-17T07:54:15+00:00",
+    "downloaded": [
+        {
+            "path": "wnli/validation-00000-of-00001.parquet",
+            "bytes": 11067,
+            "local_path": "storage/hf_datasets/nyu-mll__glue/wnli/validation-00000-of-00001.parquet"
+        },
+        {
+            "path": "wnli/test-00000-of-00001.parquet",
+            "bytes": 13620,
+            "local_path": "storage/hf_datasets/nyu-mll__glue/wnli/test-00000-of-00001.parquet"
+        },
+        {
+            "path": "cola/validation-00000-of-00001.parquet",
+            "bytes": 37551,
+            "local_path": "storage/hf_datasets/nyu-mll__glue/cola/validation-00000-of-00001.parquet"
+        }
+    ],
+    "skipped": [
+        {
+            "path": ".gitattributes",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "README.md",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "cola/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "wnli/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "rte/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "sst2/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mrpc/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "ax/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "stsb/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "sst2/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "stsb/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "cola/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mrpc/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "stsb/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "rte/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "rte/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mrpc/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qnli/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qnli/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli/validation_matched-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli_matched/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli/test_matched-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli_matched/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli/validation_mismatched-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli_mismatched/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli/test_mismatched-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli_mismatched/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "sst2/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qqp/validation-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qnli/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qqp/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "qqp/test-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        },
+        {
+            "path": "mnli/train-00000-of-00001.parquet",
+            "reason": "max_files_reached"
+        }
+    ],
+    "total_bytes": 62238
+}

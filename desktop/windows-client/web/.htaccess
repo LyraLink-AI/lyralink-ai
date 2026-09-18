@@ -1,0 +1,64 @@
+Options -Indexes
+RewriteEngine On
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), camera=()"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+# Block direct access to dotfiles and sensitive config/artifact files.
+# Keep ACME/Let's Encrypt challenge paths reachable.
+RewriteCond %{REQUEST_URI} !^/\.well-known/ [NC]
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|composer\.phar|phpunit\.xml(\.dist)?|\.git|\.gitignore|\.gitattributes|\.htaccess|\.php-version|\.php-ini|.*\.(ini|log|sql|sqlite|bak|old|dist))$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Block direct dependency access from the web.
+RewriteRule ^vendor/ - [F,L]
+
+# Block internal runtime/build tooling from direct web access.
+RewriteRule ^cron/ - [F,L]
+RewriteRule ^scripts/ - [F,L]
+RewriteCond %{REQUEST_URI} ^/desktop/windows-client/ [NC]
+RewriteCond %{REQUEST_URI} !^/desktop/windows-client/web/ [NC]
+RewriteRule ^ - [F,L]
+
+# 301 redirect old .php URLs to clean versions (pages/)
+RewriteCond %{THE_REQUEST} /pages/([^.]+)\.php [NC]
+RewriteRule ^ /pages/%1/ [R=301,L]
+
+# /chat -> chat.php
+RewriteRule ^chat/?$ chat.php [L]
+
+# /download -> download.php
+RewriteRule ^download/?$ download.php [L]
+
+# /automation -> pages/automation.php
+RewriteRule ^automation/?$ pages/automation.php [L]
+
+# / -> main landing page
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^$ index.php [L]
+
+# Clean URLs for pages/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^pages/([^/]+)/?$ pages/$1.php [L]
+
+# Top-level clean URLs: /slug -> pages/slug.php (only when that file exists)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
+RewriteRule ^([^/]+)/?$ pages/$1.php [L]

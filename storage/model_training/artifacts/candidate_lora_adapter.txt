@@ -1,0 +1,1 @@
+/var/www/vhosts/lyralinkai.com/httpdocs/storage/model_training/artifacts/lora_adapter

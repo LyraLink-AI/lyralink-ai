@@ -1,0 +1,19 @@
+[package]
+name = "lyralink_tauri_desktop"
+version = "1.0.2"
+description = "Lyralink desktop wrapper"
+authors = ["LyralinkAI"]
+license = "UNLICENSED"
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1"
+tauri = { version = "1.6", features = ["shell-open"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

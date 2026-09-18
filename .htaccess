@@ -1,0 +1,113 @@
+Options -Indexes
+RewriteEngine On
+
+# Mark only the embeddable chat route so frame headers can be relaxed there
+# without weakening the rest of the site.
+RewriteCond %{QUERY_STRING} (^|&)widget=1(&|$) [NC]
+RewriteRule ^chat/?$ - [E=LYRA_WIDGET_EMBED:1]
+RewriteCond %{QUERY_STRING} (^|&)widget=1(&|$) [NC]
+RewriteRule ^chat/index\.php$ - [E=LYRA_WIDGET_EMBED:1]
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN" env=!LYRA_WIDGET_EMBED
+    Header always set Content-Security-Policy "frame-ancestors *" env=LYRA_WIDGET_EMBED
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), camera=()"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 30 days"
+    ExpiresByType application/javascript "access plus 30 days"
+    ExpiresByType text/javascript "access plus 30 days"
+    ExpiresByType image/png "access plus 90 days"
+    ExpiresByType image/jpeg "access plus 90 days"
+    ExpiresByType image/webp "access plus 90 days"
+    ExpiresByType image/gif "access plus 90 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType font/woff2 "access plus 180 days"
+    ExpiresByType font/woff "access plus 180 days"
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?:css|js)$">
+        Header set Cache-Control "public, max-age=2592000, stale-while-revalidate=86400"
+    </FilesMatch>
+    <Files "widget.js">
+        Header set Cache-Control "no-cache, must-revalidate"
+    </Files>
+    <FilesMatch "\.(?:png|jpe?g|gif|webp|svg|woff2?|ico)$">
+        Header set Cache-Control "public, max-age=7776000, immutable"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain text/html text/css text/javascript application/javascript application/json application/xml image/svg+xml
+</IfModule>
+
+# Block direct access to dotfiles and sensitive config/artifact files.
+# Keep ACME/Let's Encrypt challenge paths reachable.
+RewriteCond %{REQUEST_URI} !^/\.well-known/ [NC]
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|composer\.phar|phpunit\.xml(\.dist)?|\.git|\.gitignore|\.gitattributes|\.htaccess|\.php-version|\.php-ini|.*\.(ini|log|sql|sqlite|bak|old|dist))$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Block direct dependency access from the web.
+RewriteRule ^vendor/ - [F,L]
+
+# Allow the public bootstrap helpers for remote brain provisioning.
+RewriteRule ^scripts/remote_brain_(bootstrap|full_bootstrap)\.sh$ - [L]
+
+# Block internal runtime/build tooling from direct web access.
+RewriteRule ^cron/ - [F,L]
+RewriteRule ^scripts/ - [F,L]
+RewriteCond %{REQUEST_URI} ^/desktop/windows-client/ [NC]
+RewriteCond %{REQUEST_URI} !^/desktop/windows-client/web/ [NC]
+RewriteRule ^ - [F,L]
+
+# 301 redirect old .php URLs to clean versions (pages/)
+RewriteCond %{THE_REQUEST} /pages/([^.]+)\.php [NC]
+RewriteRule ^ /pages/%1/ [R=301,L]
+
+# Widget embed requests should resolve through /chat/index.php so the
+# path-local frame header override applies.
+RewriteCond %{QUERY_STRING} (^|&)widget=1(&|$) [NC]
+RewriteRule ^chat/?$ chat/index.php [L]
+
+# /chat -> chat.php
+RewriteRule ^chat/?$ chat.php [L]
+
+# /download -> download.php
+RewriteRule ^download/?$ download.php [L]
+
+# /automation -> pages/automation.php
+RewriteRule ^automation/?$ pages/automation.php [L]
+
+# YouTube OAuth callback route
+RewriteRule ^api/marketing/oauth/youtube/callback/?$ api/marketing/oauth/youtube/callback.php [L]
+
+# / -> main landing page
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^$ index.php [L]
+
+# Clean URLs for pages/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^pages/([^/]+)/?$ pages/$1.php [L]
+
+# Top-level clean URLs: /slug -> pages/slug.php (only when that file exists)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
+RewriteRule ^([^/]+)/?$ pages/$1.php [L]

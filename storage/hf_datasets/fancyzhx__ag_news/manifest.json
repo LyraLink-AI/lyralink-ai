@@ -1,0 +1,27 @@
+{
+    "repo_id": "fancyzhx/ag_news",
+    "downloaded_at": "2026-09-17T09:09:46+00:00",
+    "downloaded": [
+        {
+            "path": "data/test-00000-of-00001.parquet",
+            "bytes": 1234829,
+            "local_path": "storage/hf_datasets/fancyzhx__ag_news/data/test-00000-of-00001.parquet"
+        },
+        {
+            "path": "data/train-00000-of-00001.parquet",
+            "bytes": 18585438,
+            "local_path": "storage/hf_datasets/fancyzhx__ag_news/data/train-00000-of-00001.parquet"
+        }
+    ],
+    "skipped": [
+        {
+            "path": ".gitattributes",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "README.md",
+            "reason": "ext_not_allowed"
+        }
+    ],
+    "total_bytes": 19820267
+}

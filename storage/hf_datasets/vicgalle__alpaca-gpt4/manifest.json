@@ -1,0 +1,22 @@
+{
+    "repo_id": "vicgalle/alpaca-gpt4",
+    "downloaded_at": "2026-09-17T07:21:15+00:00",
+    "downloaded": [
+        {
+            "path": "data/train-00000-of-00001-6ef3991c06080e14.parquet",
+            "bytes": 48393562,
+            "local_path": "storage/hf_datasets/vicgalle__alpaca-gpt4/data/train-00000-of-00001-6ef3991c06080e14.parquet"
+        }
+    ],
+    "skipped": [
+        {
+            "path": ".gitattributes",
+            "reason": "ext_not_allowed"
+        },
+        {
+            "path": "README.md",
+            "reason": "ext_not_allowed"
+        }
+    ],
+    "total_bytes": 48393562
+}

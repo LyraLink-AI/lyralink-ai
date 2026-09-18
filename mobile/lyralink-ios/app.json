@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Lyralink AI",
+    "slug": "lyralink-ios",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "lyralink",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lyralinkai.lyralink"
+    },
+    "extra": {
+      "apiBaseUrl": "http://lyralinkai.com"
+    }
+  }
+}

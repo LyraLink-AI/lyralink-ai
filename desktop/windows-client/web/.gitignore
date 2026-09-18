@@ -1,0 +1,23 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime files
+maintenance.flag
+maintenance.info
+*.log
+
+# Dependencies and tooling
+vendor/
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / cache
+*.cache
+coverage/

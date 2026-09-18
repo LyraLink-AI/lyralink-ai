@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "package": {
+    "productName": "Lyralink",
+    "version": "1.0.2"
+  },
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../dist",
+    "distDir": "../dist"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.lyralink.desktop",
+      "icon": [
+        "icons/icon.png"
+      ],
+      "macOS": {
+        "signingIdentity": null,
+        "entitlements": null,
+        "minimumSystemVersion": "10.13"
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "Lyralink",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 620,
+        "resizable": true
+      }
+    ]
+  }
+}
