@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
+require_once __DIR__ . '/../api/lyra_teams_chrome.php';
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
 }
@@ -125,6 +126,7 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/css/lyra-ui.css">
+<link rel="stylesheet" href="/assets/css/lyra-teams.css">
 <script src="/assets/js/lyra-ui.js" defer></script>
 <style>
 /* ── SHELL ────────────────────────────────────────────────────────────────
@@ -333,6 +335,7 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
     </div>
 
     <!-- Scroll region: the full channel, newest at the bottom -->
+    <?php echo lyra_tw_feed_head(); ?>
     <div class="tw-feed" id="tw-feed" tabindex="0" role="log" aria-label="Channel messages">
         <?php if ($messages): foreach ($messages as $msg):
             $uid    = (int) pk($msg, ['sender_user_id','user_id','author_id'], '0');
@@ -369,6 +372,7 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
     </div>
 
     <div class="tw-compose">
+        <?php echo lyra_tw_compose_chips(); ?>
         <div class="tw-composebox">
             <button class="tw-icobtn" type="button" disabled title="Not wired up yet" aria-label="Add attachment">
                 <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -387,65 +391,18 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 
 <!-- ══ RAIL ══ -->
 <aside class="ly-rail tw-rail">
-    <div class="ly-panel" style="margin-bottom:16px">
-        <div class="ly-panel-head">
-            <h2 class="ly-panel-title">Team</h2>
-            <span class="ly-badge"><?php echo $nMem; ?></span>
-        </div>
-        <div class="ly-panel-body" style="padding:14px 16px">
-            <input class="ly-input" placeholder="Search team members&hellip;" disabled
-                   title="Member search is not wired up yet"
-                   style="margin-bottom:10px;padding:8px 12px;font-size:12px">
-            <?php if ($members): foreach ($members as $mm):
-                $muid  = (int) ($mm['user_id'] ?? 0);
-                $mname = tw_author($muid, $users);
-                $role  = pk($mm, ['role','member_role'], 'member');
-                $ls    = (string) ($mm['last_seen_at'] ?? '');
-                $seencut = date('Y-m-d H:i:s', time() - 300);
-                $online  = ($ls !== '' && $ls >= $seencut); ?>
-            <div class="tw-member">
-                <span class="ly-avatar ly-avatar-sm" style="background:var(--ly-grad)"><?php echo htmlspecialchars(inits($mname)); ?></span>
-                <div style="min-width:0;flex:1 1 auto">
-                    <div class="ly-truncate" title="<?php echo htmlspecialchars($mname); ?>"><?php echo htmlspecialchars($mname); ?></div>
-                    <div class="r"><?php echo htmlspecialchars(ucfirst($role)); ?></div>
-                </div>
-                <span class="ly-dot <?php echo $online ? 'ly-dot-online' : ''; ?>"
-                      style="<?php echo $online ? '' : 'background:var(--ly-text-4)'; ?>"
-                      title="<?php echo $online ? 'Active in the last 5 minutes' : ($ls !== '' ? 'Last seen ' . htmlspecialchars(tw_when($ls)) : 'No presence recorded'); ?>"></span>
-            </div>
-            <?php endforeach; else: ?>
-            <div style="font-size:12.5px;color:var(--ly-text-4)">No members recorded.</div>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <div class="ly-panel" style="margin-bottom:16px">
-        <div class="ly-panel-head">
-            <h2 class="ly-panel-title">Channels</h2>
-            <span class="ly-badge"><?php echo $nCh; ?></span>
-        </div>
-        <div class="ly-panel-body" style="padding:14px 16px">
-            <input class="ly-input" placeholder="Search channels&hellip;" disabled
-                   title="Channel search is not wired up yet"
-                   style="margin-bottom:10px;padding:8px 12px;font-size:12px">
-            <?php if ($channels): foreach ($channels as $ch):
-                $cch = $chanCounts[(int) ($ch['id'] ?? 0)] ?? 0; ?>
-            <div class="ly-row-between" style="font-size:12.5px;padding:5px 0">
-                <span class="ly-muted ly-truncate" title="# <?php echo htmlspecialchars(pk($ch, ['name'], 'channel')); ?>"># <?php echo htmlspecialchars(pk($ch, ['name'], 'channel')); ?></span>
-                <span class="ly-badge"><?php echo (int) $cch; ?></span>
-            </div>
-            <?php endforeach; else: ?>
-            <div style="font-size:12.5px;color:var(--ly-text-4)">No channels.</div>
-            <?php endif; ?>
-        </div>
-    </div>
+    <?php echo lyra_tw_team_panel(); ?>
+    <?php echo lyra_tw_channels_panel(); ?>
+    <?php echo lyra_tw_status_panel(); ?>
+    <?php echo lyra_tw_activity_panel(); ?>
 
     <div class="ly-promo" style="flex:0 0 auto">
         <div style="font-weight:700;font-size:13px;margin-bottom:6px">Powered by Lyralink</div>
         <div style="font-size:11.5px;color:var(--ly-text-3);line-height:1.65">
-            This workspace reads the live social_* tables. Panels with no data show an
-            empty state rather than placeholder content. Presence is derived from
-            <span class="ly-mono" style="font-size:10.5px">last_seen_at</span>.
+            This workspace reads the live social_* tables. Member presence is derived from
+            <span class="ly-mono" style="font-size:10.5px">last_seen_at</span>, and service health
+            from the same source as the public status page. Upcoming meetings, tasks and files
+            have no table in this schema yet, so those panels are not shown.
         </div>
     </div>
 </aside>
