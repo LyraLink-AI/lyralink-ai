@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/lib/chat/llm_routing.php';
+require_once __DIR__ . '/lib/chat/execution_foundation.php';
+// Same single decision point as the main path.
+require_once __DIR__ . '/lib/chat/orchestrator.php';
 
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
@@ -373,6 +376,37 @@ if ($temperature > 1.2) {
 }
 
 $traceId = 'stream_' . bin2hex(random_bytes(8));
+
+// Unify with the main request path: consult the same decision point rather
+// than deciding independently, so voice and typed chat agree on routing.
+$latestUserMsg = '';
+for ($mi = count($messages) - 1; $mi >= 0; $mi--) {
+    if (($messages[$mi]['role'] ?? '') === 'user') {
+        $latestUserMsg = (string)($messages[$mi]['content'] ?? '');
+        break;
+    }
+}
+if (is_array($latestUserMsg)) {
+    $latestUserMsg = (string)($latestUserMsg['text'] ?? '');
+}
+$orchestrationDecision = [];
+if (function_exists('chat_orchestrate')) {
+    try {
+        $orchestrationDecision = chat_orchestrate((string)$latestUserMsg, [
+            'plan' => 'free',
+            'is_logged_in' => !empty($isDevUser),
+            'privacy_mode' => $localOnlyForced ? 'local' : 'cloud',
+            'task_mode' => $taskMode,
+            'web_search' => null,
+            'org_id' => 0,
+            'user_id' => 0,
+        ]);
+    } catch (\Throwable $orchErr) {
+        error_log('stream_orchestration_failed: ' . $orchErr->getMessage());
+        $orchestrationDecision = [];
+    }
+}
+$streamStartedAt = gmdate('c');
 $developerReasoning = null;
 if ($devMode) {
     $developerReasoning = [
@@ -416,6 +450,17 @@ $reply = chat_stream_request(
 );
 
 if ($reply === null) {
+    if (function_exists('chat_append_audit_log')) {
+        chat_append_audit_log([
+            'at' => gmdate('c'),
+            'trace_id' => $traceId,
+            'channel' => 'voice',
+            'incomplete' => true,
+            'final_state' => 'FAILED',
+            'reason' => 'streaming_provider_request_failed',
+            'orchestration' => $orchestrationDecision,
+        ]);
+    }
     chat_stream_emit([
         'type' => 'error',
         'trace_id' => $traceId,
@@ -429,6 +474,17 @@ $thinkingText = $devMode
     ? 'Developer reasoning mode enabled. Decision path: parsed the request, reasoned through the likely answer without public safety softening, and validated assumptions and trade-offs before finalizing.'
     : null;
 
+if (function_exists('chat_append_audit_log')) {
+    chat_append_audit_log([
+        'at' => gmdate('c'),
+        'trace_id' => $traceId,
+        'channel' => 'voice',
+        'incomplete' => false,
+        'final_state' => 'SUCCESS',
+        'started_at' => $streamStartedAt,
+        'orchestration' => $orchestrationDecision,
+    ]);
+}
 chat_stream_emit([
     'type' => 'done',
     'trace_id' => $traceId,
