@@ -1,0 +1,126 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK — ADMIN AND DEV STATS COMPONENTS
+   ══════════════════════════════════════════════════════════════════════════
+   Stat cards with period deltas, sparkline panels, donuts, progress rings,
+   log tables and the right-rail status/activity lists. Companion to
+   api/lyra_admin_data.php.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Stat card with delta ───────────────────────────────────────────────── */
+.lyra-stat { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lyra-stat-top { display: flex; align-items: flex-start; gap: 10px; }
+.lyra-stat-label { font-size: 11.5px; color: var(--ly-text-4); }
+.lyra-stat-value {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.03em;
+    line-height: 1.1; color: var(--ly-text);
+    font-variant-numeric: tabular-nums;
+}
+.lyra-stat-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lyra-stat-note { font-size: 10.5px; color: var(--ly-text-4); }
+
+.lyra-delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: var(--ly-r-full);
+    font-size: 10.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.lyra-delta-up   { background: rgba(34,197,94,0.13);  color: #6EE7A0; }
+.lyra-delta-down { background: rgba(239,68,68,0.13);  color: #FCA5A5; }
+.lyra-delta-flat { background: var(--ly-glass-strong); color: var(--ly-text-4); font-weight: 600; }
+
+/* ── Sparkline panel ────────────────────────────────────────────────────── */
+.lyra-spark { width: 100%; height: 96px; margin-top: 6px; }
+.lyra-chartrow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.lyra-legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--ly-text-3); }
+.lyra-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+
+/* ── Ring with centre label ─────────────────────────────────────────────── */
+.lyra-ring2 { position: relative; flex: 0 0 auto; }
+.lyra-ring2 svg { width: 100%; height: 100%; }
+.lyra-ring2 b {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 800; color: var(--ly-text);
+    letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+}
+
+/* ── Donut with centre label ────────────────────────────────────────────── */
+.lyra-donut { position: relative; flex: 0 0 auto; }
+.lyra-donut svg { width: 100%; height: 100%; }
+.lyra-donut-centre {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    line-height: 1.15;
+}
+.lyra-donut-centre b { font-size: 15px; font-weight: 800; color: var(--ly-text); }
+.lyra-donut-centre em { font-size: 9.5px; font-style: normal; color: var(--ly-text-4); }
+
+.lyra-breakdown { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.lyra-breakdown-list { display: flex; flex-direction: column; gap: 5px; flex: 1 1 200px; min-width: 0; }
+.lyra-breakdown-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ly-text-2); min-width: 0; }
+.lyra-breakdown-row i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.lyra-breakdown-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.lyra-breakdown-row b { font-variant-numeric: tabular-nums; color: var(--ly-text); flex: 0 0 auto; }
+.lyra-breakdown-row em { font-style: normal; color: var(--ly-text-4); flex: 0 0 auto; min-width: 38px; text-align: right; }
+
+/* ── Horizontal model bars ──────────────────────────────────────────────── */
+.lyra-modelrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }
+.lyra-modelrow + .lyra-modelrow { border-top: 1px solid var(--ly-border); }
+.lyra-modelrow-name { flex: 0 1 150px; min-width: 0; font-size: 11.5px; color: var(--ly-text-2); }
+.lyra-modelbar { flex: 1 1 60px; min-width: 30px; height: 7px; border-radius: var(--ly-r-full); background: var(--ly-glass-strong); overflow: hidden; }
+.lyra-modelbar > span { display: block; height: 100%; border-radius: var(--ly-r-full); background: var(--ly-grad); }
+.lyra-modelrow-pct { flex: 0 0 auto; width: 44px; text-align: right; font-size: 11px; color: var(--ly-text-3); font-variant-numeric: tabular-nums; }
+.lyra-modelrow-n { flex: 0 0 auto; width: 52px; text-align: right; font-size: 11px; color: var(--ly-text-4); font-variant-numeric: tabular-nums; }
+
+/* ── Log table ──────────────────────────────────────────────────────────── */
+.lyra-logtable { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.lyra-logtable th {
+    padding: 7px 10px; text-align: left;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ly-text-4); border-bottom: 1px solid var(--ly-border); white-space: nowrap;
+}
+.lyra-logtable td { padding: 8px 10px; border-bottom: 1px solid var(--ly-border); color: var(--ly-text-2); }
+.lyra-logtable tr:last-child td { border-bottom: 0; }
+.lyra-logtable td.num { font-variant-numeric: tabular-nums; color: var(--ly-text-4); white-space: nowrap; }
+.lyra-logtable .ok { color: #6EE7A0; }
+.lyra-logtable .bad { color: #FCA5A5; }
+
+/* ── Rail status / activity lists ───────────────────────────────────────── */
+.lyra-svcrow2 { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 11.5px; color: var(--ly-text-2); border-bottom: 1px solid var(--ly-border); }
+.lyra-svcrow2:last-child { border-bottom: 0; }
+.lyra-svcrow2 span { flex: 1 1 auto; min-width: 0; }
+.lyra-svcrow2 em { font-style: normal; font-size: 11px; color: #6EE7A0; flex: 0 0 auto; }
+.lyra-svcrow2 em.warn { color: #FCD34D; }
+.lyra-actrow2 { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; min-width: 0; }
+.lyra-actrow2 + .lyra-actrow2 { border-top: 1px solid var(--ly-border); }
+.lyra-actrow2 i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; margin-top: 5px; }
+.lyra-actrow2 div { min-width: 0; flex: 1 1 auto; }
+.lyra-actrow2 b { display: block; font-size: 11.5px; font-weight: 600; color: var(--ly-text); }
+.lyra-actrow2 em { font-style: normal; font-size: 10.5px; color: var(--ly-text-4); }
+.lyra-actrow2 span { font-size: 10.5px; color: var(--ly-text-4); flex: 0 0 auto; }
+
+/* ── Top bar title block ────────────────────────────────────────────────── */
+.lyra-ad-title { display: flex; flex-direction: column; min-width: 0; }
+.lyra-ad-title b { font-size: 13.5px; font-weight: 700; color: var(--ly-text); letter-spacing: -0.02em; }
+.lyra-ad-title em { font-size: 10.5px; font-style: normal; color: var(--ly-text-4); }
+
+/* ── Empty state used where no source exists ────────────────────────────── */
+.lyra-nosource {
+    font-size: 11.5px; color: var(--ly-text-4); line-height: 1.6;
+    padding: 10px 0;
+}
+.lyra-nosource code {
+    font-family: var(--ly-mono); font-size: 10.5px;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--ly-glass-strong); color: var(--ly-text-3);
+}
+
+@media (max-width: 1200px) {
+    .lyra-modelrow-name { flex: 0 1 110px; }
+}
+@media (max-width: 700px) {
+    .lyra-stat-value { font-size: 22px; }
+    .lyra-spark { height: 72px; }
+    .lyra-modelrow-name { flex: 1 1 100%; }
+    .lyra-modelrow { flex-wrap: wrap; }
+}

@@ -2,6 +2,10 @@
 session_start();
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
+require_once __DIR__ . '/../api/lyra_chat_data.php';
+require_once __DIR__ . '/../api/lyra_admin_data.php';
+$lyraStats = lyra_ad_stats(24);
+$lyraMachine = lyra_ad_machine();
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
@@ -179,6 +183,7 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
     <meta name="robots" content="noindex, nofollow">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/lyra-ui.css">
+<link rel="stylesheet" href="/assets/css/lyra-admin.css">
     <script src="/assets/js/lyra-ui.js" defer></script>
     <style>
         .ds-hour { display:flex; align-items:flex-end; gap:5px; height:150px; }
@@ -263,21 +268,36 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                 <?php if ($agg['last']): ?>(latest <?php echo htmlspecialchars(substr($agg['last'], 0, 19)); ?>Z)<?php endif; ?>.
             </p>
 
-            <div class="ly-grid ly-grid-4 ly-mb-6">
+            <div class="ly-grid ly-grid-5 ly-mb-6">
                 <?php
+                /* Five cards, each with a real comparison against the previous
+                   equally-sized window. Delta renders "no baseline" when the
+                   previous window has no data rather than showing a fake 0%. */
                 $cards = [
-                    ['Audit Entries', nf_safe($agg['requests']), 'M6 3h8l4 4v14H6z'],
-                    ['Verified Pass',  nf_safe($agg['verified_pass']), 'M9 12l2 2 4-4M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z'],
-                    ['Verified Fail',  nf_safe($agg['verified_fail']), 'M12 8v5M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z'],
-                    ['Orch. Decisions',nf_safe($agg['orch']), 'M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 2V5Z'],
+                    ['Total Requests', nf_safe($agg['requests']), 'M6 3h8l4 4v14H6z',
+                     lyra_ad_delta_html($lyraStats['requests_delta']), 'vs previous 24h'],
+                    ['Verified Pass', nf_safe($agg['verified_pass']), 'M9 12l2 2 4-4M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
+                     '', 'verification.passed = true'],
+                    ['Verified Fail', nf_safe($agg['verified_fail']), 'M12 8v5M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
+                     '', 'verification.passed = false'],
+                    ['Success Rate',
+                     $lyraStats['verify_rate'] === null ? '—' : number_format($lyraStats['verify_rate'], 2) . '%',
+                     'M22 12A10 10 0 1 1 12 2',
+                     lyra_ad_delta_html($lyraStats['verify_rate_delta']), 'verified pass / total'],
+                    ['Orch. Decisions', nf_safe($agg['orch']), 'M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 1 5 3 3 0 0 0 5 2V5Z',
+                     '', 'orchestration records'],
                 ];
                 foreach ($cards as $c): ?>
-                <div class="ly-card">
-                    <div class="ly-row-between ly-mb-3">
+                <div class="ly-card lyra-stat">
+                    <div class="lyra-stat-top">
                         <span class="ly-tile"><svg class="ly-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $c[2]; ?>"/></svg></span>
+                        <span class="lyra-stat-label"><?php echo $c[0]; ?></span>
                     </div>
-                    <div class="ds-num" style="font-size:24px;font-weight:800;letter-spacing:-.03em"><?php echo $c[1]; ?></div>
-                    <div style="font-size:11.5px;color:var(--ly-text-4)"><?php echo $c[0]; ?></div>
+                    <div class="lyra-stat-value"><?php echo $c[1]; ?></div>
+                    <div class="lyra-stat-foot">
+                        <?php echo $c[3]; ?>
+                        <span class="lyra-stat-note"><?php echo $c[4]; ?></span>
+                    </div>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -368,6 +388,103 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                 </div>
             </div>
 
+            <div class="ly-grid ly-grid-3 ly-mb-6">
+                <div class="ly-panel">
+                    <div class="ly-panel-head"><h2 class="ly-panel-title">Request Breakdown</h2><span class="ly-badge">by task type</span></div>
+                    <div class="ly-panel-body">
+                        <?php
+                        $taskData = [];
+                        foreach (($lyraStats['tasks'] ?? []) as $k => $v) { $taskData[ucfirst(str_replace('_', ' ', $k))] = $v; }
+                        $taskTotal = array_sum($taskData);
+                        $palette = ['#6C3AF8', '#38BDF8', '#22C55E', '#F59E0B', '#EF4444', '#9B5CFF'];
+                        ?>
+                        <?php if ($taskData): ?>
+                        <div class="lyra-breakdown">
+                            <?php echo lyra_ad_donut($taskData, 120); ?>
+                            <div class="lyra-breakdown-list">
+                                <?php $i = 0; foreach ($taskData as $k => $v): ?>
+                                <div class="lyra-breakdown-row">
+                                    <i style="background:<?php echo $palette[$i % count($palette)]; ?>"></i>
+                                    <span><?php echo htmlspecialchars($k); ?></span>
+                                    <b><?php echo number_format($v); ?></b>
+                                    <em><?php echo $taskTotal > 0 ? round($v / $taskTotal * 100, 1) : 0; ?>%</em>
+                                </div>
+                                <?php $i++; endforeach; ?>
+                            </div>
+                        </div>
+                        <?php else: ?>
+                        <div class="lyra-nosource">
+                            No classified tasks in the last 24 hours. The orchestrator records
+                            <code>orchestration.task_type</code> only when a request is routed to a
+                            capability, so quiet periods legitimately show nothing here.
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="ly-panel">
+                    <div class="ly-panel-head"><h2 class="ly-panel-title">Request Success Rate</h2><span class="ly-badge">24h</span></div>
+                    <div class="ly-panel-body">
+                        <div class="lyra-chartrow" style="justify-content:center">
+                            <?php echo lyra_ad_ring($lyraStats['verify_rate'], 112, '#22C55E', '%'); ?>
+                        </div>
+                        <div class="lyra-legend" style="justify-content:center;margin-top:14px">
+                            <span><i style="background:#22C55E"></i>Passed <?php echo number_format($agg['verified_pass']); ?></span>
+                            <span><i style="background:#EF4444"></i>Failed <?php echo number_format($agg['verified_fail']); ?></span>
+                        </div>
+                        <div class="lyra-nosource" style="margin-top:10px">
+                            Verification outcome only. Response time is not shown because the audit
+                            log records no request duration.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ly-panel">
+                    <div class="ly-panel-head"><h2 class="ly-panel-title">Storage Usage</h2><span class="ly-badge">live</span></div>
+                    <div class="ly-panel-body">
+                        <?php
+                        $dUsed = $lyraMachine['disk_used'] ?? null;
+                        $dTotal = $lyraMachine['disk_total'] ?? null;
+                        $dPct = ($dUsed !== null && $dTotal) ? round($dUsed / $dTotal * 100, 1) : null;
+                        ?>
+                        <div class="lyra-chartrow" style="justify-content:center">
+                            <?php echo lyra_ad_donut(['Used' => (int) ($dUsed ?? 0), 'Free' => (int) (($dTotal ?? 0) - ($dUsed ?? 0))], 130); ?>
+                        </div>
+                        <div class="lyra-legend" style="justify-content:center;margin-top:14px">
+                            <span><i style="background:#6C3AF8"></i>Used <?php echo lyra_ad_fmt_bytes($dUsed); ?></span>
+                            <span><i style="background:#4A5270"></i>Total <?php echo lyra_ad_fmt_bytes($dTotal); ?></span>
+                        </div>
+                        <?php if ($dPct !== null): ?>
+                        <div class="lyra-legend" style="justify-content:center;margin-top:6px">
+                            <span><?php echo $dPct; ?>% of the volume</span>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ly-panel ly-mb-6">
+                <div class="ly-panel-head"><h2 class="ly-panel-title">Model Usage</h2><span class="ly-badge">from audit</span></div>
+                <div class="ly-panel-body">
+                    <?php
+                    $models = $lyraStats['models'] ?? [];
+                    $mt = array_sum($models);
+                    ?>
+                    <?php if ($models): ?>
+                        <?php foreach ($models as $m => $n): ?>
+                        <div class="lyra-modelrow">
+                            <span class="lyra-modelrow-name ly-truncate" title="<?php echo htmlspecialchars($m); ?>"><?php echo htmlspecialchars($m); ?></span>
+                            <div class="lyra-modelbar"><span style="width:<?php echo $mt > 0 ? round($n / $mt * 100, 1) : 0; ?>%"></span></div>
+                            <span class="lyra-modelrow-pct"><?php echo $mt > 0 ? round($n / $mt * 100, 1) : 0; ?>%</span>
+                            <span class="lyra-modelrow-n"><?php echo number_format($n); ?></span>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                    <div class="lyra-nosource">No model attribution in the last 24 hours.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
             <div class="ly-panel ly-mt-6">
                 <div class="ly-panel-head"><h2 class="ly-panel-title">Recent Security Events</h2><a href="/pages/security_log.php" style="font-size:12px">View all</a></div>
                 <div class="ly-panel-body" style="padding:0">
@@ -402,6 +519,48 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                 Cached for <?php echo LY_CACHE_TTL; ?> seconds to avoid re-reading the log on each load.
             </div>
         </div>
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head"><h2 class="ly-panel-title">System Overview</h2>
+                <a href="/pages/status" style="font-size:11px">View all &rarr;</a></div>
+            <div class="ly-panel-body">
+                <?php
+                // Read directly rather than borrowing the Teams helper, so this
+                // page carries no dependency on the teams chrome module.
+                $svcRows = lyra_chat_q('SELECT name, status FROM status_services ORDER BY id LIMIT 6');
+                foreach ($svcRows as $s):
+                    $okY = strtolower((string) $s['status']) === 'operational'; ?>
+                <div class="lyra-svcrow2">
+                    <span class="ly-dot <?php echo $okY ? 'ly-dot-online' : 'ly-dot-warn'; ?>"></span>
+                    <span class="ly-truncate"><?php echo htmlspecialchars((string) $s['name']); ?></span>
+                    <em class="<?php echo $okY ? '' : 'warn'; ?>"><?php echo $okY ? 'Online' : htmlspecialchars(ucfirst((string) $s['status'])); ?></em>
+                </div>
+                <?php endforeach; ?>
+                <?php if (!$svcRows): ?>
+                <div class="lyra-nosource">Service status unavailable.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head"><h2 class="ly-panel-title">Runtime</h2></div>
+            <div class="ly-panel-body">
+                <div class="lyra-svcrow2"><span>Load average</span><em><?php echo $lyraMachine['load'] !== null ? $lyraMachine['load'] : '—'; ?></em></div>
+                <div class="lyra-svcrow2"><span>Memory</span><em><?php echo lyra_ad_fmt_bytes($lyraMachine['mem_used']); ?> / <?php echo lyra_ad_fmt_bytes($lyraMachine['mem_total']); ?></em></div>
+                <div class="lyra-svcrow2"><span>Disk</span><em><?php echo lyra_ad_fmt_bytes($lyraMachine['disk_used']); ?> / <?php echo lyra_ad_fmt_bytes($lyraMachine['disk_total']); ?></em></div>
+                <div class="lyra-svcrow2"><span>Uptime</span><em><?php echo lyra_ad_fmt_uptime($lyraMachine['uptime']); ?></em></div>
+            </div>
+        </div>
+
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head"><h2 class="ly-panel-title">Recent Deployments</h2></div>
+            <div class="ly-panel-body">
+                <div class="lyra-nosource">
+                    No deploy history exists in this schema. <code>pelican_deployments</code> is a
+                    game-hosting panel, not application releases, so it is deliberately not used here.
+                </div>
+            </div>
+        </div>
+
         <div class="ly-promo">
             <div style="font-weight:700;font-size:13px;margin-bottom:6px">Audit window</div>
             <div style="font-size:11.5px;color:var(--ly-text-3)">

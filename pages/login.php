@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/../api/lyra_art.php';
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
@@ -52,6 +53,14 @@ if (!empty($_SESSION['user_id'])) {
             background: linear-gradient(180deg, #0B0620 0%, #14093A 42%, #1E0E52 100%);
         }
         .lg-scene { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+        /* The generated SVG paints the whole scene; these hand-built
+           approximations would otherwise draw on top of it. */
+        .lg-scene .lg-moon,
+        .lg-scene .lg-aurora,
+        .lg-scene .lg-ridge,
+        .lg-scene .lg-ridge-2,
+        .lg-scene .lg-lake { display: none; }
+        .lg-scene .lyra-art { position: absolute; inset: 0; width: 100%; height: 100%; }
         .lg-moon {
             position: absolute; right: 6%; top: 8%; width: 320px; height: 320px; border-radius: 50%;
             background: radial-gradient(circle at 38% 34%, rgba(180,150,255,.42), rgba(108,58,248,.16) 46%, transparent 68%);
@@ -142,13 +151,7 @@ if (!empty($_SESSION['user_id'])) {
 
     <!-- ══ LEFT: brand / artwork ══ -->
     <section class="lg-left">
-        <div class="lg-scene" aria-hidden="true">
-            <div class="lg-moon"></div>
-            <div class="lg-aurora"></div>
-            <div class="lg-ridge"></div>
-            <div class="lg-ridge-2"></div>
-            <div class="lg-lake"></div>
-        </div>
+        <div class="lg-scene" aria-hidden="true"><?php echo lyra_art_landscape('hero', 'lg'); ?></div>
 
         <a class="ly-logo" href="/" style="color:#fff">
             <img src="/images/lyralinklogobolt.png" alt="" class="ly-logo-mark" style="border-radius:8px">
