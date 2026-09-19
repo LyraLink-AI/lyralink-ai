@@ -34,15 +34,17 @@
         new MutationObserver(sync).observe(list, { childList: true, subtree: true });
     }
 
-    /* ── Tools enabled: count the tool controls that actually exist ──────── */
+    /* ── Tools enabled ───────────────────────────────────────────────────────
+       The server already renders this count from the tool registry, and that is
+       the honest figure: it counts tools with a real implementation behind them.
+       An earlier version of this file counted the UI checkboxes instead and
+       overwrote the server value with a smaller, misleading number. The server
+       value is now left alone; this only fills the element if it is empty. */
     function wireTools() {
         var out = $('lyraToolsCount');
-        if (!out) { return; }
-        var boxes = document.querySelectorAll(
-            '#aiToolsWrap input[type="checkbox"], .ai-tool-toggle input[type="checkbox"], #taskModeToggle, #codeTestToggle'
-        );
-        var n = boxes.length;
-        out.textContent = n > 0 ? n + ' Enabled' : 'None';
+        if (!out || out.textContent.trim() !== '') { return; }
+        var boxes = document.querySelectorAll('#taskModeToggle, #codeTestToggle');
+        out.textContent = String(boxes.length);
     }
 
     /* ── API status: reuse the chat's own indicator ──────────────────────── */

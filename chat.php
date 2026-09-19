@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/api/lyra_chat_chrome.php';
+require_once __DIR__ . '/api/lyra_chat_data.php';
 $maintenanceFlag = __DIR__ . '/maintenance.flag';
 $isMaintenance   = file_exists($maintenanceFlag);
 $isDevCookie     = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
@@ -88,10 +89,8 @@ if ($isMaintenance && !$isDevCookie) {
 
 <!-- LEFT: CONVERSATIONS (desktop) -->
 <nav class="conv-panel">
-    <div class="conv-header">
-        <img src="/assets/lyralogowide.png" alt="Lyralink" class="conv-logo">
-        <span class="lyra-brand-tag">Next-Gen AI Infrastructure</span>
-    </div>
+    <div class="conv-header" hidden aria-hidden="true"></div>
+    <?php echo lyra_chat_brand(); ?>
     <?php echo lyra_chat_rail_chrome(); ?>
     <button class="new-chat-btn" onclick="newConversation()">+ New Chat</button>
     <div class="conv-list" id="convList"></div>
@@ -175,6 +174,8 @@ if ($isMaintenance && !$isDevCookie) {
     <div id="chatbox">
         <?php echo lyra_chat_welcome(); ?>
     </div>
+
+    <?php echo lyra_chat_stages(); ?>
 
     <div class="composer-wrap">
         <div class="chat-attachment-bar" id="chatAttachmentBar">
@@ -485,29 +486,15 @@ window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;
     </div>
 
     <div class="lyra-rail-body" data-lyra-panel="context">
-        <div class="lyra-rail-label">Current model</div>
-        <div class="lyra-rail-card">
-            <span class="lyra-rail-dot"></span>
-            <div class="lyra-rail-model">
-                <strong id="lyraRailModel">Lyra-1</strong>
-                <span id="lyraRailModelState">Ready</span>
-            </div>
-        </div>
+        <?php echo lyra_chat_rail_model(); ?>
 
-        <div class="lyra-rail-label">Tools enabled</div>
-        <div class="lyra-rail-list" id="lyraRailTools">
-            <div class="lyra-rail-row"><span>Web Search</span><em>Active</em></div>
-            <div class="lyra-rail-row"><span>Code Validation</span><em>Active</em></div>
-            <div class="lyra-rail-row"><span>Filesystem</span><em class="is-idle">Idle</em></div>
-            <div class="lyra-rail-row"><span>Database</span><em class="is-idle">Idle</em></div>
-        </div>
+        <?php echo lyra_chat_rail_tools(); ?>
 
         <?php echo lyra_chat_task_progress(); ?>
         <div class="lyra-rail-label">Last response</div>
         <div class="lyra-rail-note" id="lyraRailLastResponse">No request yet. Send a message and the execution details will appear here.</div>
 
-        <div class="lyra-rail-label">Sources</div>
-        <div class="lyra-rail-note" id="lyraRailSources">No retrieved sources in the last response.</div>
+        <?php echo lyra_chat_sources(); ?>
         <?php echo lyra_chat_related(); ?>
     </div>
 
