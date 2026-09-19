@@ -728,16 +728,12 @@ body.minimal-chat-shell {
 
 @media (max-width: 1240px) {
     body.minimal-chat-shell { grid-template-columns: 264px minmax(0, 1fr); }
-    .lyra-topbar { grid-template-columns: 264px minmax(0, 1fr); }
     .lyra-chatrail { display: none; }
-    .lyra-topbar-actions { grid-column: 2; }
-    .lyra-topbar-search { display: none; }
 }
 @media (max-width: 900px) {
     body.minimal-chat-shell { grid-template-columns: minmax(0, 1fr); }
-    .lyra-topbar { grid-template-columns: minmax(0, 1fr) auto; padding: 0 var(--ly-s4); }
+    .lyra-topbar { padding: 0 var(--ly-s4); }
     .lyra-topbar-brand { display: none; }
-    .lyra-topbar-actions { grid-column: 2; }
 }
 
 /* The top bar now carries the brand, so the rail's own logo is redundant. */
@@ -745,3 +741,310 @@ body.minimal-chat-shell {
 
 /* The in-panel header is now just the thread title plus the mobile menu. */
 .lyra-topbar ~ .chat-panel > header { border-bottom: 0; height: auto; padding-top: var(--ly-s4); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHAT-PAGE DESIGN — the chrome from the approved mockup
+   ══════════════════════════════════════════════════════════════════════════
+   Adds the rail navigation, Quick Access, promo card, System Status, the top
+   bar pills and model selector, the welcome state with capability and
+   suggestion cards, the task-progress ring, and the composer action chips.
+   All new elements; no existing id is touched.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Left rail: brand, nav, quick access, promo, status ─────────────────── */
+.conv-header { padding: 0 var(--ly-s2) var(--ly-s4); }
+.conv-header .conv-logo { height: 22px; width: auto; }
+.lyra-brand-tag {
+    display: block;
+    margin-top: 5px;
+    font-size: 10.5px;
+    color: var(--ly-text-4);
+    letter-spacing: 0.01em;
+}
+
+.lyra-railnav, .lyra-quick { display: flex; flex-direction: column; gap: 2px; }
+.lyra-railhead {
+    padding: var(--ly-s4) var(--ly-s3) var(--ly-s2);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ly-text-4);
+}
+.lyra-navitem {
+    display: flex;
+    align-items: center;
+    gap: var(--ly-s3);
+    padding: 8px 10px;
+    border-radius: var(--ly-r-md);
+    font-size: 13.5px;
+    color: var(--ly-text-2);
+    text-decoration: none;
+    min-width: 0;
+    transition: background var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease);
+}
+.lyra-navitem:hover { background: var(--ly-glass); color: var(--ly-text); }
+.lyra-navitem svg { width: 16px; height: 16px; flex: 0 0 auto; opacity: 0.85; }
+.lyra-navitem span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lyra-navitem .lyra-count {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass-strong);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--ly-text-2);
+    flex: 0 0 auto;
+}
+
+/* Promo card */
+.lyra-promo {
+    margin-top: var(--ly-s3);
+    padding: var(--ly-s4);
+    border: 1px solid var(--ly-primary-line);
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-grad-soft), var(--ly-surface);
+    flex: 0 0 auto;
+}
+.lyra-promo b { display: block; font-size: 13px; margin-bottom: 5px; color: var(--ly-text); }
+.lyra-promo p { font-size: 11.5px; color: var(--ly-text-3); line-height: 1.55; margin: 0 0 11px; }
+.lyra-promo a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    justify-content: center;
+    padding: 8px 12px;
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-grad);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+/* System status */
+.lyra-sysstatus { margin-top: var(--ly-s3); padding-top: var(--ly-s3); border-top: 1px solid var(--ly-border); flex: 0 0 auto; }
+.lyra-sysrow { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ly-text-2); }
+.lyra-sysrow + .lyra-sysrow { margin-top: 4px; color: var(--ly-text-4); font-size: 11px; }
+.lyra-sysdot { width: 7px; height: 7px; border-radius: 50%; background: var(--ly-success); flex: 0 0 auto; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+
+/* ── Top bar: model selector and status pills ───────────────────────────── */
+.lyra-topbar-left { grid-column: 1; display: flex; align-items: center; gap: var(--ly-s3); min-width: 0; }
+
+.lyra-modelselect {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+    color: var(--ly-text);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 0;
+}
+.lyra-modelselect:hover { background: var(--ly-glass-hover); border-color: var(--ly-primary-line); }
+.lyra-modelselect .lyra-mdot {
+    width: 18px; height: 18px; flex: 0 0 auto;
+    border-radius: 5px;
+    background: var(--ly-grad);
+}
+.lyra-modelselect svg { width: 12px; height: 12px; opacity: 0.6; flex: 0 0 auto; }
+
+.lyra-pillgroup { display: flex; align-items: center; gap: 0; border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); background: var(--ly-glass); overflow: hidden; }
+.lyra-pillcell {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    color: var(--ly-text-4);
+    border-right: 1px solid var(--ly-border);
+    white-space: nowrap;
+}
+.lyra-pillcell:last-child { border-right: 0; }
+.lyra-pillcell b { display: block; font-size: 12px; font-weight: 600; color: var(--ly-text); }
+.lyra-pillcell .lyra-pdot { width: 6px; height: 6px; border-radius: 50%; background: var(--ly-success); flex: 0 0 auto; }
+.lyra-pillcell svg { width: 13px; height: 13px; flex: 0 0 auto; opacity: 0.7; }
+
+.lyra-iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    flex: 0 0 auto;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-glass);
+    color: var(--ly-text-3);
+    cursor: pointer;
+}
+.lyra-iconbtn:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.lyra-iconbtn svg { width: 15px; height: 15px; }
+
+.lyra-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.lyra-user .lyra-uav {
+    width: 32px; height: 32px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--ly-grad);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #fff;
+}
+.lyra-user .lyra-uname { font-size: 12.5px; font-weight: 600; color: var(--ly-text); line-height: 1.25; }
+.lyra-user .lyra-uplan { font-size: 10.5px; color: var(--ly-text-4); }
+
+/* ── Welcome state (capability + suggestion cards) ──────────────────────── */
+.lyra-welcome { width: 100%; max-width: 880px; margin: 0 auto; padding: 8px 0 20px; }
+.lyra-welcome-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 26px; text-align: left; }
+.lyra-welcome-mark {
+    width: 56px; height: 56px; flex: 0 0 auto;
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-grad);
+    box-shadow: var(--ly-shadow-glow);
+}
+.lyra-welcome-head h1 {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    margin: 0 0 5px;
+    color: var(--ly-text);
+}
+.lyra-welcome-head p { font-size: 14px; color: var(--ly-text-3); margin: 0; }
+
+.lyra-capgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
+.lyra-cap {
+    padding: 15px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-glass);
+    text-align: left;
+}
+.lyra-cap i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    margin-bottom: 10px;
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-primary-soft);
+    border: 1px solid var(--ly-primary-line);
+    color: var(--ly-primary-text);
+}
+.lyra-cap i svg { width: 15px; height: 15px; }
+.lyra-cap b { display: block; font-size: 13.5px; margin-bottom: 4px; color: var(--ly-text); }
+.lyra-cap span { font-size: 11.5px; color: var(--ly-text-3); line-height: 1.5; }
+
+.lyra-suggest-label { font-size: 13px; color: var(--ly-text-2); margin-bottom: 11px; }
+.lyra-suggestgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.lyra-suggest {
+    padding: 13px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-glass);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color var(--ly-fast) var(--ly-ease), background var(--ly-fast) var(--ly-ease), transform var(--ly-fast) var(--ly-ease);
+}
+.lyra-suggest:hover { border-color: var(--ly-primary-line); background: var(--ly-glass-hover); transform: translateY(-2px); }
+.lyra-suggest p { font-size: 12.5px; color: var(--ly-text-2); line-height: 1.5; margin: 0 0 10px; }
+.lyra-suggest em {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    font-size: 10.5px;
+    font-style: normal;
+    color: var(--ly-text-3);
+}
+.lyra-suggest em svg { width: 11px; height: 11px; }
+
+/* ── Task progress ring and related context ─────────────────────────────── */
+.lyra-ring { position: relative; width: 60px; height: 60px; flex: 0 0 auto; }
+.lyra-ring svg { transform: rotate(-90deg); width: 60px; height: 60px; }
+.lyra-ring .lyra-ringtrack { fill: none; stroke: var(--ly-glass-strong); stroke-width: 5; }
+.lyra-ring .lyra-ringbar { fill: none; stroke: var(--ly-success); stroke-width: 5; stroke-linecap: round; }
+.lyra-ring b {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--ly-text);
+}
+.lyra-progress { display: flex; align-items: center; gap: 13px; padding: 12px; border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); background: var(--ly-glass); }
+.lyra-progress-meta strong { display: block; font-size: 12.5px; color: var(--ly-text); }
+.lyra-progress-meta span { font-size: 11px; color: var(--ly-text-4); }
+.lyra-steps { margin-top: 9px; display: flex; flex-direction: column; gap: 1px; }
+.lyra-step { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 11.5px; color: var(--ly-text-3); }
+.lyra-step svg { width: 12px; height: 12px; color: var(--ly-success); flex: 0 0 auto; }
+.lyra-step em { margin-left: auto; font-style: normal; color: var(--ly-text-4); }
+
+/* ── Composer action chips ──────────────────────────────────────────────── */
+.lyra-composer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lyra-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+.lyra-chip:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.lyra-chip svg { width: 13px; height: 13px; }
+.lyra-chip.is-on { background: var(--ly-primary-soft); border-color: var(--ly-primary-line); color: var(--ly-primary-text); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 1240px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lyra-pillgroup { display: none; }
+}
+@media (max-width: 900px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: minmax(0, 1fr); }
+    .lyra-modelselect { display: none; }
+    .lyra-welcome-head h1 { font-size: 24px; }
+    .lyra-welcome-head { flex-direction: column; gap: 12px; }
+    .lyra-railnav, .lyra-quick, .lyra-promo, .lyra-sysstatus { display: none; }
+}
+
+/* ── Top bar grid correction ────────────────────────────────────────────────
+   The top bar is a grid with three columns. Adding .lyra-topbar-mid as a
+   fourth child with no explicit placement caused auto-placement to create an
+   implicit row, which pushed the bar to two rows and collapsed the whole page
+   layout. Every child now has an explicit column.
+
+   The global search field is not part of the Chat-Page design, so it is hidden
+   here rather than removed from the markup, keeping the element available. */
+.lyra-topbar { grid-template-columns: 264px auto minmax(0, 1fr) auto; }
+.lyra-topbar-search { display: none; }
+.lyra-topbar-mid { grid-column: 2; display: flex; align-items: center; gap: var(--ly-s3); min-width: 0; }
+.lyra-topbar-actions { grid-column: 4; }
+
+@media (max-width: 1240px) {
+    .lyra-topbar { grid-template-columns: 230px auto minmax(0, 1fr) auto; }
+}
+@media (max-width: 1100px) {
+    /* Not enough room for the pills next to the model selector. */
+    .lyra-pillgroup { display: none; }
+    .lyra-topbar { grid-template-columns: 230px auto minmax(0, 1fr) auto; }
+}
+@media (max-width: 900px) {
+    .lyra-topbar { grid-template-columns: minmax(0, 1fr) auto; }
+    .lyra-topbar-mid { grid-column: 1; }
+    .lyra-topbar-actions { grid-column: 2; }
+}
