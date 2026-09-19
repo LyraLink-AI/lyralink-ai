@@ -6,6 +6,9 @@ require_once __DIR__ . '/lib/network_policy.php';
 require_once __DIR__ . '/lib/chat/execution_foundation.php';
 require_once __DIR__ . '/lib/chat/runtime_core.php';
 require_once __DIR__ . '/lib/finance.php';
+// Single decision point. Loaded early because the per-request decision is
+// computed alongside the trace id, above the remaining routing requires.
+require_once __DIR__ . '/lib/chat/orchestrator.php';
 
 $isDevMode = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
 $isDebugEnabled = api_get_secret('APP_DEBUG', '0') === '1';
@@ -33,6 +36,7 @@ $traceId = chat_make_trace_id();
 // normal write happens, so the success path is unchanged.
 $GLOBALS['lyra_audit_written'] = false;
 $GLOBALS['lyra_audit_trace_id'] = $traceId;
+
 register_shutdown_function(static function (): void {
     if (!empty($GLOBALS['lyra_audit_written'])) {
         return;
@@ -889,6 +893,29 @@ $responseCacheKey = '';
 $responseCacheHit = false;
 $responseCacheTtl = chat_response_cache_ttl();
 $webSearchExplicit = array_key_exists('web_search', $input);
+
+// Single decision point (observer only for now: nothing routes on this yet).
+// Placed here because every input it reads is assigned by this point:
+// $latestUserMsg (476), $userPlan (136), $userId (282), $taskMode (317),
+// $attachmentMeta (363), $webSearchExplicit (above).
+$orchestrationDecision = [];
+if (function_exists('chat_orchestrate')) {
+    try {
+        $orchestrationDecision = chat_orchestrate((string)($latestUserMsg ?? ''), [
+            'plan' => $userPlan ?? 'free',
+            'is_logged_in' => $isLoggedIn ?? false,
+            'privacy_mode' => strtolower(trim((string)api_get_secret('LLM_PROVIDER', 'local'))) === 'local' ? 'local' : 'cloud',
+            'task_mode' => $taskMode ?? false,
+            'has_attachments' => !empty($attachmentMeta),
+            'web_search' => $webSearchExplicit ?? null,
+            'org_id' => 0,
+            'user_id' => isset($userId) ? (int)$userId : 0,
+        ]);
+    } catch (\Throwable $orchestrationError) {
+        error_log('orchestrator_decision_failed: ' . $orchestrationError->getMessage());
+        $orchestrationDecision = [];
+    }
+}
 $webSearchStrict = api_get_secret('CHAT_WEB_SEARCH_STRICT', '1') === '1';
 $needsFreshWeb = chat_needs_fresh_web_context((string)$latestUserMsg);
 $webSearchState = [
@@ -2723,6 +2750,7 @@ $GLOBALS['lyra_audit_written'] = true;
 chat_append_audit_log([
     'at' => gmdate('c'),
     'trace_id' => $traceId,
+    'orchestration' => $orchestrationDecision,
     'user_scope' => $isLoggedIn ? 'user' : 'guest',
     'project_id' => $projectId,
     'task_mode' => $taskMode,
