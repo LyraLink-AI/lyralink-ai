@@ -262,8 +262,8 @@ function renderChat() {
 
     if (!msgs.length) {
         chatbox.innerHTML = widgetMode
-            ? `<div class="empty-state" id="emptyState"><div class="icon">⚡</div><p>Ask a question, get support, or start a quick conversation right here without leaving the page.</p><div class="quick-prompts"><span class="quick-prompt" onclick="setInput('What can you help me with today?')">What can you do?</span><span class="quick-prompt" onclick="setInput('I need help with pricing and plans')">Pricing help</span><span class="quick-prompt" onclick="setInput('Can you help me with setup?')">Setup help</span></div></div>`
-            : `<div class="empty-state" id="emptyState"><div class="icon">⚡</div><p>Hey! I'm Lyralink. Ask me about code, science, creative writing — anything really!</p></div>`;
+            ? (window.LYRA_WELCOME_HTML || "<div class='empty-state' id='emptyState'><div class='icon'>&#9889;</div><p>Ask Lyralink anything to get started.</p></div>")
+            : (window.LYRA_WELCOME_HTML || "<div class='empty-state' id='emptyState'><div class='icon'>&#9889;</div><p>Ask Lyralink anything to get started.</p></div>");
         chatTitle.textContent = conv?.title || 'New Chat';
         chatTitle.className   = 'chat-title';
         return;

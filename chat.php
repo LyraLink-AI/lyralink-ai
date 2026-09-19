@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/api/lyra_chat_chrome.php';
 $maintenanceFlag = __DIR__ . '/maintenance.flag';
 $isMaintenance   = file_exists($maintenanceFlag);
 $isDevCookie     = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
@@ -50,7 +51,9 @@ if ($isMaintenance && !$isDevCookie) {
     <link rel="stylesheet" href="/assets/css/chat/app.css?v=<?php echo htmlspecialchars($chatCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="/assets/css/lyra-ui.css?v=1">
     <link rel="stylesheet" href="/assets/css/chat/lyra-chat.css?v=2">
+    <script src="/assets/js/chat/lyra-chat-rail.js?v=1" defer></script>
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+<script>window.LYRA_WELCOME_HTML = <?php echo json_encode(lyra_chat_welcome(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;</script>
 </head>
 <body class="minimal-chat-shell<?php echo $isWidgetEmbed ? ' widget-chat-shell' : ''; ?>">
 
@@ -67,7 +70,7 @@ if ($isMaintenance && !$isDevCookie) {
                title="Global search is not wired to an endpoint yet">
     </div>
 
-    <div class="lyra-topbar-actions" id="lyraTopbarActions"></div>
+    <?php echo lyra_chat_topbar_mid(); ?><div class="lyra-topbar-actions" id="lyraTopbarActions"><?php echo lyra_chat_topbar_actions(); ?></div>
 </header>
 
 <!-- DRAWER OVERLAY (mobile) -->
@@ -87,10 +90,13 @@ if ($isMaintenance && !$isDevCookie) {
 <nav class="conv-panel">
     <div class="conv-header">
         <img src="/assets/lyralogowide.png" alt="Lyralink" class="conv-logo">
+        <span class="lyra-brand-tag">Next-Gen AI Infrastructure</span>
     </div>
+    <?php echo lyra_chat_rail_chrome(); ?>
     <button class="new-chat-btn" onclick="newConversation()">+ New Chat</button>
     <div class="conv-list" id="convList"></div>
-    <div class="conv-footer">
+    <?php echo lyra_chat_promo(); ?>
+<div class="conv-footer">
         <div class="conv-footer-status">
             <span class="status-dot" id="apiStatusDot"></span>
             <span class="status-text" id="apiStatusText">Checking...</span>
@@ -167,16 +173,7 @@ if ($isMaintenance && !$isDevCookie) {
     </div>
 
     <div id="chatbox">
-        <div class="empty-state" id="emptyState">
-            <div class="icon">⚡</div>
-                <p>Ask Lyralink anything, or start a real execution flow.</p>
-                <div class="quick-prompts">
-                    <span class="quick-prompt" onclick="setInput('Plan the next steps for this product launch')">Plan</span>
-                    <span class="quick-prompt" onclick="setInput('Debug this code and explain the root cause')">Debug</span>
-                    <span class="quick-prompt" onclick="setInput('Design a clean architecture for this feature')">Build</span>
-                    <span class="quick-prompt" onclick="setInput('Turn this rough idea into a clear execution plan')">Ship</span>
-                </div>
-        </div>
+        <?php echo lyra_chat_welcome(); ?>
     </div>
 
     <div class="composer-wrap">
@@ -190,6 +187,7 @@ if ($isMaintenance && !$isDevCookie) {
             </div>
             <button type="button" class="chat-attachment-remove" onclick="clearPendingAttachment()">Remove</button>
         </div>
+        <?php echo lyra_chat_composer_chips(); ?>
         <div class="input-area">
             <button type="button" id="attachBtn" class="chat-attach-btn" onclick="openChatAttachmentPicker()" title="Attach image or file">📎</button>
             <input type="file" id="chatAttachmentInput" style="display:none" accept=".txt,.md,.markdown,.pdf,.csv,.json,.docx,.png,.jpg,.jpeg,.gif,.webp,.svg,.js,.ts,.py,.php,.html,.css,.xml,.log" onchange="onChatAttachmentSelected(event)">
@@ -504,11 +502,13 @@ window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;
             <div class="lyra-rail-row"><span>Database</span><em class="is-idle">Idle</em></div>
         </div>
 
+        <?php echo lyra_chat_task_progress(); ?>
         <div class="lyra-rail-label">Last response</div>
         <div class="lyra-rail-note" id="lyraRailLastResponse">No request yet. Send a message and the execution details will appear here.</div>
 
         <div class="lyra-rail-label">Sources</div>
         <div class="lyra-rail-note" id="lyraRailSources">No retrieved sources in the last response.</div>
+        <?php echo lyra_chat_related(); ?>
     </div>
 
     <div class="lyra-rail-body" data-lyra-panel="execution" hidden>

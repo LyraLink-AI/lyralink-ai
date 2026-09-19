@@ -758,7 +758,7 @@ function renderChat() {
     const conv      = convCache.find(c => c.conv_id === activeConvId);
 
     if (!msgs.length) {
-        chatbox.innerHTML = `<div class="empty-state" id="emptyState"><div class="icon">⚡</div><p>Hey! I'm Lyralink. Ask me about code, science, creative writing — anything really!</p></div>`;
+        chatbox.innerHTML = (window.LYRA_WELCOME_HTML || "<div class='empty-state' id='emptyState'><div class='icon'>&#9889;</div><p>Ask Lyralink anything to get started.</p></div>");
         chatTitle.textContent = conv?.title || 'New Chat';
         chatTitle.className   = 'chat-title';
         return;
