@@ -48,3 +48,7 @@ desktop-updates/
 # Written continuously by the application; not source.
 storage/
 api/lib/storage/
+
+# Nested virtualenv used by the render worker scripts
+scripts/render_worker/.venv/
+.venv/
