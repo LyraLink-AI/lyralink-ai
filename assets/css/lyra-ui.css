@@ -136,17 +136,23 @@ body.ly::before {
 }
 body.ly > * { position: relative; z-index: 1; }
 
-.ly h1, .ly h2, .ly h3, .ly h4, .ly h5, .ly h6 {
+/* Base element styling for headings is wrapped in :where() so it contributes
+   ZERO specificity. Previously `.ly h2` (0,1,1) outranked component classes
+   such as `.ly-panel-title` (0,1,0), so panel headings rendered at the 28px
+   display size instead of 12.5px and the panels looked broken.
+   With :where(), a component class always wins and any override still works. */
+:where(.ly) h1, :where(.ly) h2, :where(.ly) h3,
+:where(.ly) h4, :where(.ly) h5, :where(.ly) h6 {
   margin: 0 0 var(--ly-s4);
   font-weight: 700;
   letter-spacing: -0.022em;
   line-height: 1.18;
   color: var(--ly-text);
 }
-.ly h1 { font-size: var(--ly-fs-4xl); }
-.ly h2 { font-size: var(--ly-fs-2xl); letter-spacing: -0.02em; }
-.ly h3 { font-size: var(--ly-fs-lg); }
-.ly h4 { font-size: var(--ly-fs-md); }
+:where(.ly) h1 { font-size: var(--ly-fs-4xl); }
+:where(.ly) h2 { font-size: var(--ly-fs-2xl); letter-spacing: -0.02em; }
+:where(.ly) h3 { font-size: var(--ly-fs-lg); }
+:where(.ly) h4 { font-size: var(--ly-fs-md); }
 
 .ly p { margin: 0 0 var(--ly-s4); color: var(--ly-text-2); }
 .ly a { color: var(--ly-primary-text); text-decoration: none; transition: color var(--ly-fast) var(--ly-ease); }
@@ -634,6 +640,17 @@ body.ly > * { position: relative; z-index: 1; }
   }
   .ly-sidebar-brand, .ly-sidebar-section, .ly-sidebar-foot { display: none; }
   .ly-navitem { white-space: nowrap; }
+  /* Hug the content instead of stretching: as a horizontal bar the sidebar
+     must not reserve vertical space. The promo card is a full column of text
+     and would otherwise dominate the bar, so it is hidden on small screens. */
+  .ly-shell > .ly-sidebar,
+  .ly-shell-has-rail > .ly-sidebar,
+  .ly-sidebar {
+    flex: 0 0 auto;
+    max-height: none;
+    padding: var(--ly-s2) var(--ly-s4);
+  }
+  .ly-sidebar .ly-promo { display: none; }
   .ly-grid-2, .ly-grid-3, .ly-grid-4, .ly-grid-5 { grid-template-columns: minmax(0, 1fr); }
   .ly-wrap { padding: 0 var(--ly-s4); }
   .ly-card-pad, .ly-panel-body { padding: var(--ly-s4); }
@@ -654,4 +671,121 @@ body.ly > * { position: relative; z-index: 1; }
   body.ly::before, .ly-sidebar, .ly-topnav, .ly-rail { display: none !important; }
   .ly-shell { grid-template-columns: 1fr; }
   body.ly { background: #fff; color: #000; }
+}
+
+/* ── 22. APP SHELL FITMENT ──────────────────────────────────────────────── */
+/* App pages (admin, dev-stats, teams, chat) must fit the viewport and let
+   each column scroll on its own. Previously `.ly-sidebar` carried
+   `min-height: 100vh` and the shell only set `min-height`, so long content
+   pushed the whole document taller than the screen. The consequence was
+   reported directly by a user: scrolling the page moved the sidebar and rail
+   out of alignment and made the layout look broken.
+
+   Fixed-height shell + internal scrollers means the document never scrolls
+   on these pages, so nothing can drift relative to anything else. */
+
+/* Panel titles are <h2>. Qualified so the component wins even if a base
+   heading rule is reintroduced later. */
+.ly .ly-panel-title {
+  font-size: var(--ly-fs-sm);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ly-text);
+  margin: 0;
+}
+
+/* The rail had no base rule at all, so it never scrolled and had no
+   min-width guard. */
+.ly-rail { min-width: 0; }
+
+/* Cancel the standalone sidebar's viewport min-height inside a shell, where
+   the shell itself now owns the height. */
+.ly-shell .ly-sidebar,
+.ly-shell-has-rail .ly-sidebar { min-height: 0; }
+
+/* Fit the viewport. 100dvh accounts for mobile browser chrome; 100vh is the
+   fallback for engines without dvh. */
+.ly-shell,
+.ly-shell-has-rail {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* min-height:0 is required on grid children for overflow to take effect at
+   all; without it a grid item refuses to shrink below its content. */
+.ly-shell > main {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ly-shell > .ly-sidebar,
+.ly-shell-has-rail > .ly-sidebar,
+.ly-shell > .ly-rail,
+.ly-shell-has-rail > .ly-rail {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Stack rail panels from the top instead of stretching them to fill. */
+.ly-shell > .ly-rail,
+.ly-shell-has-rail > .ly-rail {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Give the scroller a bottom gutter so the last panel is not flush against
+   the viewport edge, and do it in CSS rather than relying on each page's
+   inner padding div. */
+.ly-shell > main::after {
+  content: "";
+  display: block;
+  height: var(--ly-s6);
+}
+
+/* Long unbroken strings - URLs, hashes, pasted tokens, base64 - must not
+   widen a grid track or force horizontal overflow. */
+.ly-panel-body,
+.ly-panel-body *:not(svg):not(path),
+.tw-post .body,
+.ly-message-body {
+  overflow-wrap: anywhere;
+}
+
+/* Keyboard focus must stay visible inside the scrollers. */
+.ly-shell > main:focus-visible,
+.ly-shell > .ly-sidebar:focus-visible,
+.ly-shell > .ly-rail:focus-visible {
+  outline: 2px solid var(--ly-primary);
+  outline-offset: -2px;
+}
+
+@media (max-width: 720px) {
+  /* Sidebar collapses to a horizontal bar; the shell then has two rows and
+     only the content column scrolls. */
+  .ly-shell,
+  .ly-shell-has-rail {
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+  }
+  .ly-shell > .ly-sidebar,
+  .ly-shell-has-rail > .ly-sidebar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    flex: 0 0 auto;
+  }
+  /* Wrapping beats truncating once the column is this narrow: an ellipsis
+     hides the value entirely, which is worse than a second line. */
+  .ly-row-between {
+    flex-wrap: wrap;
+    row-gap: var(--ly-s1);
+  }
+  .ly-row-between > .ly-truncate {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }

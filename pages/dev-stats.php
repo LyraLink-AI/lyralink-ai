@@ -152,10 +152,27 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
     <style>
         .ds-hour { display:flex; align-items:flex-end; gap:5px; height:150px; }
         .ds-hour > div { flex:1; background:linear-gradient(180deg,#8B5CF6,#5028E0); border-radius:4px 4px 0 0; min-height:3px; opacity:.9; }
-        .ds-modelrow { display:flex; align-items:center; gap:11px; padding:9px 0; }
-        .ds-bar { flex:1; height:7px; border-radius:var(--ly-r-full); background:var(--ly-glass-strong); overflow:hidden; }
+        .ds-modelrow { display:flex; align-items:center; gap:11px; padding:9px 0; min-width:0; }
+        /* The model name must be free to shrink. A fixed 150px width took up the
+           whole panel on a narrow column, and the name is the one field that
+           genuinely varies in length. */
+        .ds-name { flex:0 1 168px; min-width:0; font-size:12px; }
+        .ds-bar { flex:1 1 60px; min-width:36px; height:7px; border-radius:var(--ly-r-full); background:var(--ly-glass-strong); overflow:hidden; }
         .ds-bar > span { display:block; height:100%; border-radius:var(--ly-r-full); background:linear-gradient(90deg,#5028E0,#9B5CFF); }
         .ds-num { font-variant-numeric:tabular-nums; }
+        .ds-num-fixed { width:52px; flex:0 0 auto; text-align:right; font-size:11.5px; color:var(--ly-text-3); }
+
+        /* Health rows. The value is never truncated: the strings are short
+           ("0 models", "60.4% of 125 GB") and a hidden percentage is worse
+           than a second line. */
+        .ds-health { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--ly-border); font-size:12.5px; }
+        .ds-health-val { font-size:11.5px; text-align:right; overflow-wrap:anywhere; }
+        @media (max-width:760px) {
+            .ds-health { flex-wrap:wrap; }
+            .ds-health-val { flex:1 1 100%; padding-left:18px; text-align:left; }
+            .ds-modelrow { flex-wrap:wrap; }
+            .ds-name { flex:1 1 100%; }
+        }
     </style>
 </head>
 <body class="ly">
@@ -284,9 +301,9 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                             foreach ($top as $name => $n):
                                 $pct = round($n / max(1, $totalM) * 100, 1); ?>
                         <div class="ds-modelrow">
-                            <span class="ly-truncate" style="width:150px;font-size:12px"><?php echo htmlspecialchars($name); ?></span>
+                            <span class="ly-truncate ds-name" title="<?php echo htmlspecialchars($name); ?>"><?php echo htmlspecialchars($name); ?></span>
                             <div class="ds-bar"><span style="width:<?php echo $pct; ?>%"></span></div>
-                            <span class="ds-num" style="font-size:11.5px;color:var(--ly-text-3);width:52px;text-align:right"><?php echo $pct; ?>%</span>
+                            <span class="ds-num ds-num-fixed"><?php echo $pct; ?>%</span>
                         </div>
                             <?php endforeach; ?>
                         <?php else: ?>
@@ -306,11 +323,11 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                                 $storagePct !== null ? ($storagePct . '% of ' . round($storageTotal / 1e9) . ' GB') : 'unknown'],
                         ];
                         foreach ($health as $hc): ?>
-                        <div class="ly-row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--ly-border);font-size:12.5px">
+                        <div class="ds-health">
                             <span class="ly-dot <?php echo $hc[1] ? 'ly-dot-online' : 'ly-dot-warn'; ?>"></span>
                             <span><?php echo $hc[0]; ?></span>
                             <span class="ly-spacer"></span>
-                            <span class="ly-truncate ly-muted" style="max-width:190px;font-size:11.5px"><?php echo htmlspecialchars($hc[2]); ?></span>
+                            <span class="ly-muted ds-health-val" title="<?php echo htmlspecialchars($hc[2]); ?>"><?php echo htmlspecialchars($hc[2]); ?></span>
                         </div>
                         <?php endforeach; ?>
                     </div>

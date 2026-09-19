@@ -35,10 +35,15 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
     <script src="/assets/js/lyra-ui.js" defer></script>
     <style>
         /* ── page-specific ─────────────────────────────────────────────── */
-        .cw-shell { display: grid; grid-template-columns: 252px minmax(0,1fr) 330px; min-height: 100vh; }
-        .cw-side { background: var(--ly-rail); border-right: 1px solid var(--ly-border); display:flex; flex-direction:column; }
-        .cw-main { display:flex; flex-direction:column; min-width:0; }
-        .cw-rail { background: var(--ly-rail); border-left: 1px solid var(--ly-border); }
+        /* The shell is pinned to the viewport and each column scrolls on its
+           own. min-height:100vh on a shell whose children are flex columns
+           let long content stretch the page instead of the column, which is
+           what made the whole document scroll. min-height:0 on the flex
+           parents is what actually enables a child to scroll. */
+        .cw-shell { display: grid; grid-template-columns: 252px minmax(0,1fr) 330px; height: 100vh; height: 100dvh; overflow: hidden; }
+        .cw-side { background: var(--ly-rail); border-right: 1px solid var(--ly-border); display:flex; flex-direction:column; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+        .cw-main { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+        .cw-rail { background: var(--ly-rail); border-left: 1px solid var(--ly-border); min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 
         .cw-top {
             display:flex; align-items:center; gap:12px; flex-wrap:wrap;
@@ -54,7 +59,7 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
         }
         .cw-pill b { color: var(--ly-text); font-weight:600; }
 
-        .cw-scroll { flex:1; overflow-y:auto; padding: 26px 28px 8px; }
+        .cw-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding: 26px 28px 8px; }
         .cw-head { text-align:center; max-width: 760px; margin: 0 auto 26px; }
         .cw-h1 { font-size: 34px; letter-spacing:-.035em; margin: 0 0 8px; }
         .cw-actions { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; max-width: 820px; margin: 0 auto 26px; }
@@ -138,10 +143,12 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
             .cw-actions, .cw-suggests { grid-template-columns: repeat(2, minmax(0,1fr)); }
         }
         @media (max-width: 720px) {
-            .cw-shell { grid-template-columns: minmax(0,1fr); }
+            .cw-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
             .cw-side { display:none; }
             .cw-actions, .cw-suggests { grid-template-columns: minmax(0,1fr); }
             .cw-scroll, .cw-compose-wrap { padding-left:16px; padding-right:16px; }
+            .cw-h1 { font-size: 26px; }
+            .cw-head { margin-bottom: 18px; }
         }
     </style>
 </head>

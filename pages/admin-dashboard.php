@@ -271,7 +271,7 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
                             <div class="ad-modelrow">
                                 <span class="ly-avatar ly-avatar-sm" style="background:var(--ly-grad)"><?php echo htmlspecialchars(strtoupper(substr($m['name'], 0, 1))); ?></span>
                                 <div style="min-width:0;flex:1">
-                                    <div class="ly-truncate" style="font-size:12.5px"><?php echo htmlspecialchars($m['name']); ?></div>
+                                    <div class="ly-truncate" style="font-size:12.5px" title="<?php echo htmlspecialchars($m['name']); ?>"><?php echo htmlspecialchars($m['name']); ?></div>
                                     <div style="font-size:11px;color:var(--ly-text-4)"><?php echo $m['size']; ?> GB</div>
                                 </div>
                                 <?php if (stripos($m['name'], 'lyralink') !== false): ?>

@@ -35,6 +35,23 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
     <style>
         /* ── page-specific ─────────────────────────────────────────────── */
         .lp-nav { position: sticky; top: 0; z-index: 60; }
+
+        /* The nav has five actions plus the logo. Below 640px they no longer
+           fit on one line and the row overflowed the viewport horizontally.
+           Hide the secondary actions rather than let the bar scroll sideways:
+           "Sign In" and "Get Started Free" both lead to the same login page,
+           and the theme toggle is decorative, so nothing functional is lost. */
+        @media (max-width: 900px) {
+            .lp-nav { gap: var(--ly-s3); }
+        }
+        @media (max-width: 640px) {
+            .lp-nav { gap: var(--ly-s2); padding: 0 14px; }
+            .lp-nav .ly-btn-quiet,
+            .lp-nav .ly-btn-ghost { display: none; }
+            .lp-nav .ly-logo { min-width: 0; font-size: 15px; }
+            .lp-nav .ly-logo svg { flex: 0 0 auto; }
+            .lp-nav .ly-btn-primary { padding: 7px 11px; }
+        }
         .lp-hero { padding: 72px 0 96px; }
         .lp-hero-grid {
             display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.06fr);
