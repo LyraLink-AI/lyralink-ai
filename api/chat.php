@@ -23,6 +23,41 @@ api_json_headers();
 header('Cache-Control: no-store, private, max-age=0');
 $requestStartedAt = microtime(true);
 $traceId = chat_make_trace_id();
+
+// ── ONE RECORD PER RUN, ON EVERY EXIT PATH ──
+// The full audit record is written at a single point near the end of this file,
+// but this script has 14 exit paths (auth, missing input, approval gate, rate
+// limits, timeouts, early errors). Any exit before that point previously left
+// no record at all, so a request that returned nothing was undiagnosable.
+// This handler guarantees exactly one record per run: it no-ops as soon as the
+// normal write happens, so the success path is unchanged.
+$GLOBALS['lyra_audit_written'] = false;
+$GLOBALS['lyra_audit_trace_id'] = $traceId;
+register_shutdown_function(static function (): void {
+    if (!empty($GLOBALS['lyra_audit_written'])) {
+        return;
+    }
+    if (!function_exists('chat_append_audit_log')) {
+        return;
+    }
+    $lastError = error_get_last();
+    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
+    $fatal = is_array($lastError) && in_array((int)($lastError['type'] ?? 0), $fatalTypes, true);
+    chat_append_audit_log([
+        'at' => gmdate('c'),
+        'trace_id' => (string)($GLOBALS['lyra_audit_trace_id'] ?? ''),
+        'user_scope' => 'unknown',
+        'channel' => 'unknown',
+        'incomplete' => true,
+        'final_state' => $fatal ? 'FAILED' : 'INCOMPLETE',
+        'reason' => $fatal
+            ? ('php_fatal: ' . (string)($lastError['message'] ?? ''))
+            : 'request_exited_before_completion',
+        'php_fatal_file' => $fatal ? (string)($lastError['file'] ?? '') : null,
+        'php_fatal_line' => $fatal ? (int)($lastError['line'] ?? 0) : null,
+    ]);
+});
+
 $stageTelemetry = [
     'request_id' => $traceId,
     'stages' => [],
@@ -1708,10 +1743,13 @@ if ($cacheEligible) {
         ]);
     }
 }
-if ($streamResponseRequested && !$streamResponseActive && ($responseCacheHit || is_string($reply) || $reply !== null)) {
+// $reply is only assigned on a cache hit at this point; testing it directly
+// raised "Undefined variable $reply" twice per request (47 occurrences logged).
+$haveReplyToEmit = isset($reply) && is_string($reply) && trim($reply) !== '';
+if ($streamResponseRequested && !$streamResponseActive && ($responseCacheHit || $haveReplyToEmit)) {
     $chatStreamStart();
     $chatStreamEmit('status', ['message' => 'Generating response']);
-    if (is_string($reply) && trim($reply) !== '') {
+    if ($haveReplyToEmit) {
         $chatStreamEmit('delta', ['delta' => $reply]);
     }
 }
@@ -2118,7 +2156,7 @@ $regenerationLatencyMs = 0;
 $validationFailureClass = 'NONE';
 $validationResult = 'pass';
 if (!($verificationSummary['passed'] ?? false)) {
-    $validationFailureClass = chat_verification_failure_class((string)$latestUserMsg, (string)$reply, $verificationSummary, $requestTrustProfile);
+    $validationFailureClass = chat_verification_failure_class((string)$latestUserMsg, (string)$reply, $verificationSummary, $requestTrustProfile, !empty($webSearchResults));
     $validationResult = $validationFailureClass;
     $answerabilityState = is_array($verificationSummary['answerability'] ?? null) ? $verificationSummary['answerability'] : [];
     $answerable = (bool)($answerabilityState['answerable'] ?? true);
@@ -2164,7 +2202,7 @@ if (!($verificationSummary['passed'] ?? false)) {
                     $validationResult = 'pass_after_deterministic_production_repair';
                     $deterministicRepairApplied = true;
                 }
-            } elseif ($validationFailureClass === 'MISSING_EXTERNAL_EVIDENCE' && function_exists('chat_repair_evidence_bound_response')) {
+            } elseif ($validationFailureClass === 'MISSING_EXTERNAL_EVIDENCE' && empty($webSearchResults) && function_exists('chat_repair_evidence_bound_response')) {
                 $repairedReply = chat_repair_evidence_bound_response((string)$latestUserMsg, (string)$reply);
                 $repairVerification = chat_self_verify_summary((string)$latestUserMsg, $repairedReply, $taskMode, $taskFocus, $verificationContext);
                 $repairVerification['answerability'] = $verificationSummary['answerability'] ?? [];
@@ -2336,10 +2374,10 @@ if ($verificationHardStop['blocked']) {
     $replySafety['blocked'] = true;
 }
 
-if ($benchmarkMode && function_exists('chat_benchmark_quality_repair')) {
-    $benchmarkRepairedReply = chat_benchmark_quality_repair((string)$latestUserMsg, (string)$reply, $requestTrustProfile, $osRuntimeDecision);
-    if (is_string($benchmarkRepairedReply) && trim($benchmarkRepairedReply) !== '' && trim($benchmarkRepairedReply) !== trim((string)$reply)) {
-        $reply = trim($benchmarkRepairedReply);
+if (function_exists('chat_runtime_quality_repair')) {
+    $qualityRepairedReply = chat_runtime_quality_repair((string)$latestUserMsg, (string)$reply, $requestTrustProfile, $osRuntimeDecision, !empty($webSearchResults));
+    if (is_string($qualityRepairedReply) && trim($qualityRepairedReply) !== '' && trim($qualityRepairedReply) !== trim((string)$reply)) {
+        $reply = trim($qualityRepairedReply);
         $verificationSummary = chat_self_verify_summary((string)$latestUserMsg, (string)$reply, $taskMode, $taskFocus, $verificationContext);
         $verificationSummary['answerability'] = chat_answerability_arbitrator(
             (string)$latestUserMsg,
@@ -2358,9 +2396,9 @@ if ($benchmarkMode && function_exists('chat_benchmark_quality_repair')) {
             ]
         );
         $validationResult = ($verificationSummary['passed'] ?? false)
-            ? 'pass_after_benchmark_quality_repair'
-            : 'improved_after_benchmark_quality_repair';
-        trace_add($trace, $liveTrace, 'validation', 'Applied benchmark quality repair contract', [
+            ? 'pass_after_quality_repair'
+            : 'improved_after_quality_repair';
+        trace_add($trace, $liveTrace, 'validation', 'Applied response quality repair contract', [
             'request_class' => $requestTrustProfile['request_class'] ?? 'GENERAL_INFORMATION',
             'route_class' => $osRuntimeDecision['route_class'] ?? 'STANDARD',
         ]);
@@ -2681,6 +2719,7 @@ chat_project_state_save($projectStateKey, $projectState);
 
 $webhookEvents = array_values(array_filter(array_map(static fn($v) => strtolower(trim((string)$v)), $webhookEventsInput), static fn($v) => $v !== ''));
 
+$GLOBALS['lyra_audit_written'] = true;
 chat_append_audit_log([
     'at' => gmdate('c'),
     'trace_id' => $traceId,

@@ -192,10 +192,157 @@ function chat_web_news_rss_query(string $query, int $limit = 5): array {
     return chat_web_parse_rss_items((string)$feed['body'], $limit);
 }
 
+function chat_web_wikipedia_query(string $query, int $limit = 5): array {
+    // Wikipedia's API returns JSON, so it needs no HTML scraping and is not
+    // affected by the anti-bot challenge that intermittently blocks the
+    // DuckDuckGo path. Verified working on this host (HTTP 200, ~300ms).
+    $query = trim($query);
+    if ($query === '') {
+        return [];
+    }
+
+    $url = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch='
+        . rawurlencode($query) . '&format=json&srlimit=' . max(1, min(10, $limit));
+
+    $page = chat_web_fetch_html($url, 8);
+    if (!$page || empty($page['body'])) {
+        return [];
+    }
+
+    $data = json_decode((string)$page['body'], true);
+    $hits = $data['query']['search'] ?? [];
+    if (!is_array($hits)) {
+        return [];
+    }
+
+    $results = [];
+    foreach ($hits as $hit) {
+        $title = trim((string)($hit['title'] ?? ''));
+        if ($title === '') {
+            continue;
+        }
+        $snippet = trim(preg_replace('/\\s+/', ' ', strip_tags((string)($hit['snippet'] ?? ''))) ?? '');
+        $link = 'https://en.wikipedia.org/wiki/' . rawurlencode(str_replace(' ', '_', $title));
+        $host = 'en.wikipedia.org';
+
+        $results[] = [
+            'title' => $title,
+            'url' => $link,
+            'host' => $host,
+            'snippet' => $snippet,
+            'source_type' => 'search_result',
+            'content_safety' => chat_web_content_safety($snippet),
+            'authority_tier' => chat_web_authority_tier($host, 'search_result'),
+            'retrieved_at' => gmdate('c'),
+            'evidence_state' => 'SEARCH_RESULT',
+        ];
+        if (count($results) >= $limit) {
+            break;
+        }
+    }
+
+    return $results;
+}
+
+function chat_web_searxng_query(string $query, int $limit = 6): array {
+    // Local SearXNG instance. Aggregates several engines, so a single engine
+    // being blocked cannot empty search, and it needs no HTML scraping.
+    $query = trim($query);
+    if ($query === '') {
+        return [];
+    }
+
+    $base = rtrim(trim((string)api_get_secret('SEARXNG_BASE_URL', '')), '/');
+    if ($base === '') {
+        $base = 'http://127.0.0.1:8888';
+    }
+
+    $url = $base . '/search?q=' . rawurlencode($query) . '&format=json';
+
+    // Validate with allowLocalHttp = true. The shared chat_web_fetch_html()
+    // helper passes false and therefore rejects plain http to 127.0.0.1, which
+    // is how SearXNG is served. This exemption is limited to local hosts by
+    // netpolicy_is_local_host(), and it is applied here rather than in the
+    // shared helper so no other outbound fetch is weakened.
+    if (function_exists('netpolicy_validate_outbound_url')) {
+        $validation = netpolicy_validate_outbound_url($url, true);
+        if (!($validation['ok'] ?? false)) {
+            return [];
+        }
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT => 10,
+        CURLOPT_USERAGENT => 'LyralinkWebSearch/1.0 (+https://lyralinkai.com)',
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $body = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false || $httpCode < 200 || $httpCode >= 400) {
+        return [];
+    }
+
+    $data = json_decode((string)$body, true);
+    $rows = $data['results'] ?? [];
+    if (!is_array($rows)) {
+        return [];
+    }
+
+    $results = [];
+    $seen = [];
+    foreach ($rows as $row) {
+        $link = trim((string)($row['url'] ?? ''));
+        if ($link === '' || isset($seen[$link])) {
+            continue;
+        }
+        $host = strtolower((string)(parse_url($link, PHP_URL_HOST) ?? ''));
+        if ($host === '') {
+            continue;
+        }
+        $seen[$link] = true;
+
+        $title = trim((string)($row['title'] ?? ''));
+        if ($title === '') {
+            $title = $host;
+        }
+        $snippet = trim(preg_replace('/\s+/', ' ', (string)($row['content'] ?? '')) ?? '');
+
+        $results[] = [
+            'title' => $title,
+            'url' => $link,
+            'host' => $host,
+            'snippet' => $snippet,
+            'source_type' => 'search_result',
+            'content_safety' => chat_web_content_safety($snippet),
+            'authority_tier' => chat_web_authority_tier($host, 'search_result'),
+            'retrieved_at' => gmdate('c'),
+            'evidence_state' => 'SEARCH_RESULT',
+        ];
+        if (count($results) >= $limit) {
+            break;
+        }
+    }
+
+    return $results;
+}
+
 function chat_web_search_query(string $query, bool $degradedMode = false): array {
     $query = trim($query);
     if ($query === '') {
         return [];
+    }
+
+    // Primary source: local SearXNG (multi-engine). Measured 42 results where
+    // the raw DuckDuckGo scrape managed 5-6 and intermittently 0.
+    $searxResults = chat_web_searxng_query($query, 6);
+    if (!empty($searxResults)) {
+        return $searxResults;
     }
 
     $curatedResults = chat_web_curated_news_query($query, $degradedMode ? 3 : 5);
@@ -206,6 +353,16 @@ function chat_web_search_query(string $query, bool $degradedMode = false): array
     $searchUrl = 'https://html.duckduckgo.com/html/?q=' . rawurlencode($query) . '&kl=us-en';
     $searchPage = chat_web_fetch_html($searchUrl, $degradedMode ? 5 : 7);
     if (!$searchPage || empty($searchPage['body'])) {
+        // Previously this returned an empty list immediately, so a single
+        // blocked scrape silently emptied the whole research request.
+        $wikiFallback = chat_web_wikipedia_query($query, 5);
+        if (!empty($wikiFallback)) {
+            return $wikiFallback;
+        }
+        $rssFallback = chat_web_news_rss_query($query, 5);
+        if (!empty($rssFallback)) {
+            return $rssFallback;
+        }
         return [];
     }
 
@@ -336,6 +493,22 @@ function chat_web_search_query(string $query, bool $degradedMode = false): array
         $rssResults = chat_web_news_rss_query($query, 5);
         if (!empty($rssResults)) {
             return $rssResults;
+        }
+    }
+
+    // The "fresh context" fallback above only runs for time-sensitive queries,
+    // so an ordinary topical query that parsed nothing returned an empty list.
+    // Try the scrape-independent source for every query before giving up.
+    if (empty($results) || $usableExcerptCount === 0) {
+        $wikiResults = chat_web_wikipedia_query($query, 5);
+        if (!empty($wikiResults)) {
+            return $wikiResults;
+        }
+        if (empty($results)) {
+            $rssResults = chat_web_news_rss_query($query, 5);
+            if (!empty($rssResults)) {
+                return $rssResults;
+            }
         }
     }
 

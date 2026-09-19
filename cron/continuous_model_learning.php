@@ -283,6 +283,22 @@ $hfExtraPath = trim((string)getenv('LYRALINK_HF_EXTRA_JSONL'));
 $snapshotFullPath = $exportRoot . '/snapshots/dataset_' . $timestamp . '.jsonl';
 $snapshotIncrementalPath = $exportRoot . '/snapshots/incremental_' . $timestamp . '.jsonl';
 
+// Snapshot retention. These snapshots are write-only traceability artifacts:
+// no code path reads them back (the training run consumes latest_dataset.jsonl
+// / latest_incremental.jsonl). Without a bound the directory grows forever at
+// roughly 0.4 GB per day. Retention is configurable; default 72 hours.
+$snapshotRetentionHours = max(1, (int) (getenv('LYRALINK_SNAPSHOT_RETENTION_HOURS') ?: 72));
+$snapshotDir = $exportRoot . '/snapshots';
+if (is_dir($snapshotDir)) {
+    $snapshotCutoff = time() - ($snapshotRetentionHours * 3600);
+    foreach ((array) glob($snapshotDir . '/*.jsonl') as $snapshotCandidate) {
+        $snapshotMtime = @filemtime($snapshotCandidate);
+        if ($snapshotMtime !== false && $snapshotMtime < $snapshotCutoff) {
+            @unlink($snapshotCandidate);
+        }
+    }
+}
+
 $dbCfg = api_db_config([
     'host' => 'localhost',
     'user' => 'app_user',

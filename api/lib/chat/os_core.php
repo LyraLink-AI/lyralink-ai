@@ -606,9 +606,19 @@ if (!function_exists('chat_os_capability_for_request')) {
         if ($genuineOperation && $explicitProductionCheck && ($explicitInspectIntent || $explicitRuntimeStatusCheck) && !$advisoryOperationalQuestion) {
             return 'server.inspect';
         }
+        // A mention of the word "database" is not a request to read a live
+        // database. Asking to build, write or design software that merely
+        // involves a database is a code task; classifying it as database.query
+        // replaced the entire answer with a tool-unavailable notice. Require an
+        // explicit read/query intent against a live system, and never classify a
+        // build or authoring request this way.
+        $buildOrAuthorIntent = preg_match('/\b(?:make|build|create|write|generate|implement|design|develop|scaffold|author|code|site|website|app|application|page|script|project|add|set\s*up)\b/i', $lower) === 1;
+        $explicitDatabaseRead = preg_match('/\b(?:query|queries|select|fetch|retrieve|dump|count|count\s+rows|rows?|records?|indexes?|schema\s+of)\b[^.\n]{0,60}\b(?:database|db|table|schema|mysql|postgres|production)\b/i', $lower) === 1
+            || preg_match('/\b(?:database|db|table|schema|mysql|postgres)\b[^.\n]{0,60}\b(?:query|queries|how\s+many\s+rows|row\s+count|size|slow|lagging|replica|index(?:es)?\s+missing)\b/i', $lower) === 1;
         if (
             $genuineOperation
-            && preg_match('/\b(?:database|db|schema|table|sql|mysql|postgres|query)\b/i', $lower) === 1
+            && !$buildOrAuthorIntent
+            && $explicitDatabaseRead
             && preg_match('/\b(what is|explain|define|describe|difference between|how does|why does|how do i|what does)\b/i', $lower) !== 1
         ) {
             return 'database.query';

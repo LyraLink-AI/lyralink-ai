@@ -221,7 +221,7 @@ test(
 // Test 17: Benchmark repair must retain incident handling rather than turn
 // every evidence-sensitive request into a generic citation refusal.
 echo "\n[17] Benchmark Incident Repair\n";
-$benchmarkIncident = chat_benchmark_quality_repair(
+$benchmarkIncident = chat_runtime_quality_repair(
     "A release changed config and ran unknown migration steps. Recommend recovery actions with rollback constraints and data safety checks.",
     "Start by making a backup, then assess the migration.",
     ['request_class' => 'PRODUCTION_OPERATIONS', 'evidence_required' => true],
@@ -237,7 +237,7 @@ test(
     $passedTests,
     $testResults
 );
-$benchmarkUngroundedRuntime = chat_benchmark_quality_repair(
+$benchmarkUngroundedRuntime = chat_runtime_quality_repair(
     "A production migration is failing. List safe first actions.",
     "Live runtime evidence from Production MySQL is unavailable. Query MySQL before continuing.",
     ['request_class' => 'PRODUCTION_OPERATIONS', 'evidence_required' => true],

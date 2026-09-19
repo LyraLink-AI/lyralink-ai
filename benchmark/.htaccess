@@ -1,5 +1,5 @@
 Options -Indexes
 
-<FilesMatch "\.(json|txt)$">
+<FilesMatch "\.(json|txt|py|pyc|jsonl|md|sh|log|csv|safetensors|pt|ckpt)$">
     Require all denied
 </FilesMatch>

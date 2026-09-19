@@ -1,1 +1,0 @@
-lyralink-auto-canary:latest

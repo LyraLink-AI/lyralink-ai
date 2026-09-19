@@ -1,7 +1,0 @@
-[2026-09-17 09:14:12] continuous_learning dataset_rows=27886 new_rows=203 runtime_rows=2891 runtime_new_rows=0 hf_extra_rows=6920 hf_extra_path=/var/www/vhosts/lyralinkai.com/httpdocs/storage/model_training/hf_imports/SetFit__sst2.jsonl effective_new_rows=7123 total_train_rows=37697 full_export=yes incremental_export=yes snapshot_full=yes snapshot_incremental=yes train_enabled=yes train_attempted=yes train_ok=yes duration=38.783s
-[2026-09-17 09:14:12] continuous_learning train_output=[2026-09-17T09:13:34Z] finetune_orchestrator step=corpus_refresh status=ok
-[2026-09-17T09:13:34Z] finetune_orchestrator step=train status=start
-[2026-09-17T09:13:34Z] auto_finetune_train step=lora_train status=start base_model=distilgpt2 python=/var/www/vhosts/lyralinkai.com/httpdocs/.venv-finetune/bin/python
-[2026-09-17T09:14:10Z] auto_finetune_train step=lora_train status=ok output=/var/www/vhosts/lyralinkai.com/httpdocs/storage/model_training/artifacts/lora_adapter
-[2026-09-17T09:14:10Z] auto_finetune_train step=fallback_model_build status=skipped reason=lora_completed
-[2026-09-17T09:14:10Z

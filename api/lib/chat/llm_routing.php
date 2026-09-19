@@ -18,7 +18,7 @@ function llm_safe_local_model(string $candidate, string $fallback = 'lyralink-au
 
 function llm_default_model(string $provider): string {
     $localModel = trim((string)api_get_secret('LOCAL_LLM_MODEL', 'lyralink-auto-canary:latest'));
-    $openRouterModel = trim(api_get_secret('OPENROUTER_MODEL', 'openclaw/openclaw-7b'));
+    $openRouterModel = trim(api_get_secret('OPENROUTER_MODEL', 'openai/gpt-oss-20b'));
     $openAiModel = trim(api_get_secret('OPENAI_MODEL', 'gpt-4o-mini'));
     if ($provider === 'local' || $provider === 'hermes') {
         if ($localModel !== '' && stripos($localModel, 'lyralink') !== false) {
@@ -27,9 +27,9 @@ function llm_default_model(string $provider): string {
         return 'lyralink-auto-canary:latest';
     }
     return match ($provider) {
-        'openrouter' => $openRouterModel !== '' ? $openRouterModel : 'openclaw/openclaw-7b',
+        'openrouter' => $openRouterModel !== '' ? $openRouterModel : 'openai/gpt-oss-20b',
         'openai'     => $openAiModel !== '' ? $openAiModel : 'gpt-4o-mini',
-        default      => 'llama-3.1-8b-instant',
+        default      => 'openai/gpt-oss-20b',
     };
 }
 
@@ -176,9 +176,9 @@ function llm_provider_models(string $provider): array {
         return $models;
     }
     return match (strtolower($provider)) {
-        'openrouter' => llm_parse_csv(api_get_secret('LLM_OPENROUTER_MODELS', api_get_secret('OPENROUTER_MODEL', 'openclaw/openclaw-7b'))),
+        'openrouter' => llm_parse_csv(api_get_secret('LLM_OPENROUTER_MODELS', api_get_secret('OPENROUTER_MODEL', 'openai/gpt-oss-20b'))),
         'openai' => llm_parse_csv(api_get_secret('LLM_OPENAI_MODELS', api_get_secret('OPENAI_MODEL', 'gpt-4o-mini'))),
-        default => llm_parse_csv(api_get_secret('LLM_GROQ_MODELS', 'llama-3.1-8b-instant,llama-3.3-70b-versatile')),
+        default => llm_parse_csv(api_get_secret('LLM_GROQ_MODELS', 'openai/gpt-oss-120b,openai/gpt-oss-20b')),
     };
 }
 
@@ -198,10 +198,10 @@ function llm_provider_allowed_for_plan(string $provider, string $plan): bool {
         $provider = 'local';
     }
 
-    if (!in_array($provider, ['local'], true)) {
-        return false;
-    }
-
+    // Local inference is always permitted. Every other provider is governed by
+    // the plan allow-list below. The previous early return rejected all remote
+    // providers outright and made the rest of this function unreachable, so a
+    // plan could never enable Groq/OpenRouter/OpenAI.
     if ($provider === 'local') {
         return true;
     }

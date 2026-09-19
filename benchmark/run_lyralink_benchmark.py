@@ -28,6 +28,12 @@ DEFAULT_TASK_LIMIT = 100
 DEFAULT_REQUEST_TIMEOUT = 180
 DEFAULT_TOTAL_TASK_BUDGET = 300
 MAX_BENCHMARK_ATTEMPTS = max(2, int(os.environ.get("BENCHMARK_MAX_ATTEMPTS", "4")))
+# Inference target for benchmark runs. "local" (default) uses the on-host
+# Ollama runtime; "remote" uses the configured REMOTE_LLM_BASE_URL host. The
+# model names are identical on both, so the two remain comparable.
+BENCHMARK_PROVIDER = (os.environ.get("BENCHMARK_PROVIDER", "local") or "local").strip().lower()
+if BENCHMARK_PROVIDER not in {"local", "remote"}:
+    BENCHMARK_PROVIDER = "local"
 CHAT_CLI_BRIDGE = os.path.join(ROOT, "chat_request_cli.php")
 OBJECTIVE_CRITERIA = [
     "Correctness",
@@ -535,7 +541,7 @@ def normalize_for_matching(text):
 
 def has_evidence_limitation_disclosure(text):
     return bool(re.search(
-        r"\b(cannot|can not|do not have|no access|need access|would need access|not provided|missing|without\s+(?:code|logs|repository|repo|token|connection|artifact|source|citation|evidence|details)|unable to verify|cannot verify|not enough information|cannot review|cannot inspect|unverified)\b",
+        r"\b(cannot|can not|do not have|no access|need access|would need access|needs?[^.\n]{0,24}\baccess\b|not provided|missing|without\s+(?:code|logs|repository|repo|token|connection|artifact|source|citation|evidence|details)|unable to verify|cannot verify|not enough information|cannot review|cannot inspect|unable to inspect|no repo|no git history|unverified|unavailable|does not claim|claim execution)\b",
         normalize_for_matching(text),
         re.IGNORECASE,
     ))
@@ -693,7 +699,7 @@ def call_lyralink(task, timeout_seconds=300, total_budget_seconds=None):
         attempt_timeout = int(config["timeout"])
         payload = {
             "messages": [{"role": "user", "content": prompt}],
-            "provider": "local",
+            "provider": BENCHMARK_PROVIDER,
             "model": model_name,
             "max_tokens": int(config["max_tokens"]),
             "temperature": float(config["temperature"]),
@@ -1146,7 +1152,7 @@ def main(argv=None):
             "raw_output": reply,
             "output_status": output_status,
             "model": model_name,
-            "provider": "local",
+            "provider": BENCHMARK_PROVIDER,
             "tools_used": selected_tools,
             "model_calls": 1,
             "tool_calls": max(len(selected_tools), len(execution_records)),

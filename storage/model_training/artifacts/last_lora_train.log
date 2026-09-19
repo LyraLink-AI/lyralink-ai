@@ -1,11 +1,0 @@
-[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
-Loading weights:   0%|          | 0/76 [00:00<?, ?it/s]Loading weights: 100%|██████████| 76/76 [00:00<00:00, 771.30it/s]
-/var/www/vhosts/lyralinkai.com/httpdocs/.venv-finetune/lib/python3.10/site-packages/peft/tuners/lora/layer.py:2631: UserWarning: fan_in_fan_out is set to False but the target module is `Conv1D`. Setting fan_in_fan_out to True.
-  warnings.warn(
-Map:   0%|          | 0/768 [00:00<?, ? examples/s]Map:  23%|██▎       | 176/768 [00:00<00:00, 1734.36 examples/s]Map:  51%|█████▏    | 395/768 [00:00<00:00, 1518.43 examples/s]Map:  82%|████████▏ | 633/768 [00:00<00:00, 1849.86 examples/s]Map: 100%|██████████| 768/768 [00:00<00:00, 1442.82 examples/s]
-  0%|          | 0/12 [00:00<?, ?it/s][transformers] `loss_type=None` was set in the config but it is unrecognized. Using the default loss: `ForCausalLMLoss`.
-  8%|▊         | 1/12 [00:02<00:28,  2.63s/it] 17%|█▋        | 2/12 [00:04<00:19,  1.98s/it] 25%|██▌       | 3/12 [00:05<00:15,  1.70s/it] 33%|███▎      | 4/12 [00:06<00:11,  1.46s/it] 42%|████▏     | 5/12 [00:07<00:09,  1.38s/it]                                               42%|████▏     | 5/12 [00:07<00:09,  1.38s/it] 50%|█████     | 6/12 [00:08<00:07,  1.27s/it] 58%|█████▊    | 7/12 [00:10<00:06,  1.26s/it] 67%|██████▋   | 8/12 [00:11<00:05,  1.26s/it] 75%|███████▌  | 9/12 [00:13<00:04,  1.39s/it] 83%|████████▎ | 10/12 [00:14<00:02,  1.40s/it]                                                83%|████████▎ | 10/12 [00:14<00:02,  1.40s/it] 92%|█████████▏| 11/12 [00:15<00:01,  1.29s/it]100%|██████████| 12/12 [00:16<00:00,  1.23s/it]                                               100%|██████████| 12/12 [00:16<00:00,  1.23s/it]100%|██████████| 12/12 [00:16<00:00,  1.41s/it]
-{'loss': '20.23', 'grad_norm': '1.708', 'learning_rate': '0.0001455', 'epoch': '0.02604'}
-{'loss': '19.57', 'grad_norm': '1.602', 'learning_rate': '5.455e-05', 'epoch': '0.05208'}
-{'train_runtime': '16.95', 'train_samples_per_second': '2.832', 'train_steps_per_second': '0.708', 'train_loss': '19.55', 'epoch': '0.0625'}
-lora_train ok output_dir=/var/www/vhosts/lyralinkai.com/httpdocs/storage/model_training/artifacts/lora_adapter rows=768 steps=12

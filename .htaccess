@@ -62,6 +62,17 @@ RewriteRule (^|/)\.(?!well-known/) - [F,L]
     </IfModule>
 </FilesMatch>
 
+# Block source/runtime artifacts from direct web access.
+<FilesMatch "\.(py|pyc|sh|jsonl|md|safetensors|pt|ckpt|toml|ya?ml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
 # Block direct dependency access from the web.
 RewriteRule ^vendor/ - [F,L]
 
@@ -71,9 +82,13 @@ RewriteRule ^scripts/remote_brain_(bootstrap|full_bootstrap)\.sh$ - [L]
 # Block internal runtime/build tooling from direct web access.
 RewriteRule ^cron/ - [F,L]
 RewriteRule ^scripts/ - [F,L]
-RewriteCond %{REQUEST_URI} ^/desktop/windows-client/ [NC]
-RewriteCond %{REQUEST_URI} !^/desktop/windows-client/web/ [NC]
-RewriteRule ^ - [F,L]
+# The desktop client directory is a build/distribution artifact that bundles a
+# full copy of the web application. It must never be served over HTTP: the copy
+# drifts from the live app, so publishing it exposes a stale second version of
+# the site. Builds read these files from disk and are unaffected.
+# Note: the anchored pattern does not match /desktop-updates/, which serves the
+# released installers through its own download.php handler.
+RewriteRule ^desktop/ - [F,L]
 
 # 301 redirect old .php URLs to clean versions (pages/)
 RewriteCond %{THE_REQUEST} /pages/([^.]+)\.php [NC]

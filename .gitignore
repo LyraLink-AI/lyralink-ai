@@ -1,0 +1,32 @@
+# Runtime caches and generated state (regenerable)
+/storage/cache/
+/storage/ai_os/
+/storage/logs/
+/storage/render_jobs/
+/storage/social_uploads/
+/storage/agent_state/
+/storage/projects/
+/storage/security/
+
+# Model training artifacts: large, regenerated hourly
+/storage/model_training/snapshots/
+/storage/model_training/artifacts/
+/storage/model_training/*.jsonl
+/storage/hf_datasets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+*.egg-info/
+
+# Local env / editor / OS
+.env
+.env.*
+!.env.example
+.vscode/
+*.bak
+*.bak-*
+*.orig
+.DS_Store

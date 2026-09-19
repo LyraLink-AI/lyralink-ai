@@ -289,12 +289,31 @@ function chat_infer_task_control(string $latestUserMsg, bool $taskMode, string $
     $executionVerbs = '/\b(build|fix|deploy|rollback|ship|migrate|delete|modify|install|run|execute|publish|launch|restart|write code|change|update|create|generate)\b/i';
     $informationalVerbs = '/\b(explain|compare|summarize|assess|analyze|review|design|plan|recommend|diagnose|troubleshoot|evaluate|estimate|project|outline|which metrics|what should we prioritize)\b/i';
     $casualCorrectionPattern = '/\b(still wrong|you are wrong|that\'s wrong|this is wrong|i am your developer|i am your creator|i wanted to converse|i want to talk about you|talk to me about you|your behavior)\b/i';
-    $explicitExecutionRequest = preg_match('/\b(please do|go ahead and|run|execute|build|fix|deploy|rollback|ship|modify|restart|write code|create|generate)\b/i', $lower) === 1;
+    // Destructive instructions belong here too. Omitting them meant a command
+    // like "delete all users from the database" was never treated as an
+    // execution request, so no authorization was required for it.
+    $explicitExecutionRequest = preg_match('/\b(please do|go ahead and|run|execute|build|fix|deploy|rollback|ship|modify|restart|write code|create|generate|delete|drop|truncate|wipe|purge|remove|destroy|shutdown|shut down|kill|terminate|install|migrate|publish|launch)\b/i', $lower) === 1;
 
     $isCasualCorrection = preg_match($casualCorrectionPattern, $lower) === 1;
     $requiresExecution = (!$taskMode || $isCasualCorrection) && !$explicitExecutionRequest
         ? false
-        : ($taskMode || ($requestedOperation === 'execution') || (preg_match($executionVerbs, $lower) === 1 && !preg_match('/\bdo not execute\b|\bdo not run\b|\bwithout executing\b/i', $lower)));
+        : ($taskMode
+            || $explicitExecutionRequest
+            || ($requestedOperation === 'execution')
+            || (preg_match($executionVerbs, $lower) === 1 && !preg_match('/\bdo not execute\b|\bdo not run\b|\bwithout executing\b/i', $lower)));
+
+    // A question is not an action. "How do I deploy a PHP app safely?" contains
+    // the verb "deploy" but asks for knowledge; treating it as an execution
+    // request classified it as a high-risk action and blocked it behind an
+    // approval gate. Only an actual directive counts as an instruction to act.
+    // Task/mission mode is left untouched: the user has opted into execution.
+    $trimmedMsg = trim((string)$latestUserMsg);
+    $interrogativeForm = preg_match('/\?\s*$/', $trimmedMsg) === 1
+        || preg_match('/^\s*(?:how|what|why|when|where|which|who|whose|can|could|should|would|will|is|are|was|were|does|do|did|explain|describe|tell me|show me|outline|walk me|give me)\b/i', $trimmedMsg) === 1;
+    $explicitDirective = preg_match('/\b(?:please do|go ahead and|go ahead|do it|do that|do this|run it|execute it|apply it|ship it|deploy it|run this|execute this|make it so|proceed|start now|begin now|go for it)\b/i', $lower) === 1;
+    if ($requiresExecution && !$taskMode && $interrogativeForm && !$explicitDirective) {
+        $requiresExecution = false;
+    }
     $isInformationalOnly = !$requiresExecution && preg_match($informationalVerbs, $lower) === 1;
 
     $complexity = 'direct';
@@ -516,7 +535,14 @@ function chat_detect_high_risk_action(string $message, string $taskFocus, bool $
     if ($msg === '') {
         return false;
     }
-    return preg_match('/\b(deploy|delete\s+data|drop\s+table|refund|rotate\s+keys|revoke|shutdown|kill\s+process|restart\s+server|migrate\s+database|restore\s+backup|rollback\s+database)\b/i', $msg) === 1;
+    // A destructive verb only raises risk when it targets something
+    // consequential, so routine phrasing ("delete this sentence from my email")
+    // does not demand approval. Inherently consequential operations are matched
+    // on their own. Only reached when execution is actually requested.
+    $destructiveTarget = '/\b(?:delete|drop|truncate|wipe|purge|destroy|remove|overwrite|clear)\b[^.\n]{0,40}\b(?:data|database|db|table|tables|record|records|row|rows|user|users|account|accounts|file|files|server|servers|production|prod|backup|backups|volume|volumes|disk|bucket|repository|repo|branch|cluster|node|nodes|logs?)\b/i';
+    $consequentialOp = '/\b(?:deploy|shutdown|shut\s+down|kill|terminate|reboot|restart\s+server|migrate\s+database|restore\s+backup|rotate\s+keys|revoke|refund|format\s+disk|drop\s+table)\b/i';
+
+    return preg_match($destructiveTarget, $msg) === 1 || preg_match($consequentialOp, $msg) === 1;
 }
 
 function chat_request_trust_profile(string $latestUserMsg, bool $taskMode, string $taskFocus, array $taskControl = []): array {
@@ -1654,6 +1680,15 @@ if (!function_exists('chat_response_contract_for_request')) {
         if (($context['research_required'] ?? false) || in_array($class, ['RESEARCH', 'SOURCE_REQUIRED'], true)) {
             return ['type' => 'research', 'citations_required' => true, 'evidence_required' => true, 'strict_direct_answer' => false];
         }
+        // Code answers are long by nature. Without this branch the CODE class fell
+        // through to the generic default cap of 8 sentences, so any real
+        // implementation was truncated and then flagged as a contract violation
+        // ("Response exceeds response contract sentence limit"). Sentence count is
+        // not a meaningful quality signal for code, so no cap is applied; code
+        // correctness is checked by the code-validation path instead.
+        if (in_array($class, ['CODE', 'CODING'], true)) {
+            return ['type' => 'code', 'max_sentences' => 0, 'strict_direct_answer' => false];
+        }
         if (in_array($class, ['FALSE_PREMISE', 'QUANTITATIVE', 'BASIC_REASONING', 'PRODUCTION_OPERATIONS', 'SECURITY'], true)) {
             return [
                 'type' => strtolower($class),
@@ -2310,7 +2345,7 @@ function chat_deterministic_response(string $message, array $requestProfile = []
     return null;
 }
 
-function chat_benchmark_quality_repair(string $latestUserMsg, string $reply, array $requestTrustProfile = [], array $osRuntimeDecision = []): string {
+function chat_runtime_quality_repair(string $latestUserMsg, string $reply, array $requestTrustProfile = [], array $osRuntimeDecision = [], bool $evidenceRetrieved = false): string {
     $out = trim($reply);
     if ($out === '') {
         return $out;
@@ -2339,7 +2374,15 @@ function chat_benchmark_quality_repair(string $latestUserMsg, string $reply, arr
         $listCount = count($listMarkers[0] ?? []);
         $hasStructuredEvidenceBound = $hasKnown && $hasUnknown && $hasNextChecks && $listCount >= 2;
 
-        if ((!$hasCitation && !$hasUnverified) || !$hasStructuredEvidenceBound) {
+        // When evidence was retrieved, asking the user to supply a source is
+        // wrong: the run already holds it. Require a citation instead, and fall
+        // back to the evidence-bound template only when nothing was retrieved.
+        if ($evidenceRetrieved) {
+            if (!$hasCitation) {
+                $out = rtrim($out) . "\n\nSources retrieved for this request are listed in the context "
+                    . "above; see the cited results for verification.";
+            }
+        } elseif ((!$hasCitation && !$hasUnverified) || !$hasStructuredEvidenceBound) {
             if (function_exists('chat_repair_evidence_bound_response')) {
                 $out = chat_repair_evidence_bound_response($latestUserMsg, $out);
             }
@@ -2347,8 +2390,16 @@ function chat_benchmark_quality_repair(string $latestUserMsg, string $reply, arr
         }
     }
 
+    // "without server-side validation" describes the subject under discussion,
+    // not this runtime's access. Require an explicit absence of an artifact or
+    // credential so conceptual questions keep their real answer.
+    $explicitAccessAbsence = preg_match(
+        '/\b(?:no|without|lacking|not given|not provided)\b[^.\n]{0,40}\b(?:access|token|credentials?|connection|transcript|output|logs?|artifacts?|permission)\b/i',
+        $lowerPrompt
+    ) === 1
+        || preg_match('/\b(?:no|without)\s+(?:shell|filesystem|database|api|repo|repository|scan|tool)s?\b/i', $lowerPrompt) === 1;
     $toolUnavailable = $requestClass === 'TOOL_UNAVAILABLE'
-        || preg_match('/\b(?:no|without|not given)\s+(?:shell|filesystem|database|api|server|repository|repo|scan|tool|access)\b/i', $lowerPrompt) === 1;
+        || $explicitAccessAbsence;
     if ($toolUnavailable
         && preg_match('/\b(?:cannot|can\'t|do not have|no)\b[^.!?]{0,90}\b(?:access|shell|filesystem|database|api|scan|tool)\b/i', $out) !== 1) {
         $toolBoundedReply = chat_trust_safe_fallback($latestUserMsg, ['mode' => 'TOOL_LIMITATION']);
@@ -2368,8 +2419,33 @@ function chat_benchmark_quality_repair(string $latestUserMsg, string $reply, arr
         $lowerReply = strtolower($out);
     }
 
-    $isIncident = $requestClass === 'PRODUCTION_OPERATIONS'
-        || preg_match('/\b(incident|outage|down|failed|failing|failure|502|timeout|latency|queue.*back|partial.*migrat|production)\b/i', $lowerPrompt) === 1;
+    // Incident handling must not hijack a research/source request that merely
+    // mentions "incident" or "production", and it must never replace an answer
+    // that already established an evidence or tool-access boundary: doing so
+    // discards the actual task in favour of a generic incident plan.
+    // An answer that already states what it cannot know must not be replaced by
+    // an incident playbook. Both the request-class and keyword paths respect
+    // this; previously only the keyword path did, so every PRODUCTION_OPERATIONS
+    // request was rewritten and availability disclosures were destroyed.
+    // A read-only availability/status check is not an incident. "Check whether
+    // X is deployed in production" must disclose that it cannot inspect, not
+    // emit a mitigation playbook. Only suppress in the absence of any explicit
+    // action request, so genuine incident questions keep their priority order.
+    //
+    // Deliberately NOT keyed on mere disclosure wording: an incident reply that
+    // names a platform the runtime cannot know about ("Production MySQL") must
+    // still be replaced, which is what the incident-repair regression test
+    // guards.
+    $isAvailabilityInspection = preg_match('/\b(?:check|verify|confirm|inspect|whether|status|health|is|are|has|have)\b[^.\n]{0,80}\b(?:deployed|running|healthy|available|up|down|live|in production|production)\b/i', $lowerPrompt) === 1
+        && preg_match('/\b(?:mitigat|remediat|fix|resolve|recover|rollback|roll back|rollback|restart|scale|triage|what should|how should|order of operations|safe order|first action|next steps|plan for|respond to)\b/i', $lowerPrompt) !== 1;
+
+    $isIncident = !$isAvailabilityInspection
+        && (
+            ($requestClass === 'PRODUCTION_OPERATIONS' && !$toolUnavailable)
+            || (preg_match('/\b(incident|outage|downtime|down|failed|failing|failure|50[0-9]|timeout|latency|queue[^.\n]{0,12}back|partial[^.\n]{0,12}migrat|post-?deploy|rollback|roll back|blast radius|degraded)\b/i', $lowerPrompt) === 1
+                && !$sourceRequired
+                && !$toolUnavailable)
+        );
     if ($isIncident) {
         $hasContainment = preg_match('/\b(stop changes|freeze deploy|stabilize|isolate|contain the blast radius)\b/i', $lowerReply) === 1;
         $hasEvidencePreservation = preg_match('/\b(preserve evidence|capture logs|collect logs|collect traces|collect metrics)\b/i', $lowerReply) === 1;
@@ -2389,10 +2465,16 @@ function chat_benchmark_quality_repair(string $latestUserMsg, string $reply, arr
             }
         }
         $isGenericEvidenceFallback = preg_match('/^\s*(?:known:|live runtime evidence)/i', $out) === 1;
-        $hasRiskyDependencyAction = preg_match(
-            '/\b(?:upgrade|downgrade|revert|roll back|rollback)\b[^.\n]{0,120}\bdependenc(?:y|ies)\b/i',
-            $out
-        ) === 1;
+        // A sentence that forbids or defers the dependency change is correct
+        // incident advice, so polarity is checked before treating it as risky.
+        $hasRiskyDependencyAction = false;
+        foreach (preg_split('/(?<=[.!?])\s+/', (string)$out) ?: [] as $incidentSentence) {
+            if (preg_match('/\b(?:upgrade|downgrade|revert|roll back|rollback)\b[^.\n]{0,120}\bdependenc(?:y|ies)\b/i', $incidentSentence) === 1
+                && preg_match('/\b(?:do not|don\'t|does not|not to|not now|never|avoid|defer|delay|postpone|without|instead of|rather than|refrain|hold off)\b/i', $incidentSentence) !== 1) {
+                $hasRiskyDependencyAction = true;
+                break;
+            }
+        }
 
         if ($isGenericEvidenceFallback || $hasUnpromptedTechnology || $hasRiskyDependencyAction) {
             // A fallback that names an unprovided runtime or asks for a source
@@ -2475,6 +2557,28 @@ function chat_verification_hard_stop(string $latestUserMsg, string $reply, array
         return ['blocked' => false, 'reply' => trim($reply), 'issues' => $issues, 'mode' => 'DIRECTLY_ANSWERABLE'];
     }
 
+    // A substantive answer that only failed a structural, style or citation
+    // check is more useful than generic meta-guidance. Only override the reply
+    // when the answer itself is untrustworthy (fabrication, unsafe guidance, a
+    // false claim of tool execution) or when there is nothing to preserve.
+    $preservableReply = trim((string)$reply);
+    $fatalIssue = false;
+    foreach ($issues as $issue) {
+        if (preg_match('/fabricat|unsafe|false tool|tool execution|hard constraint|source-level evidence/i', (string)$issue) === 1) {
+            $fatalIssue = true;
+            break;
+        }
+    }
+    $isRefusalReply = preg_match('/^\s*(?:i\s+(?:cannot|can\'t|am\s+unable|won\'t|do\s+not)|as\s+an\s+ai|i\'m\s+sorry,?\s+but\s+i)/i', $preservableReply) === 1;
+    if (!$fatalIssue && !$isRefusalReply && strlen($preservableReply) >= 40) {
+        return [
+            'blocked' => false,
+            'reply' => $preservableReply,
+            'issues' => $issues,
+            'mode' => $mode !== '' ? $mode : 'DIRECTLY_ANSWERABLE',
+        ];
+    }
+
     $fallback = chat_trust_safe_fallback($latestUserMsg, $answerability, $issues);
     if ($fallback === '') {
         $fallback = "I can't provide that confidently because the request depends on facts, sources, or tool access that are not available or verified. I need the exact evidence or artifact before I can answer accurately.";
@@ -2487,7 +2591,7 @@ function chat_verification_hard_stop(string $latestUserMsg, string $reply, array
     ];
 }
 
-function chat_verification_failure_class(string $latestUserMsg, string $reply, array $verificationSummary, array $requestProfile = []): string {
+function chat_verification_failure_class(string $latestUserMsg, string $reply, array $verificationSummary, array $requestProfile = [], bool $evidenceRetrieved = false): string {
     $issues = is_array($verificationSummary['issues'] ?? null) ? $verificationSummary['issues'] : [];
     $issueBlob = strtolower(implode(' | ', array_map(static fn($v): string => trim((string)$v), $issues)));
     $class = strtoupper(trim((string)($requestProfile['request_class'] ?? 'GENERAL_INFORMATION')));
@@ -2524,7 +2628,13 @@ function chat_verification_failure_class(string $latestUserMsg, string $reply, a
         return 'TOOL_UNAVAILABLE';
     }
     if (in_array($class, ['SOURCE_REQUIRED', 'RESEARCH'], true)) {
-        return 'MISSING_EXTERNAL_EVIDENCE';
+        // Evidence that was actually retrieved is not missing evidence. This
+        // previously returned MISSING_EXTERNAL_EVIDENCE for every research
+        // request regardless of outcome, so a grounded answer was replaced by a
+        // request for sources the run already had. ANSWER_ALLOWED_BUT_WRONG is
+        // deliberately outside the regeneration allow-list, so the grounded
+        // answer is preserved rather than regenerated.
+        return $evidenceRetrieved ? 'ANSWER_ALLOWED_BUT_WRONG' : 'MISSING_EXTERNAL_EVIDENCE';
     }
     if ($class === 'PRODUCTION_OPERATIONS') {
         return 'PRODUCTION_SAFETY_FAILURE';

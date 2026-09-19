@@ -251,7 +251,28 @@ async function sendMessage() {
             return;
         }
 
-        const reply = data.reply || 'Something went wrong.';
+        // Honest failure surface. Never present a silent void: state what
+        // happened, whether anything ran, and what to do next.
+        const lyraFailureText = (() => {
+            const code = String((data && data.error) || '').trim();
+            const known = {
+                approval_required: 'This action needs your approval before I can continue. Approve it and resend, or tell me to proceed.',
+                timeout: 'The model did not finish in time. Nothing was executed or changed. Try a shorter request, or ask me to split it into steps.',
+                rate_limited: 'Too many requests right now. Nothing was executed or changed. Wait a moment and resend.',
+                usage_limit: 'The usage limit for this period was reached. Nothing was executed or changed.',
+                invalid_benchmark_payload: 'The request could not be parsed. Nothing was changed. Please resend.',
+            };
+            if (known[code]) {
+                return known[code];
+            }
+            if (code) {
+                return 'The request did not complete (' + code + '). Nothing was executed or changed. Resend to try again.';
+            }
+            return 'The request returned no output, so nothing was executed or changed. Resend to try again.';
+        })();
+        const reply = (typeof data.reply === 'string' && data.reply.trim() !== '')
+            ? data.reply
+            : lyraFailureText;
         const aiThinking = data.thinking || '';
         const codeTestCard = renderCodeTestCard(data.code_test);
         const generatedImageUrl = data.generated_image_url || '';

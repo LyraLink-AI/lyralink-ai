@@ -178,7 +178,63 @@ function dataset_embed_model_default(): string {
 // ── GET EMBEDDING FROM LOCAL LYRA MODEL ──
 // Uses the local OpenAI-compatible endpoint to extract semantic keywords,
 // then maps those keywords into a stable hash vector.
+// ── REAL EMBEDDINGS (dedicated embedding model) ──
+// Uses Ollama's /api/embed with an embedding model (for example
+// nomic-embed-text, 274 MB / 0.38 GB resident) instead of loading a
+// multi-gigabyte generative model to extract keywords. Returns null when no
+// embedding model is reachable so the caller can fall back safely.
+function dataset_real_embedding(string $text): ?array {
+    $text = trim($text);
+    if ($text === '') {
+        return null;
+    }
+
+    $localBase = rtrim((string)api_get_secret('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:11434/v1'), '/');
+    $root = preg_replace('#/v1$#', '', $localBase) ?: $localBase;
+    // Dedicated key so the legacy LOCAL_LLM_EMBED_MODEL default-normalization
+    // invariant is untouched.
+    $model = trim((string)api_get_secret('DATASET_EMBED_MODEL', 'nomic-embed-text:latest'));
+    if ($model === '') {
+        $model = 'nomic-embed-text:latest';
+    }
+
+    $payload = json_encode([
+        'model' => $model,
+        'input' => substr($text, 0, 8000),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    $ch = curl_init($root . '/api/embed');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int)api_get_secret('LOCAL_LLM_CONNECT_TIMEOUT', '3'));
+    curl_setopt($ch, CURLOPT_TIMEOUT, (int)api_get_secret('LOCAL_LLM_EMBED_TIMEOUT', '20'));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    $response = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $code < 200 || $code >= 300) {
+        return null;
+    }
+
+    $decoded = json_decode((string)$response, true);
+    $vector = $decoded['embeddings'][0] ?? null;
+    if (!is_array($vector) || $vector === []) {
+        return null;
+    }
+
+    return array_map('floatval', array_values($vector));
+}
+
 function getEmbedding($text, $groqApiKey) {
+    // Prefer a genuine embedding model. If it is not available, fall through to
+    // the legacy keyword-hash method so dataset search keeps working.
+    $real = dataset_real_embedding((string)$text);
+    if ($real !== null) {
+        return $real;
+    }
+
     $localBase = rtrim((string)api_get_secret('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:11434/v1'), '/');
     $localRoot = preg_replace('#/v1$#', '', $localBase) ?: $localBase;
     $localModel = dataset_embed_model_default();
