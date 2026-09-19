@@ -1,0 +1,5 @@
+# The desktop client bundles a full copy of the web application.
+# It must never be served over HTTP: the copy drifts from the live app,
+# so publishing it exposes a stale second version of the site.
+# Desktop builds read these files from disk and are unaffected.
+Require all denied
