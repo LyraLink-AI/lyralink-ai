@@ -68,7 +68,7 @@ if (!function_exists('lyra_ui_nav_items')) {
     function lyra_ui_nav_items(): array
     {
         $items = [
-            ['Chat',  '/pages/chat-workspace/', 'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],
+            ['Chat',  '/chat/',                 'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],
             ['Teams', '/pages/teams/',          'M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8'],
         ];
 

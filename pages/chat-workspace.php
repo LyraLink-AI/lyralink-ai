@@ -1,5 +1,18 @@
 <?php
 session_start();
+/* 302 workspace shell.
+ * The working chat application is /chat, and it now uses the same design
+ * as this page did. Keeping two chat surfaces would mean two places to fix
+ * every bug, so this URL forwards to the real one.
+ *
+ * This is a PHP header redirect on purpose, matching pages/social.php and
+ * pages/login.php which do the same thing. An earlier attempt used an
+ * Apache RewriteRule for this and caused a site-wide redirect loop
+ * (AH00124), so the rewrite engine is deliberately left alone.
+ */
+header('Location: /chat', true, 302);
+exit;
+
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
 

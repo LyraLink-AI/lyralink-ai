@@ -607,7 +607,7 @@ if ($isForkMode) {
                     <a href="/pages/api_docs/">API Docs</a>
                     <a href="/pages/api_keys.php">API Keys</a>
                     <a href="/pages/landing/">New UI &mdash; Landing</a>
-                    <a href="/pages/chat-workspace/">New UI &mdash; Chat</a>
+                    <a href="/chat">New UI &mdash; Chat</a>
                     <a href="/pages/teams/">New UI &mdash; Teams</a>
                     <a href="/pages/login/">New UI &mdash; Sign in</a>
                 </div>

@@ -1,0 +1,747 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK CHAT — DESIGN SYSTEM SKIN
+   ══════════════════════════════════════════════════════════════════════════
+   The chat application is the largest piece of working software on the site:
+   ~8,000 lines of JavaScript across eight modules, bound to 96 element ids and
+   a set of behaviour classes. Rewriting its markup to match the new design
+   would mean re-verifying all of that.
+
+   So the markup and every id are left exactly as they are, and the visual layer
+   is replaced instead. This file is loaded after assets/css/chat/app.css, so it
+   wins on source order for equal specificity.
+
+   Styles two kinds of thing:
+     1. Hardcoded colours in app.css and style.css (#0f172a, #1e293b, #334155,
+        #020617, #7c3aed, 'Syne'). app.css is a stylesheet, not a token source,
+        so those are restated here using the design tokens.
+     2. The layout and component look: rail, top bar, composer, modals, voice
+        panel, mobile nav.
+
+   Changing the look from here on means editing assets/css/lyra-ui.css. This
+   file should only need touching when the chat gains a component.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shell ──────────────────────────────────────────────────────────────── */
+body.minimal-chat-shell,
+body {
+    background: var(--ly-bg);
+    color: var(--ly-text);
+    font-family: var(--ly-font);
+}
+
+.minimal-chat-shell {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+/* The purple radial smears the chat drew behind everything read as a muddy
+   haze on the navy base, so they are replaced by the system treatment. */
+body::before,
+body::after {
+    background:
+        radial-gradient(1100px 620px at 50% -10%, rgba(108, 58, 248, 0.10), transparent 60%),
+        radial-gradient(900px 560px at 88% 108%, rgba(108, 58, 248, 0.07), transparent 62%);
+}
+
+/* ── Left rail: conversation list ───────────────────────────────────────── */
+.conv-panel {
+    background: var(--ly-rail);
+    border-right: 1px solid var(--ly-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ly-s2);
+    padding: var(--ly-s5) var(--ly-s4);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.conv-header { padding: 0 var(--ly-s2) var(--ly-s5); }
+.conv-logo { height: 26px; width: auto; }
+
+.new-chat-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ly-s2);
+    width: 100%;
+    padding: 10px 16px;
+    margin-bottom: var(--ly-s3);
+    border: 1px solid transparent;
+    border-radius: var(--ly-r-md);
+    background: var(--ly-grad);
+    color: #fff;
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--ly-shadow-glow);
+    transition: filter var(--ly-fast) var(--ly-ease);
+}
+.new-chat-btn:hover { filter: brightness(1.08); }
+
+.conv-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* The conversation rows are built by JavaScript, so this targets whatever
+   element it renders rather than a class name that may change. */
+.conv-list > *,
+.drawer-conv-list > * {
+    display: flex;
+    align-items: center;
+    gap: var(--ly-s3);
+    padding: 9px 12px;
+    border-radius: var(--ly-r-md);
+    border: 1px solid transparent;
+    color: var(--ly-text-2);
+    font-size: var(--ly-fs-base);
+    cursor: pointer;
+    min-width: 0;
+    transition: background var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease);
+}
+.conv-list > *:hover,
+.drawer-conv-list > *:hover {
+    background: var(--ly-glass);
+    color: var(--ly-text);
+}
+.conv-list > *.active,
+.conv-list > *[aria-current],
+.drawer-conv-list > *.active {
+    background: linear-gradient(90deg, rgba(108, 58, 248, 0.22), rgba(108, 58, 248, 0.05));
+    color: var(--ly-text);
+    box-shadow: inset 2px 0 0 var(--ly-primary);
+}
+
+.conv-footer {
+    flex: 0 0 auto;
+    padding-top: var(--ly-s4);
+    border-top: 1px solid var(--ly-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ly-s3);
+}
+.conv-footer-status { display: flex; align-items: center; gap: var(--ly-s2); font-size: var(--ly-fs-xs); }
+.status-text { color: var(--ly-text-4); }
+.conv-footer-links { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.footer-link {
+    font-size: 11px;
+    color: var(--ly-text-3);
+    text-decoration: none;
+    padding: 2px 7px;
+    border-radius: var(--ly-r-xs);
+    border: 1px solid var(--ly-border);
+    transition: color var(--ly-fast) var(--ly-ease), border-color var(--ly-fast) var(--ly-ease);
+}
+.footer-link:hover { color: var(--ly-text); border-color: var(--ly-primary-line); }
+.conv-footer-version { font-size: 10px; color: var(--ly-text-4); font-family: var(--ly-mono); }
+
+/* ── Centre column ──────────────────────────────────────────────────────── */
+.chat-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--ly-bg);
+}
+
+.chat-panel > header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--ly-s4);
+    height: var(--ly-topbar-h);
+    padding: 0 var(--ly-s5);
+    border-bottom: 1px solid var(--ly-border);
+    background: rgba(2, 9, 26, 0.86);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    position: relative;
+    z-index: 20;
+}
+
+.chat-title {
+    font-size: var(--ly-fs-md);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ly-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.header-right { display: flex; align-items: center; gap: var(--ly-s2); margin-left: auto; flex-wrap: wrap; }
+
+.btn-small {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease),
+                border-color var(--ly-fast) var(--ly-ease);
+}
+.btn-small:hover { background: var(--ly-glass-hover); color: var(--ly-text); border-color: var(--ly-primary-line); }
+
+.acct-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-grad);
+    color: #fff;
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-danger-small {
+    padding: 5px 10px;
+    border: 1px solid rgba(239, 68, 68, 0.32);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-danger-soft);
+    color: #FCA5A5;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+/* ── Tools strip ────────────────────────────────────────────────────────── */
+.chat-top-tools { padding: var(--ly-s3) var(--ly-s5) 0; }
+.ai-tools-row { display: flex; align-items: center; gap: var(--ly-s3); flex-wrap: wrap; }
+.ai-tool-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ly-s2);
+    padding: 5px 11px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    font-size: var(--ly-fs-sm);
+    color: var(--ly-text-2);
+    cursor: pointer;
+}
+.ai-tool-toggle input { accent-color: var(--ly-primary); cursor: pointer; }
+.ai-tool-action-btn {
+    padding: 5px 11px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    cursor: pointer;
+}
+.ai-tool-action-btn:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.ai-tools-toggle-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    color: var(--ly-text-3);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    cursor: pointer;
+}
+
+/* ── Message area ───────────────────────────────────────────────────────── */
+#chatbox {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: transparent;
+    padding: var(--ly-s5) var(--ly-s5) 0;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ly-s4);
+    text-align: center;
+    min-height: min(38vh, 280px);
+    color: var(--ly-text-3);
+}
+.empty-state .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px; height: 56px;
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-grad);
+    font-size: 26px;
+    box-shadow: var(--ly-shadow-glow);
+}
+.empty-state p { font-size: var(--ly-fs-md); color: var(--ly-text-2); margin: 0; }
+.quick-prompts { display: flex; flex-wrap: wrap; gap: var(--ly-s2); justify-content: center; }
+.quick-prompt {
+    padding: 6px 13px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    font-size: var(--ly-fs-sm);
+    color: var(--ly-text-2);
+    cursor: pointer;
+    transition: border-color var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease);
+}
+.quick-prompt:hover { border-color: var(--ly-primary-line); color: var(--ly-text); }
+
+/* Messages are rendered by JavaScript, so these target the classes the
+   modules actually create and are qualified to survive either layout. */
+#chatbox .message,
+#chatbox .msg,
+#chatbox .chat-message { border-radius: var(--ly-r-lg); }
+#chatbox .user-message,
+#chatbox .message.user { background: var(--ly-primary-soft); border: 1px solid var(--ly-primary-line); }
+#chatbox .ai-message,
+#chatbox .message.assistant,
+#chatbox .message.ai { background: var(--ly-glass); border: 1px solid var(--ly-border); }
+#chatbox pre, #chatbox code { font-family: var(--ly-mono); }
+#chatbox table { border-collapse: collapse; }
+#chatbox th, #chatbox td { border: 1px solid var(--ly-border); padding: 6px 10px; }
+
+/* ── Composer ───────────────────────────────────────────────────────────── */
+.composer-wrap {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ly-s2);
+    padding: var(--ly-s4) var(--ly-s5) var(--ly-s5);
+    border-top: 1px solid var(--ly-border);
+    background: var(--ly-surface);
+}
+.input-area {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--ly-s2);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-glass);
+    padding: 8px 10px;
+    transition: border-color var(--ly-fast) var(--ly-ease), box-shadow var(--ly-fast) var(--ly-ease);
+}
+.input-area:focus-within {
+    border-color: var(--ly-primary);
+    box-shadow: 0 0 0 3px var(--ly-primary-soft);
+}
+#userInput,
+.input-area textarea,
+.input-area input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    resize: none;
+    color: var(--ly-text);
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+    line-height: 1.55;
+    max-height: 180px;
+}
+#userInput::placeholder { color: var(--ly-text-4); }
+
+.chat-attachment-bar {
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+    padding: 8px 10px;
+}
+.chat-attachment-name { color: var(--ly-text); }
+.chat-attachment-size { color: var(--ly-text-4); }
+.chat-attachment-remove {
+    border: 1px solid rgba(239, 68, 68, 0.32);
+    background: var(--ly-danger-soft);
+    color: #FCA5A5;
+    border-radius: var(--ly-r-full);
+    font-family: inherit;
+}
+
+/* ── Modals (auth, account, profile, recovery) ──────────────────────────── */
+.auth-modal-backdrop {
+    background: rgba(1, 6, 15, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.auth-modal-card {
+    width: min(460px, 100%);
+    background: var(--ly-surface);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-xl);
+    padding: var(--ly-s6);
+    box-shadow: var(--ly-shadow-lg);
+    color: var(--ly-text);
+}
+.auth-modal-title,
+.profile-modal-card .auth-modal-title {
+    font-family: var(--ly-font);
+    font-size: var(--ly-fs-lg);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ly-text);
+}
+.auth-modal-sub { color: var(--ly-text-3); font-size: var(--ly-fs-sm); }
+.auth-modal-input,
+.auth-input {
+    width: 100%;
+    background: var(--ly-bg);
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    color: var(--ly-text);
+    padding: 11px 13px;
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+    outline: none;
+}
+.auth-modal-input:focus,
+.auth-input:focus { border-color: var(--ly-primary); box-shadow: 0 0 0 3px var(--ly-primary-soft); }
+.auth-modal-btn,
+.auth-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: var(--ly-r-md);
+    border: 1px solid var(--ly-border-2);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+.auth-modal-btn:hover,
+.auth-btn:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.auth-modal-btn.primary,
+.auth-btn.primary,
+.auth-modal-btn.primary:hover {
+    background: var(--ly-grad);
+    border-color: transparent;
+    color: #fff;
+}
+.auth-tab {
+    padding: 8px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--ly-text-3);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+.auth-tab.active { color: var(--ly-text); border-bottom-color: var(--ly-primary); }
+.auth-modal-link, .auth-help-link { color: var(--ly-primary-text); }
+.auth-modal-error { color: #FCA5A5; }
+.auth-code-item {
+    background: var(--ly-bg);
+    border: 1px solid var(--ly-border);
+    color: var(--ly-text);
+    font-family: var(--ly-mono);
+    border-radius: var(--ly-r-sm);
+}
+
+/* ── Profile ────────────────────────────────────────────────────────────── */
+.profile-modal-card { width: min(620px, 100%); }
+.profile-block {
+    background: var(--ly-bg);
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-lg);
+    padding: var(--ly-s4);
+}
+.profile-block h4 { font-family: var(--ly-font); color: var(--ly-text); font-size: var(--ly-fs-sm); }
+.profile-note, .profile-status-msg { color: var(--ly-text-3); }
+.profile-settings-wrap {
+    border: 1px solid var(--ly-primary-line);
+    border-radius: var(--ly-r-lg);
+    background: var(--ly-primary-soft);
+}
+.profile-settings-title { color: var(--ly-text-4); }
+.profile-block-danger {
+    border-color: rgba(239, 68, 68, 0.32);
+    background: var(--ly-danger-soft);
+}
+.user-name { color: var(--ly-text); }
+.user-info { color: var(--ly-text-3); }
+
+/* ── Voice panel ────────────────────────────────────────────────────────── */
+.voice-panel-backdrop {
+    background: rgba(1, 6, 15, 0.80);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.voice-panel-card {
+    background: var(--ly-surface);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-2xl);
+    box-shadow: var(--ly-shadow-lg);
+    color: var(--ly-text);
+}
+.voice-title { font-family: var(--ly-font); color: var(--ly-text); }
+.voice-status, .voice-hint { color: var(--ly-text-3); }
+.voice-orb, .voice-orb-ring, .voice-orb-ring2 {
+    background: var(--ly-grad);
+    box-shadow: var(--ly-shadow-glow);
+}
+.voice-ctrl-btn {
+    border: 1px solid var(--ly-border-2);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    border-radius: var(--ly-r-full);
+    font-family: inherit;
+    cursor: pointer;
+}
+.voice-transcript-wrap, .voice-response-wrap, .voice-thinking-wrap {
+    background: var(--ly-glass);
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-lg);
+    color: var(--ly-text-2);
+}
+
+/* ── Impersonation banner ───────────────────────────────────────────────── */
+.impersonation-banner {
+    border: 1px solid var(--ly-primary-line);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-primary-soft);
+    color: var(--ly-primary-text);
+    font-family: inherit;
+}
+.impersonation-banner button {
+    border: 1px solid var(--ly-primary-line);
+    background: var(--ly-primary-soft);
+    color: var(--ly-text);
+    border-radius: var(--ly-r-full);
+    font-family: inherit;
+}
+
+/* ── Mobile nav ─────────────────────────────────────────────────────────── */
+.bottom-nav {
+    background: rgba(2, 9, 26, 0.94);
+    border-top: 1px solid var(--ly-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+.bottom-nav-item { color: var(--ly-text-3); font-family: inherit; }
+.bottom-nav-item.active { color: var(--ly-text); }
+.bottom-nav-item.active .nav-icon { color: var(--ly-primary-text); }
+
+/* ── Mobile drawer ──────────────────────────────────────────────────────── */
+.mobile-drawer {
+    background: var(--ly-rail);
+    border-right: 1px solid var(--ly-border);
+}
+.drawer-new-btn {
+    border: 1px solid transparent;
+    border-radius: var(--ly-r-md);
+    background: var(--ly-grad);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 600;
+}
+.drawer-close { color: var(--ly-text-3); background: transparent; border: 0; cursor: pointer; }
+
+/* ── Widget embed ───────────────────────────────────────────────────────── */
+.widget-utility-bar { border-bottom: 1px solid var(--ly-border); background: var(--ly-surface); }
+.widget-utility-btn {
+    border: 1px solid var(--ly-border-2);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    border-radius: var(--ly-r-sm);
+    font-family: inherit;
+}
+body.widget-chat-shell { grid-template-columns: minmax(0, 1fr); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .conv-panel { display: none; }
+    .chat-panel > header { padding: 0 var(--ly-s4); }
+    #chatbox { padding: var(--ly-s4) var(--ly-s4) 0; }
+    .composer-wrap { padding: var(--ly-s4) var(--ly-s4) var(--ly-s5); }
+    .chat-top-tools { padding: var(--ly-s3) var(--ly-s4) 0; }
+}
+
+/* ── Top bar and right rail ─────────────────────────────────────────────────
+   Added with the layout change. The shell is now a 3-column, 2-row grid:
+   the top bar spans all columns, and row 2 holds rail / chat / rail.
+   Every id in the chat modules is untouched; these are new elements only. */
+
+body.minimal-chat-shell {
+    grid-template-columns: 264px minmax(0, 1fr) 320px;
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lyra-topbar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr) 320px;
+    align-items: center;
+    height: var(--ly-topbar-h);
+    padding: 0 var(--ly-s5) 0 var(--ly-s4);
+    border-bottom: 1px solid var(--ly-border);
+    background: rgba(2, 9, 26, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    position: relative;
+    z-index: 60;
+}
+
+.lyra-topbar-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: -0.03em;
+    color: var(--ly-text);
+    text-decoration: none;
+    min-width: 0;
+    overflow: hidden;
+}
+.lyra-topbar-mark { width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto; }
+
+.lyra-topbar-search { grid-column: 2; position: relative; min-width: 0; padding-right: var(--ly-s5); }
+.lyra-topbar-search svg {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 16px; color: var(--ly-text-4); pointer-events: none;
+}
+.lyra-topbar-search input {
+    width: 100%;
+    padding: 9px 14px 9px 42px;
+    background: var(--ly-surface);
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    color: var(--ly-text);
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+}
+.lyra-topbar-search input::placeholder { color: var(--ly-text-4); }
+.lyra-topbar-search input:disabled { cursor: not-allowed; }
+
+.lyra-topbar-actions { grid-column: 3; display: flex; align-items: center; justify-content: flex-end; gap: var(--ly-s2); min-width: 0; }
+/* The chat's own header actions are moved into the top bar by the layout
+   patch; they keep their classes and ids, only the parent changes. */
+.lyra-topbar-actions .header-right { margin-left: 0; flex-wrap: nowrap; }
+
+.conv-panel { grid-column: 1; grid-row: 2; }
+.chat-panel { grid-column: 2; grid-row: 2; }
+.lyra-chatrail { grid-column: 3; grid-row: 2; }
+
+/* The in-panel header keeps only the title and the mobile menu; its action
+   group now lives in the top bar. */
+.chat-panel > header.lyra-chathead { justify-content: flex-start; }
+
+.lyra-chatrail {
+    background: var(--ly-rail);
+    border-left: 1px solid var(--ly-border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.lyra-rail-tabs { display: flex; border-bottom: 1px solid var(--ly-border); flex: 0 0 auto; }
+.lyra-rail-tab {
+    flex: 1;
+    padding: 12px;
+    border: 0;
+    background: transparent;
+    color: var(--ly-text-3);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+.lyra-rail-tab:hover { color: var(--ly-text-2); }
+.lyra-rail-tab.is-active { color: var(--ly-text); border-bottom-color: var(--ly-primary); }
+
+.lyra-rail-body { padding: var(--ly-s4); display: flex; flex-direction: column; gap: var(--ly-s2); }
+.lyra-rail-body[hidden] { display: none; }
+
+.lyra-rail-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ly-text-4);
+    margin-top: var(--ly-s3);
+}
+.lyra-rail-label:first-child { margin-top: 0; }
+
+.lyra-rail-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+}
+.lyra-rail-dot {
+    width: 26px; height: 26px; flex: 0 0 auto;
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-grad);
+}
+.lyra-rail-model { display: flex; flex-direction: column; min-width: 0; }
+.lyra-rail-model strong { font-size: var(--ly-fs-base); color: var(--ly-text); }
+.lyra-rail-model span { font-size: 11px; color: var(--ly-success); }
+
+.lyra-rail-list { display: flex; flex-direction: column; }
+.lyra-rail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--ly-border);
+    font-size: var(--ly-fs-sm);
+    color: var(--ly-text-2);
+}
+.lyra-rail-row:last-child { border-bottom: 0; }
+.lyra-rail-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lyra-rail-row em { font-style: normal; color: var(--ly-success); flex: 0 0 auto; }
+.lyra-rail-row em.is-idle { color: var(--ly-text-4); }
+
+.lyra-rail-note { font-size: var(--ly-fs-sm); color: var(--ly-text-3); line-height: 1.65; }
+
+@media (max-width: 1240px) {
+    body.minimal-chat-shell { grid-template-columns: 264px minmax(0, 1fr); }
+    .lyra-topbar { grid-template-columns: 264px minmax(0, 1fr); }
+    .lyra-chatrail { display: none; }
+    .lyra-topbar-actions { grid-column: 2; }
+    .lyra-topbar-search { display: none; }
+}
+@media (max-width: 900px) {
+    body.minimal-chat-shell { grid-template-columns: minmax(0, 1fr); }
+    .lyra-topbar { grid-template-columns: minmax(0, 1fr) auto; padding: 0 var(--ly-s4); }
+    .lyra-topbar-brand { display: none; }
+    .lyra-topbar-actions { grid-column: 2; }
+}
+
+/* The top bar now carries the brand, so the rail's own logo is redundant. */
+.lyra-topbar ~ .conv-panel .conv-header { display: none; }
+
+/* The in-panel header is now just the thread title plus the mobile menu. */
+.lyra-topbar ~ .chat-panel > header { border-bottom: 0; height: auto; padding-top: var(--ly-s4); }

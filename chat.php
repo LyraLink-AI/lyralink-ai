@@ -48,9 +48,27 @@ if ($isMaintenance && !$isDevCookie) {
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/chat/app.css?v=<?php echo htmlspecialchars($chatCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/assets/css/lyra-ui.css?v=1">
+    <link rel="stylesheet" href="/assets/css/chat/lyra-chat.css?v=2">
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body class="minimal-chat-shell<?php echo $isWidgetEmbed ? ' widget-chat-shell' : ''; ?>">
+
+<!-- ══ TOP BAR (full width, above both columns) ══ -->
+<header class="lyra-topbar">
+    <a class="lyra-topbar-brand" href="/">
+        <img src="/images/lyralinklogobolt.png" alt="" class="lyra-topbar-mark">
+        <span>Lyralink</span>
+    </a>
+
+    <div class="lyra-topbar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="lyraGlobalSearch" placeholder="Search anything&hellip; (messages, files, people, projects)" disabled
+               title="Global search is not wired to an endpoint yet">
+    </div>
+
+    <div class="lyra-topbar-actions" id="lyraTopbarActions"></div>
+</header>
 
 <!-- DRAWER OVERLAY (mobile) -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
@@ -89,7 +107,7 @@ if ($isMaintenance && !$isDevCookie) {
             <a href="/pages/careers" class="footer-link">Careers</a>
             <a href="/pages/vscode_extension/" class="footer-link">Code Extension</a>
             <a href="/pages/landing/" class="footer-link">✦ New UI</a>
-            <a href="/pages/chat-workspace/" class="footer-link">✦ New Chat</a>
+            <a href="/chat" class="footer-link">✦ New Chat</a>
             <a href="/pages/teams/" class="footer-link">✦ New Teams</a>
         </div>
         <div class="conv-footer-version">v1.7.5</div>
@@ -98,10 +116,10 @@ if ($isMaintenance && !$isDevCookie) {
 
 <!-- MIDDLE: CHAT -->
 <div class="chat-panel">
-    <header>
+    <header class="lyra-chathead">
         <button class="mobile-menu-btn" onclick="openDrawer()">☰</button>
         <div class="chat-title" id="chatTitle">New Chat</div>
-        <div class="header-right" id="headerRight">
+        <div class="header-right" id="headerRight" data-lyra-moved="">
             <button class="btn-small" onclick="openVoicePanel()" title="AI Voice">🎤 Voice</button>
             <button class="btn-small" onclick="clearCurrentChat()">✕ Clear</button>
             <?php if ($isImpersonating): ?>
@@ -460,5 +478,96 @@ window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;
 <script src="/assets/js/chat/05_auth_session_molt.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/06_dev_markdown.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/07_voice_and_boot.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
+
+<!-- ══ RIGHT RAIL: context & execution ══ -->
+<aside class="lyra-chatrail" id="lyraChatRail">
+    <div class="lyra-rail-tabs">
+        <button type="button" class="lyra-rail-tab is-active" data-lyra-rail="context">Context</button>
+        <button type="button" class="lyra-rail-tab" data-lyra-rail="execution">Execution</button>
+    </div>
+
+    <div class="lyra-rail-body" data-lyra-panel="context">
+        <div class="lyra-rail-label">Current model</div>
+        <div class="lyra-rail-card">
+            <span class="lyra-rail-dot"></span>
+            <div class="lyra-rail-model">
+                <strong id="lyraRailModel">Lyra-1</strong>
+                <span id="lyraRailModelState">Ready</span>
+            </div>
+        </div>
+
+        <div class="lyra-rail-label">Tools enabled</div>
+        <div class="lyra-rail-list" id="lyraRailTools">
+            <div class="lyra-rail-row"><span>Web Search</span><em>Active</em></div>
+            <div class="lyra-rail-row"><span>Code Validation</span><em>Active</em></div>
+            <div class="lyra-rail-row"><span>Filesystem</span><em class="is-idle">Idle</em></div>
+            <div class="lyra-rail-row"><span>Database</span><em class="is-idle">Idle</em></div>
+        </div>
+
+        <div class="lyra-rail-label">Last response</div>
+        <div class="lyra-rail-note" id="lyraRailLastResponse">No request yet. Send a message and the execution details will appear here.</div>
+
+        <div class="lyra-rail-label">Sources</div>
+        <div class="lyra-rail-note" id="lyraRailSources">No retrieved sources in the last response.</div>
+    </div>
+
+    <div class="lyra-rail-body" data-lyra-panel="execution" hidden>
+        <div class="lyra-rail-label">Execution trace</div>
+        <div class="lyra-rail-note" id="lyraRailTrace">Nothing has run yet in this session.</div>
+        <div class="lyra-rail-label">Session</div>
+        <div class="lyra-rail-list">
+            <div class="lyra-rail-row"><span>Conversations</span><em id="lyraRailConvCount">&mdash;</em></div>
+            <div class="lyra-rail-row"><span>API status</span><em id="lyraRailApiStatus">&mdash;</em></div>
+        </div>
+    </div>
+</aside>
+
+<script>
+/* Rail tab switching. Plain DOM only - it touches none of the chat modules. */
+(function () {
+    var tabs = document.querySelectorAll('[data-lyra-rail]');
+    var panels = document.querySelectorAll('[data-lyra-panel]');
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            tabs.forEach(function (o) { o.classList.toggle('is-active', o === t); });
+            panels.forEach(function (p) { p.hidden = (p.getAttribute('data-lyra-panel') !== t.getAttribute('data-lyra-rail')); });
+        });
+    });
+
+    /* Keep the rail in step with the chat without reaching into its internals:
+       read the DOM it renders and mirror the useful parts. */
+    var model = document.getElementById('lyraRailModel');
+    var state = document.getElementById('lyraRailModelState');
+    var badge = document.querySelector('.badge');
+    if (model && badge && badge.textContent.trim()) { model.textContent = badge.textContent.trim(); }
+
+    var apiText = document.getElementById('apiStatusText');
+    var apiOut = document.getElementById('lyraRailApiStatus');
+    if (apiText && apiOut) {
+        var sync = function () { apiOut.textContent = apiText.textContent.trim() || '—'; };
+        sync();
+        new MutationObserver(sync).observe(apiText, { childList: true, characterData: true, subtree: true });
+    }
+
+    var convList = document.getElementById('convList');
+    var convOut = document.getElementById('lyraRailConvCount');
+    if (convList && convOut) {
+        var count = function () { convOut.textContent = String(convList.children.length); };
+        count();
+        new MutationObserver(count).observe(convList, { childList: true });
+    }
+
+    var box = document.getElementById('chatbox');
+    var last = document.getElementById('lyraRailLastResponse');
+    if (box && last) {
+        var watch = function () {
+            if (box.querySelector('.empty-state') && box.children.length <= 1) { return; }
+            var n = box.querySelectorAll('.message, .msg, .chat-message').length;
+            if (n > 0) { last.textContent = n + ' message' + (n === 1 ? '' : 's') + ' in this thread.'; state && (state.textContent = 'Ready'); }
+        };
+        new MutationObserver(watch).observe(box, { childList: true, subtree: true });
+    }
+})();
+</script>
 </body>
 </html>
