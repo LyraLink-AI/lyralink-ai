@@ -1,0 +1,308 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK SUPPORT DASHBOARD — DESIGN SYSTEM SKIN
+   ══════════════════════════════════════════════════════════════════════════
+   support_admin.php is 2,292 lines with nine working sections, its own ticket
+   list, detail pane, AI-assist panel, agent manager, user manager, config,
+   transcripts, careers, notification queue and status manager. Rewriting its
+   markup would mean re-verifying all of that for a visual change.
+
+   So the markup and every element id are left alone and the visual layer is
+   replaced here, loaded after the page's own <style>. Same approach that worked
+   for the chat page.
+
+   The page already loads lyra-theme.css, which remaps its legacy variables onto
+   the design tokens, so the palette is largely correct already. What this file
+   adds is the component layer: surfaces, radii, spacing, the nav, buttons,
+   form controls, filter rail, ticket rows and the panels.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Page base ──────────────────────────────────────────────────────────── */
+body {
+    background: var(--ly-bg);
+    color: var(--ly-text);
+    font-family: var(--ly-font);
+}
+
+/* The old page painted a purple radial smear behind everything. */
+body::before {
+    background:
+        radial-gradient(1100px 620px at 50% -10%, rgba(108, 58, 248, 0.10), transparent 60%),
+        radial-gradient(900px 560px at 88% 108%, rgba(108, 58, 248, 0.07), transparent 62%);
+}
+
+/* ── Top nav ────────────────────────────────────────────────────────────── */
+nav {
+    height: var(--ly-topbar-h);
+    padding: 0 var(--ly-s5);
+    border-bottom: 1px solid var(--ly-border);
+    background: rgba(2, 9, 26, 0.90) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+.nav-title { font-family: var(--ly-font); font-size: 13px; font-weight: 600; color: var(--ly-text-2); }
+.nav-logo { mix-blend-mode: normal; }
+.nav-right { gap: var(--ly-s2); }
+.nav-menu-toggle {
+    padding: 6px 11px;
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+}
+.agent-badge {
+    padding: 3px 10px;
+    border: 1px solid var(--ly-primary-line);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-primary-soft);
+    color: var(--ly-primary-text);
+    font-size: 11px; font-weight: 600;
+}
+
+/* ── Login ──────────────────────────────────────────────────────────────── */
+#loginScreen { min-height: calc(100vh - var(--ly-topbar-h)); }
+.login-card {
+    width: min(400px, 100%);
+    padding: var(--ly-s7, 32px);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-xl);
+    background: var(--ly-surface);
+    box-shadow: var(--ly-shadow-lg);
+}
+.login-card h2 {
+    font-family: var(--ly-font);
+    font-size: var(--ly-fs-xl);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--ly-text);
+    margin-bottom: var(--ly-s5);
+}
+.login-card h2 span { color: var(--ly-primary-text); }
+
+/* ── Form controls ──────────────────────────────────────────────────────── */
+.f-field { margin-bottom: var(--ly-s4); }
+.f-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ly-text-4);
+}
+.f-field input, .f-field select, .search-input, .ctrl-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-bg);
+    color: var(--ly-text);
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+}
+.f-field input::placeholder, .search-input::placeholder { color: var(--ly-text-4); }
+.f-field input:focus, .f-field select:focus, .search-input:focus, .ctrl-select:focus {
+    outline: none;
+    border-color: var(--ly-primary);
+    box-shadow: 0 0 0 3px var(--ly-primary-soft);
+}
+.ctrl-label { font-size: 10.5px; color: var(--ly-text-4); text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn-sm {
+    padding: 6px 12px;
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    font-weight: 500;
+    cursor: pointer;
+}
+.btn-sm:hover { background: var(--ly-glass-hover); color: var(--ly-text); border-color: var(--ly-primary-line); }
+.btn-full {
+    width: 100%;
+    padding: 11px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--ly-r-md);
+    background: var(--ly-grad);
+    color: #fff;
+    font-family: inherit;
+    font-size: var(--ly-fs-base);
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--ly-shadow-glow);
+}
+.btn-full:hover { filter: brightness(1.08); }
+.err-msg { color: #FCA5A5; font-size: var(--ly-fs-sm); }
+
+/* ── Layout: filter rail + main panel ───────────────────────────────────── */
+.layout { gap: 0; }
+.sidebar-section {
+    padding: 14px;
+    border-bottom: 1px solid var(--ly-border);
+}
+.sidebar-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ly-text-4);
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+.filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--ly-r-sm);
+    background: transparent;
+    color: var(--ly-text-2);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
+    text-align: left;
+    cursor: pointer;
+}
+.filter-btn:hover, .filter-btn.active {
+    background: var(--ly-glass-hover);
+    color: var(--ly-text);
+}
+.filter-btn.active { box-shadow: inset 2px 0 0 var(--ly-primary); }
+.filter-btn .count {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass-strong);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--ly-text-2);
+}
+
+/* ── Panels ─────────────────────────────────────────────────────────────── */
+.main-panel {
+    background: var(--ly-bg);
+    border-left: 1px solid var(--ly-border);
+}
+.main-empty { color: var(--ly-text-4); }
+.dock-row {
+    border-bottom: 1px solid var(--ly-border);
+}
+.dock-row:hover { background: var(--ly-glass); }
+.dock-pill {
+    padding: 2px 9px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    font-size: 10.5px;
+    font-weight: 600;
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+}
+.dock-pill.ok   { border-color: rgba(34,197,94,0.35);  background: rgba(34,197,94,0.13);  color: #6EE7A0; }
+.dock-pill.warn { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.13); color: #FCD34D; }
+.dock-pill.bad  { border-color: rgba(239,68,68,0.35);  background: rgba(239,68,68,0.13);  color: #FCA5A5; }
+.dock-table { width: 100%; border-collapse: collapse; font-size: var(--ly-fs-sm); }
+.dock-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ly-text-4);
+    border-bottom: 1px solid var(--ly-border);
+}
+.dock-table td { padding: 9px 10px; border-bottom: 1px solid var(--ly-border); color: var(--ly-text-2); }
+
+/* Small stat rows used across the manager panels */
+.stat-mini { padding: 10px 12px; border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); background: var(--ly-glass); }
+.stat-mini .lbl, .lbl { font-size: 10.5px; color: var(--ly-text-4); text-transform: uppercase; letter-spacing: 0.1em; }
+.stat-mini .val, .val { font-size: 18px; font-weight: 800; letter-spacing: -0.03em; color: var(--ly-text); }
+
+.tool-chip, .user-shortcut-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit; font-size: var(--ly-fs-sm);
+    cursor: pointer;
+}
+.tool-chip:hover, .user-shortcut-btn:hover { background: var(--ly-glass-hover); color: var(--ly-text); border-color: var(--ly-primary-line); }
+
+.user-summary-item, .user-log-item {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--ly-border);
+    font-size: var(--ly-fs-sm);
+    color: var(--ly-text-2);
+}
+.user-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ly-text-4); }
+.user-note, .user-inline-note, .cfg-note, .kbd-hint, .internal-note {
+    font-size: 11.5px;
+    color: var(--ly-text-3);
+    line-height: 1.65;
+}
+.user-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.template-panel { border: 1px solid var(--ly-border); border-radius: var(--ly-r-lg); background: var(--ly-rail); padding: 14px; }
+
+/* Mobile pane toggle */
+.pane-btn {
+    padding: 8px 14px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-glass);
+    color: var(--ly-text-2);
+    font-family: inherit; font-size: var(--ly-fs-sm); font-weight: 600;
+}
+.pane-btn.active { background: var(--ly-primary-soft); border-color: var(--ly-primary-line); color: var(--ly-primary-text); }
+
+/* ── AI assist panel ────────────────────────────────────────────────────── */
+.ai-assist-launcher {
+    width: 52px; height: 52px;
+    border: 1px solid var(--ly-primary-line);
+    border-radius: 50%;
+    background: var(--ly-grad);
+    color: #fff;
+    box-shadow: var(--ly-shadow-glow);
+    cursor: pointer;
+}
+.ai-assist-panel {
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-xl);
+    background: var(--ly-surface);
+    box-shadow: var(--ly-shadow-lg);
+}
+.ai-assist-head, .ai-assist-foot { border-color: var(--ly-border); }
+.ai-assist-title { font-family: var(--ly-font); font-weight: 700; color: var(--ly-text); }
+.ai-assist-sub { color: var(--ly-text-4); }
+.ai-msg { border-radius: var(--ly-r-md); font-size: var(--ly-fs-sm); }
+.ai-msg.user { background: var(--ly-primary-soft); border: 1px solid var(--ly-primary-line); color: var(--ly-text); }
+.ai-msg.bot  { background: var(--ly-glass); border: 1px solid var(--ly-border); color: var(--ly-text-2); }
+.ai-assist-input {
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-bg);
+    color: var(--ly-text);
+    font-family: inherit;
+}
+.ai-assist-input:focus { outline: none; border-color: var(--ly-primary); box-shadow: 0 0 0 3px var(--ly-primary-soft); }
+.ai-assist-send {
+    border: 1px solid transparent;
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-grad);
+    color: #fff;
+    cursor: pointer;
+}
+.ai-assist-send:disabled { opacity: 0.45; cursor: not-allowed; }
+.ai-assist-close { border: 0; background: transparent; color: var(--ly-text-3); cursor: pointer; }
+.ai-typing-dot { background: var(--ly-text-4); }
+
+@media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+}

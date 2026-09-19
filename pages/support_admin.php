@@ -255,7 +255,9 @@
         }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
-    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <link rel="stylesheet" href="/assets/css/lyra-ui.css">
+<link rel="stylesheet" href="/assets/css/lyra-theme.css">
+<link rel="stylesheet" href="/assets/css/lyra-support.css">
 </head>
 <body>
 

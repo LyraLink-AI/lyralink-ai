@@ -61,6 +61,7 @@ if (!function_exists('lyra_chat_icons')) {
             'browse' => 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z',
             'grid'   => 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
             'src'    => 'M6 3h8l4 4v14H6zM14 3v4h4',
+            'shield' => 'M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3Z',
         ];
     }
 }
@@ -193,7 +194,8 @@ if (!function_exists('lyra_chat_topbar_actions')) {
                      . lyra_chat_icon($ic['mic'], 1.7) . 'Sign in</button>';
         }
 
-        return '<button type="button" class="lyra-btn-voice" onclick="openVoicePanel()" title="Voice">'
+        return lyra_chat_admin_menu()
+             . '<button type="button" class="lyra-btn-voice" onclick="openVoicePanel()" title="Voice">'
              . lyra_chat_icon($ic['mic']) . '<span>Voice</span></button>'
              . '<button type="button" class="lyra-iconbtn" title="Appearance" aria-label="Appearance">' . lyra_chat_icon($ic['sun']) . '</button>'
              . '<button type="button" class="lyra-iconbtn" title="Notifications" aria-label="Notifications">' . lyra_chat_icon($ic['bell']) . '</button>'
@@ -319,7 +321,52 @@ if (!function_exists('lyra_chat_related')) {
 
 /* ── Chat column ─────────────────────────────────────────────────────────── */
 
+if (!function_exists('lyra_chat_admin_menu')) {
+    /**
+     * Admin entry point for the top bar.
+     *
+     * The chat page previously had an admin link that was permanently hidden:
+     * <a id="adminLink" style="display:none"> with no code anywhere that ever
+     * revealed it, and its visibility rule elsewhere was based on the literal
+     * username "developer". Two accounts carry users.is_admin, so that check
+     * missed one of them as well.
+     *
+     * This renders only for a verified administrator, reading the real flag
+     * through lyra_chat_viewer(), and links to the admin surfaces that exist.
+     * <details> is used rather than a JS dropdown so it works without script.
+     */
+    function lyra_chat_admin_menu(): string
+    {
+        $v = lyra_chat_viewer();
+        if ($v === null || empty($v['is_admin'])) {
+            return '';
+        }
+        $ic = lyra_chat_icons();
+        $items = [
+            ['/pages/admin-dashboard/', 'Admin Dashboard', 'Traffic, tasks, resources'],
+            ['/pages/dev-stats/',       'Developer Stats', 'Audit log and runtime'],
+            ['/pages/support_admin.php','Support Dashboard', 'Tickets and agents'],
+            ['/pages/admin.php',        'Legacy Console',    'Original admin page'],
+        ];
+        $links = '';
+        foreach ($items as $it) {
+            $links .= '<a class="lyra-adminitem" href="' . htmlspecialchars($it[0], ENT_QUOTES) . '">'
+                    . '<b>' . htmlspecialchars($it[1]) . '</b>'
+                    . '<em>' . htmlspecialchars($it[2]) . '</em></a>';
+        }
+        return '<details class="lyra-adminmenu">'
+             . '<summary class="lyra-adminbtn" title="Administration">'
+             . lyra_chat_icon($ic['shield'] ?? $ic['set'])
+             . '<span>Admin</span>' . lyra_chat_icon($ic['chev'], 2)
+             . '</summary>'
+             . '<div class="lyra-adminpop">'
+             . '<div class="lyra-adminhead">Signed in as <b>' . htmlspecialchars($v['username']) . '</b></div>'
+             . $links . '</div></details>';
+    }
+}
+
 if (!function_exists('lyra_chat_composer_chips')) {
+
     function lyra_chat_composer_chips(): string
     {
         $ic = lyra_chat_icons();
