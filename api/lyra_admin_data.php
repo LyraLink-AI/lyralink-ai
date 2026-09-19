@@ -75,7 +75,7 @@ if (!function_exists('lyra_ad_tail')) {
      * Return the last $maxLines lines of a file without loading it whole.
      * Reads backwards in chunks until enough newlines are found.
      */
-    function lyra_ad_tail(string $path, int $maxLines = 4000): array
+    function lyra_ad_tail(string $path, int $maxLines = 4000, int $maxBytes = 20971520): array
     {
         $fh = @fopen($path, 'rb');
         if (!$fh) {
@@ -86,7 +86,12 @@ if (!function_exists('lyra_ad_tail')) {
         $found = 0;
         fseek($fh, 0, SEEK_END);
         $pos = ftell($fh);
-        while ($pos > 0 && $found <= $maxLines) {
+        // Stopping on line count alone is unsafe here: the audit file is ~65MB in
+        // only ~4,800 lines, because each record is ~13KB. Asking for 6,000 lines
+        // therefore reads the ENTIRE file and exhausted the 128MB PHP limit
+        // (measured: 65,187,480 bytes attempted in one allocation). The byte cap
+        // is what actually bounds memory; the line cap is a secondary stop.
+        while ($pos > 0 && $found <= $maxLines && strlen($buffer) < $maxBytes) {
             $read = min($chunk, $pos);
             $pos -= $read;
             fseek($fh, $pos);

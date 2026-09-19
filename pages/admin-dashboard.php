@@ -4,8 +4,6 @@ require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
 require_once __DIR__ . '/../api/lyra_chat_data.php';
 require_once __DIR__ . '/../api/lyra_admin_data.php';
-$lyraStats = lyra_ad_stats(24);
-$lyraMachine = lyra_ad_machine();
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
@@ -40,6 +38,10 @@ if (!$lyIsAdmin) {
     header('Location: /');
     exit;
 }
+
+require_once __DIR__ . '/../api/lyra_admin_data.php';
+$lyraStats = lyra_ad_stats(24);
+$lyraMachine = lyra_ad_machine();
 
 /* Admin dashboard. Implements the approved Admin-Dashboard design.
  *
