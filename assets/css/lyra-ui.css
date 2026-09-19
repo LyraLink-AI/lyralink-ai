@@ -1,0 +1,657 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK UI — DESIGN SYSTEM
+   ══════════════════════════════════════════════════════════════════════════
+   Derived from the approved UX mockups by sampling the source PNGs rather than
+   eyeballing them, so the tokens match the designs exactly.
+
+   Base surface is a deep navy-black (#02091A), not the neutral black the older
+   pages used. Accent stays in the violet family already present site-wide
+   (#7c3aed), so this reads as an evolution rather than a rebrand.
+
+   Load order:  lyra-ui.css  →  page-specific <style>
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. TOKENS ──────────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces — sampled from the mockups: #02091A / #02091B / #030D1F / #030A28 */
+  --ly-bg:            #02091A;
+  --ly-bg-deep:       #01060F;
+  --ly-surface:       #061027;
+  --ly-surface-2:     #0A1533;
+  --ly-surface-3:     #101B3D;
+  --ly-rail:          #030C20;
+
+  /* Translucent surfaces for cards on top of the page background */
+  --ly-glass:         rgba(255, 255, 255, 0.024);
+  --ly-glass-hover:   rgba(255, 255, 255, 0.045);
+  --ly-glass-strong:  rgba(255, 255, 255, 0.06);
+
+  /* Borders */
+  --ly-border:        rgba(255, 255, 255, 0.075);
+  --ly-border-2:      rgba(255, 255, 255, 0.12);
+  --ly-border-3:      rgba(255, 255, 255, 0.18);
+
+  /* Brand violet — sampled: #6829FC / #6C52F1 / #4422E6 / #7830F8 */
+  --ly-primary:       #6C3AF8;
+  --ly-primary-hover: #7D4FFF;
+  --ly-primary-press: #5A2CE0;
+  --ly-primary-soft:  rgba(108, 58, 248, 0.14);
+  --ly-primary-line:  rgba(108, 58, 248, 0.36);
+  --ly-primary-glow:  rgba(108, 58, 248, 0.42);
+  --ly-primary-text:  #B9A4FF;
+  --ly-primary-ink:   #FFFFFF;
+
+  /* Signature gradient (buttons, banners, promo cards) */
+  --ly-grad:          linear-gradient(135deg, #5028E0 0%, #7830F8 55%, #9B5CFF 100%);
+  --ly-grad-soft:     linear-gradient(135deg, rgba(80,40,224,0.22), rgba(155,92,255,0.10));
+  --ly-grad-text:     linear-gradient(100deg, #FFFFFF 0%, #B9A4FF 55%, #7830F8 100%);
+
+  /* Semantic */
+  --ly-success:       #22C55E;
+  --ly-success-soft:  rgba(34, 197, 94, 0.13);
+  --ly-warning:       #F59E0B;
+  --ly-warning-soft:  rgba(245, 158, 11, 0.13);
+  --ly-danger:        #EF4444;
+  --ly-danger-soft:   rgba(239, 68, 68, 0.13);
+  --ly-info:          #38BDF8;
+  --ly-info-soft:     rgba(56, 189, 248, 0.13);
+
+  /* Text */
+  --ly-text:          #F3F5FA;
+  --ly-text-2:        #A8B0C8;
+  --ly-text-3:        #6E7794;
+  --ly-text-4:        #4A5270;
+
+  /* Typography — mockups use a neutral grotesque, not the older display face */
+  --ly-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ly-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --ly-fs-xs:   11px;
+  --ly-fs-sm:   12.5px;
+  --ly-fs-base: 14px;
+  --ly-fs-md:   15px;
+  --ly-fs-lg:   18px;
+  --ly-fs-xl:   22px;
+  --ly-fs-2xl:  28px;
+  --ly-fs-3xl:  36px;
+  --ly-fs-4xl:  46px;
+  --ly-fs-5xl:  60px;
+
+  /* Spacing */
+  --ly-s1: 4px;   --ly-s2: 8px;   --ly-s3: 12px;  --ly-s4: 16px;
+  --ly-s5: 20px;  --ly-s6: 24px;  --ly-s7: 32px;  --ly-s8: 40px;
+  --ly-s9: 56px;  --ly-s10: 72px; --ly-s11: 96px;
+
+  /* Radius */
+  --ly-r-xs: 6px;  --ly-r-sm: 8px;  --ly-r-md: 10px;
+  --ly-r-lg: 14px; --ly-r-xl: 18px; --ly-r-2xl: 24px;
+  --ly-r-full: 999px;
+
+  /* Elevation */
+  --ly-shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+  --ly-shadow:    0 8px 24px rgba(0,0,0,0.40);
+  --ly-shadow-lg: 0 24px 64px rgba(0,0,0,0.50);
+  --ly-shadow-glow: 0 10px 40px rgba(108, 58, 248, 0.30);
+
+  /* Layout */
+  --ly-sidebar-w: 264px;
+  --ly-rail-w:    340px;
+  --ly-topbar-h:  64px;
+  --ly-maxw:      1240px;
+
+  /* Motion */
+  --ly-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ly-fast: 140ms;
+  --ly-base: 220ms;
+}
+
+/* ── 2. RESET / BASE ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+body.ly {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--ly-bg);
+  color: var(--ly-text);
+  font-family: var(--ly-font);
+  font-size: var(--ly-fs-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ambient violet aurora, as seen behind the hero and page backgrounds */
+body.ly::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px 500px at 12% -8%,  rgba(108,58,248,0.20), transparent 62%),
+    radial-gradient(760px 420px at 92% 4%,   rgba(80,40,224,0.14),  transparent 60%),
+    radial-gradient(1000px 600px at 50% 108%, rgba(108,58,248,0.10), transparent 62%);
+}
+body.ly > * { position: relative; z-index: 1; }
+
+.ly h1, .ly h2, .ly h3, .ly h4, .ly h5, .ly h6 {
+  margin: 0 0 var(--ly-s4);
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  line-height: 1.18;
+  color: var(--ly-text);
+}
+.ly h1 { font-size: var(--ly-fs-4xl); }
+.ly h2 { font-size: var(--ly-fs-2xl); letter-spacing: -0.02em; }
+.ly h3 { font-size: var(--ly-fs-lg); }
+.ly h4 { font-size: var(--ly-fs-md); }
+
+.ly p { margin: 0 0 var(--ly-s4); color: var(--ly-text-2); }
+.ly a { color: var(--ly-primary-text); text-decoration: none; transition: color var(--ly-fast) var(--ly-ease); }
+.ly a:hover { color: #fff; }
+
+.ly code, .ly kbd, .ly pre { font-family: var(--ly-mono); font-size: 0.92em; }
+
+.ly ::selection { background: var(--ly-primary); color: #fff; }
+
+.ly :focus-visible {
+  outline: 2px solid var(--ly-primary);
+  outline-offset: 2px;
+  border-radius: var(--ly-r-xs);
+}
+
+/* Scrollbars */
+.ly ::-webkit-scrollbar { width: 10px; height: 10px; }
+.ly ::-webkit-scrollbar-track { background: transparent; }
+.ly ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.10);
+  border-radius: var(--ly-r-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.ly ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); background-clip: content-box; }
+
+/* ── 3. LAYOUT PRIMITIVES ───────────────────────────────────────────────── */
+.ly-wrap { width: 100%; max-width: var(--ly-maxw); margin: 0 auto; padding: 0 var(--ly-s6); }
+.ly-wrap-wide { max-width: 1480px; }
+.ly-stack > * + * { margin-top: var(--ly-s4); }
+.ly-row { display: flex; align-items: center; gap: var(--ly-s3); }
+.ly-row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--ly-s3); }
+.ly-spacer { flex: 1; }
+
+.ly-grid { display: grid; gap: var(--ly-s5); }
+.ly-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ly-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ly-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ly-grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+.ly-section { padding: var(--ly-s11) 0; }
+.ly-section-sm { padding: var(--ly-s9) 0; }
+
+/* App shell: sidebar + main + optional right rail */
+.ly-shell {
+  display: grid;
+  grid-template-columns: var(--ly-sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+}
+.ly-shell-has-rail { grid-template-columns: var(--ly-sidebar-w) minmax(0, 1fr) var(--ly-rail-w); }
+
+/* ── 4. TYPOGRAPHY HELPERS ──────────────────────────────────────────────── */
+.ly-eyebrow {
+  display: inline-block;
+  font-size: var(--ly-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ly-text-3);
+  margin-bottom: var(--ly-s3);
+}
+.ly-grad-text {
+  background: var(--ly-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.ly-lead { font-size: var(--ly-fs-lg); color: var(--ly-text-2); line-height: 1.65; }
+.ly-muted { color: var(--ly-text-3); }
+.ly-dim { color: var(--ly-text-4); }
+.ly-mono { font-family: var(--ly-mono); }
+.ly-center { text-align: center; }
+.ly-tight { letter-spacing: -0.03em; }
+
+/* ── 5. BUTTONS ─────────────────────────────────────────────────────────── */
+.ly-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ly-s2);
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--ly-r-md);
+  background: var(--ly-glass-strong);
+  color: var(--ly-text);
+  font-family: inherit;
+  font-size: var(--ly-fs-base);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ly-fast) var(--ly-ease),
+              border-color var(--ly-fast) var(--ly-ease),
+              transform var(--ly-fast) var(--ly-ease),
+              box-shadow var(--ly-fast) var(--ly-ease);
+}
+.ly-btn:hover { background: var(--ly-glass-hover); border-color: var(--ly-border-2); }
+.ly-btn:active { transform: translateY(1px); }
+.ly-btn[disabled], .ly-btn.is-disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.ly-btn-primary {
+  background: var(--ly-grad);
+  border-color: transparent;
+  color: var(--ly-primary-ink);
+  box-shadow: var(--ly-shadow-glow);
+}
+.ly-btn-primary:hover { filter: brightness(1.08); border-color: transparent; box-shadow: 0 12px 44px rgba(108,58,248,0.42); }
+
+.ly-btn-ghost { background: transparent; border-color: var(--ly-border-2); }
+.ly-btn-ghost:hover { background: var(--ly-glass); }
+
+.ly-btn-quiet { background: transparent; border-color: transparent; color: var(--ly-text-2); }
+.ly-btn-quiet:hover { background: var(--ly-glass); color: var(--ly-text); }
+
+.ly-btn-danger { background: var(--ly-danger-soft); border-color: rgba(239,68,68,0.32); color: #FCA5A5; }
+.ly-btn-danger:hover { background: rgba(239,68,68,0.20); }
+
+.ly-btn-sm { padding: 7px 13px; font-size: var(--ly-fs-sm); border-radius: var(--ly-r-sm); }
+.ly-btn-lg { padding: 14px 26px; font-size: var(--ly-fs-md); border-radius: var(--ly-r-lg); }
+.ly-btn-block { width: 100%; }
+.ly-btn-icon { padding: 9px; border-radius: var(--ly-r-md); }
+
+/* ── 6. FORM CONTROLS ───────────────────────────────────────────────────── */
+.ly-field { display: block; margin-bottom: var(--ly-s4); }
+.ly-label {
+  display: block;
+  margin-bottom: var(--ly-s2);
+  font-size: var(--ly-fs-sm);
+  font-weight: 600;
+  color: var(--ly-text-2);
+}
+.ly-input, .ly-select, .ly-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--ly-surface);
+  border: 1px solid var(--ly-border);
+  border-radius: var(--ly-r-md);
+  color: var(--ly-text);
+  font-family: inherit;
+  font-size: var(--ly-fs-base);
+  transition: border-color var(--ly-fast) var(--ly-ease), box-shadow var(--ly-fast) var(--ly-ease);
+}
+.ly-input::placeholder, .ly-textarea::placeholder { color: var(--ly-text-4); }
+.ly-input:focus, .ly-select:focus, .ly-textarea:focus {
+  outline: none;
+  border-color: var(--ly-primary);
+  box-shadow: 0 0 0 3px var(--ly-primary-soft);
+}
+.ly-textarea { min-height: 120px; resize: vertical; }
+
+/* Input with a leading icon */
+.ly-input-icon { position: relative; }
+.ly-input-icon .ly-input { padding-left: 42px; }
+.ly-input-icon > svg, .ly-input-icon > .ly-ico {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ly-text-4);
+  pointer-events: none;
+}
+
+.ly-check { display: inline-flex; align-items: center; gap: var(--ly-s2); font-size: var(--ly-fs-sm); color: var(--ly-text-2); cursor: pointer; }
+.ly-check input { width: 16px; height: 16px; accent-color: var(--ly-primary); cursor: pointer; }
+
+/* ── 7. SURFACES ────────────────────────────────────────────────────────── */
+.ly-card {
+  background: var(--ly-glass);
+  border: 1px solid var(--ly-border);
+  border-radius: var(--ly-r-lg);
+  padding: var(--ly-s5);
+}
+.ly-card-pad { padding: var(--ly-s6); }
+.ly-card-hover { transition: border-color var(--ly-base) var(--ly-ease), background var(--ly-base) var(--ly-ease), transform var(--ly-base) var(--ly-ease); }
+.ly-card-hover:hover { border-color: var(--ly-primary-line); background: var(--ly-glass-hover); transform: translateY(-2px); }
+
+.ly-panel {
+  background: var(--ly-rail);
+  border: 1px solid var(--ly-border);
+  border-radius: var(--ly-r-lg);
+  overflow: hidden;
+}
+.ly-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ly-s4) var(--ly-s5);
+  border-bottom: 1px solid var(--ly-border);
+}
+.ly-panel-title { font-size: var(--ly-fs-sm); font-weight: 700; letter-spacing: -0.01em; color: var(--ly-text); margin: 0; }
+.ly-panel-body { padding: var(--ly-s5); }
+
+.ly-divide { border: 0; border-top: 1px solid var(--ly-border); margin: var(--ly-s5) 0; }
+
+/* Violet promo / banner block */
+.ly-promo {
+  background: var(--ly-grad-soft), var(--ly-surface);
+  border: 1px solid var(--ly-primary-line);
+  border-radius: var(--ly-r-xl);
+  padding: var(--ly-s6);
+}
+.ly-banner {
+  background: var(--ly-grad);
+  border-radius: var(--ly-r-xl);
+  padding: var(--ly-s7);
+  color: #fff;
+  box-shadow: var(--ly-shadow-glow);
+}
+
+/* ── 8. BADGES / PILLS / STATUS ─────────────────────────────────────────── */
+.ly-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--ly-r-full);
+  font-size: var(--ly-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--ly-border-2);
+  background: var(--ly-glass);
+  color: var(--ly-text-2);
+}
+.ly-badge-primary { background: var(--ly-primary-soft); border-color: var(--ly-primary-line); color: var(--ly-primary-text); }
+.ly-badge-success { background: var(--ly-success-soft); border-color: rgba(34,197,94,0.30);  color: #6EE7A0; }
+.ly-badge-warning { background: var(--ly-warning-soft); border-color: rgba(245,158,11,0.30); color: #FCD34D; }
+.ly-badge-danger  { background: var(--ly-danger-soft);  border-color: rgba(239,68,68,0.30);  color: #FCA5A5; }
+.ly-badge-info    { background: var(--ly-info-soft);    border-color: rgba(56,189,248,0.30); color: #7DD3FC; }
+
+.ly-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ly-s2);
+  padding: 7px 14px;
+  border-radius: var(--ly-r-full);
+  background: var(--ly-glass);
+  border: 1px solid var(--ly-border-2);
+  font-size: var(--ly-fs-sm);
+  color: var(--ly-text-2);
+}
+
+.ly-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--ly-text-4); }
+.ly-dot-online  { background: var(--ly-success); box-shadow: 0 0 0 3px var(--ly-success-soft); }
+.ly-dot-warn    { background: var(--ly-warning); box-shadow: 0 0 0 3px var(--ly-warning-soft); }
+.ly-dot-offline { background: var(--ly-danger);  box-shadow: 0 0 0 3px var(--ly-danger-soft); }
+
+.ly-status { display: inline-flex; align-items: center; gap: var(--ly-s2); font-size: var(--ly-fs-sm); font-weight: 600; }
+.ly-status-online  { color: #6EE7A0; }
+.ly-status-offline { color: #FCA5A5; }
+.ly-status-warn    { color: #FCD34D; }
+
+/* Delta indicators (▲ 20%) */
+.ly-delta { font-size: var(--ly-fs-xs); font-weight: 700; }
+.ly-delta-up   { color: #6EE7A0; }
+.ly-delta-down { color: #FCA5A5; }
+.ly-delta-flat { color: var(--ly-text-4); }
+
+/* ── 9. ICON TILES ──────────────────────────────────────────────────────── */
+.ly-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: var(--ly-r-md);
+  background: var(--ly-primary-soft);
+  border: 1px solid var(--ly-primary-line);
+  color: var(--ly-primary-text);
+  flex: 0 0 auto;
+}
+.ly-tile-lg { width: 52px; height: 52px; border-radius: var(--ly-r-lg); }
+.ly-tile-solid { background: var(--ly-grad); border-color: transparent; color: #fff; }
+.ly-tile-neutral { background: var(--ly-glass); border-color: var(--ly-border-2); color: var(--ly-text-2); }
+
+/* ── 10. NAVIGATION: TOPBAR ─────────────────────────────────────────────── */
+.ly-topnav {
+  position: sticky; top: 0; z-index: 60;
+  display: flex; align-items: center; gap: var(--ly-s6);
+  height: var(--ly-topbar-h);
+  padding: 0 var(--ly-s6);
+  border-bottom: 1px solid var(--ly-border);
+  background: rgba(2, 9, 26, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.ly-logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: var(--ly-fs-lg); letter-spacing: -0.03em; color: var(--ly-text); }
+.ly-logo:hover { color: var(--ly-text); }
+.ly-logo-mark { width: 30px; height: 30px; flex: 0 0 auto; }
+.ly-navlinks { display: flex; align-items: center; gap: var(--ly-s1); }
+.ly-navlink {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--ly-r-sm);
+  font-size: var(--ly-fs-base);
+  font-weight: 500;
+  color: var(--ly-text-2);
+}
+.ly-navlink:hover { color: var(--ly-text); background: var(--ly-glass); }
+.ly-navlink.is-active { color: var(--ly-text); }
+.ly-navlink.is-active::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+  background: var(--ly-primary); border-radius: 2px;
+}
+
+/* ── 11. NAVIGATION: SIDEBAR ────────────────────────────────────────────── */
+.ly-sidebar {
+  display: flex; flex-direction: column; gap: var(--ly-s2);
+  padding: var(--ly-s5) var(--ly-s4);
+  background: var(--ly-rail);
+  border-right: 1px solid var(--ly-border);
+  min-height: 100vh;
+}
+.ly-sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 var(--ly-s2) var(--ly-s5); }
+.ly-sidebar-section {
+  padding: var(--ly-s5) var(--ly-s3) var(--ly-s2);
+  font-size: var(--ly-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ly-text-4);
+}
+.ly-navitem {
+  display: flex; align-items: center; gap: var(--ly-s3);
+  padding: 9px 12px;
+  border-radius: var(--ly-r-md);
+  font-size: var(--ly-fs-base);
+  font-weight: 500;
+  color: var(--ly-text-2);
+  transition: background var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease);
+}
+.ly-navitem:hover { background: var(--ly-glass); color: var(--ly-text); }
+.ly-navitem.is-active {
+  background: linear-gradient(90deg, rgba(108,58,248,0.22), rgba(108,58,248,0.06));
+  color: var(--ly-text);
+  box-shadow: inset 2px 0 0 var(--ly-primary);
+}
+.ly-navitem .ly-ico { flex: 0 0 auto; opacity: 0.85; }
+.ly-navitem-count {
+  margin-left: auto;
+  min-width: 22px; padding: 1px 7px;
+  border-radius: var(--ly-r-full);
+  background: var(--ly-glass-strong);
+  font-size: var(--ly-fs-xs); font-weight: 700; text-align: center;
+  color: var(--ly-text-2);
+}
+.ly-navitem.is-active .ly-navitem-count { background: var(--ly-primary); color: #fff; }
+
+/* ── 12. TABLES ─────────────────────────────────────────────────────────── */
+.ly-table { width: 100%; border-collapse: collapse; font-size: var(--ly-fs-sm); }
+.ly-table th {
+  padding: 10px var(--ly-s4);
+  text-align: left;
+  font-size: var(--ly-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ly-text-4);
+  border-bottom: 1px solid var(--ly-border);
+  white-space: nowrap;
+}
+.ly-table td { padding: 12px var(--ly-s4); border-bottom: 1px solid var(--ly-border); color: var(--ly-text-2); }
+.ly-table tbody tr { transition: background var(--ly-fast) var(--ly-ease); }
+.ly-table tbody tr:hover { background: var(--ly-glass); }
+.ly-table tbody tr:last-child td { border-bottom: 0; }
+.ly-table .ly-cell-strong { color: var(--ly-text); font-weight: 600; }
+
+/* ── 13. TABS ───────────────────────────────────────────────────────────── */
+.ly-tabs { display: flex; gap: var(--ly-s2); border-bottom: 1px solid var(--ly-border); }
+.ly-tab {
+  padding: 10px 14px;
+  border: 0; background: transparent;
+  font-family: inherit; font-size: var(--ly-fs-sm); font-weight: 600;
+  color: var(--ly-text-3); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--ly-fast) var(--ly-ease), border-color var(--ly-fast) var(--ly-ease);
+}
+.ly-tab:hover { color: var(--ly-text-2); }
+.ly-tab.is-active { color: var(--ly-text); border-bottom-color: var(--ly-primary); }
+.ly-tabpanel[hidden] { display: none; }
+
+/* Segmented control (24h / 7d / 30d) */
+.ly-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--ly-glass); border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); }
+.ly-seg button {
+  padding: 5px 12px; border: 0; border-radius: var(--ly-r-xs);
+  background: transparent; color: var(--ly-text-3);
+  font-family: inherit; font-size: var(--ly-fs-xs); font-weight: 600; cursor: pointer;
+  transition: background var(--ly-fast) var(--ly-ease), color var(--ly-fast) var(--ly-ease);
+}
+.ly-seg button:hover { color: var(--ly-text-2); }
+.ly-seg button.is-active { background: var(--ly-primary); color: #fff; }
+
+/* ── 14. AVATARS ────────────────────────────────────────────────────────── */
+.ly-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ly-grad);
+  color: #fff; font-size: var(--ly-fs-sm); font-weight: 700;
+  border: 1px solid var(--ly-border-2);
+}
+.ly-avatar-sm { width: 26px; height: 26px; font-size: var(--ly-fs-xs); }
+.ly-avatar-lg { width: 44px; height: 44px; font-size: var(--ly-fs-md); }
+.ly-avatar-stack { display: inline-flex; }
+.ly-avatar-stack .ly-avatar { margin-left: -9px; box-shadow: 0 0 0 2px var(--ly-bg); }
+.ly-avatar-stack .ly-avatar:first-child { margin-left: 0; }
+
+/* ── 15. PROGRESS ───────────────────────────────────────────────────────── */
+.ly-bar { height: 6px; border-radius: var(--ly-r-full); background: var(--ly-glass-strong); overflow: hidden; }
+.ly-bar > span { display: block; height: 100%; border-radius: var(--ly-r-full); background: var(--ly-grad); transition: width var(--ly-base) var(--ly-ease); }
+.ly-bar-success > span { background: linear-gradient(90deg, #16A34A, #22C55E); }
+.ly-bar-sm { height: 4px; }
+
+/* Ring progress (SVG-based; set --v to 0-100 via inline style) */
+.ly-ring { position: relative; width: 88px; height: 88px; flex: 0 0 auto; }
+.ly-ring svg { transform: rotate(-90deg); display: block; }
+.ly-ring circle { fill: none; stroke-width: 7; stroke-linecap: round; }
+.ly-ring .ly-ring-track { stroke: var(--ly-glass-strong); }
+.ly-ring .ly-ring-val { stroke: var(--ly-success); transition: stroke-dashoffset var(--ly-base) var(--ly-ease); }
+.ly-ring-label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--ly-fs-md); font-weight: 700; color: var(--ly-text);
+}
+
+/* ── 16. PIPELINE / STEPS ───────────────────────────────────────────────── */
+.ly-steps { display: flex; align-items: center; gap: var(--ly-s3); flex-wrap: wrap; }
+.ly-step { display: inline-flex; align-items: center; gap: var(--ly-s2); font-size: var(--ly-fs-sm); font-weight: 600; }
+.ly-step-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--ly-glass-strong); border: 1px solid var(--ly-border-2);
+  font-size: 11px; color: var(--ly-text-3);
+}
+.ly-step-done .ly-step-mark { background: var(--ly-primary); border-color: transparent; color: #fff; }
+.ly-step-done { color: var(--ly-text); }
+.ly-step-todo { color: var(--ly-text-4); }
+.ly-step-line { flex: 1 1 32px; height: 2px; min-width: 20px; background: var(--ly-border-2); border-radius: 2px; }
+.ly-step-line.is-done { background: linear-gradient(90deg, var(--ly-primary), var(--ly-primary-hover)); }
+
+/* ── 17. ICON (inline SVG sizing) ───────────────────────────────────────── */
+.ly-ico { width: 18px; height: 18px; stroke-width: 1.9; flex: 0 0 auto; }
+.ly-ico-sm { width: 15px; height: 15px; }
+.ly-ico-lg { width: 22px; height: 22px; }
+
+/* ── 18. UTILITIES ──────────────────────────────────────────────────────── */
+.ly-hide { display: none !important; }
+.ly-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.ly-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-scroll-y { overflow-y: auto; }
+.ly-gap-0 { gap: 0; }
+.ly-mt-0 { margin-top: 0; }
+.ly-mb-0 { margin-bottom: 0; }
+.ly-mb-3 { margin-bottom: var(--ly-s3); }
+.ly-mb-5 { margin-bottom: var(--ly-s5); }
+.ly-mb-6 { margin-bottom: var(--ly-s6); }
+.ly-mt-5 { margin-top: var(--ly-s5); }
+.ly-mt-6 { margin-top: var(--ly-s6); }
+
+/* ── 19. RESPONSIVE ─────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .ly-shell-has-rail { grid-template-columns: var(--ly-sidebar-w) minmax(0, 1fr); }
+  .ly-shell-has-rail .ly-rail { display: none; }
+  .ly-grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 960px) {
+  :root { --ly-fs-4xl: 34px; --ly-fs-5xl: 40px; --ly-fs-3xl: 28px; --ly-fs-2xl: 23px; }
+  .ly-grid-4, .ly-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ly-section { padding: var(--ly-s9) 0; }
+  .ly-topnav { gap: var(--ly-s4); padding: 0 var(--ly-s4); }
+  .ly-navlinks { display: none; }
+}
+@media (max-width: 720px) {
+  .ly-shell, .ly-shell-has-rail { grid-template-columns: minmax(0, 1fr); }
+  .ly-sidebar {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--ly-border);
+    flex-direction: row; align-items: center;
+    overflow-x: auto; gap: var(--ly-s2);
+    padding: var(--ly-s3) var(--ly-s4);
+  }
+  .ly-sidebar-brand, .ly-sidebar-section, .ly-sidebar-foot { display: none; }
+  .ly-navitem { white-space: nowrap; }
+  .ly-grid-2, .ly-grid-3, .ly-grid-4, .ly-grid-5 { grid-template-columns: minmax(0, 1fr); }
+  .ly-wrap { padding: 0 var(--ly-s4); }
+  .ly-card-pad, .ly-panel-body { padding: var(--ly-s4); }
+}
+
+/* ── 20. MOTION PREFERENCES ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ly *, .ly *::before, .ly *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── 21. PRINT ──────────────────────────────────────────────────────────── */
+@media print {
+  body.ly::before, .ly-sidebar, .ly-topnav, .ly-rail { display: none !important; }
+  .ly-shell { grid-template-columns: 1fr; }
+  body.ly { background: #fff; color: #000; }
+}
