@@ -30,3 +30,21 @@ __pycache__/
 *.bak-*
 *.orig
 .DS_Store
+
+# ── Build artifacts and dependency trees ──
+# Regenerable from source. Committing them bloats history and exceeds GitHub's
+# per-file limit (node_modules/electron alone is 144 MB, over the 100 MB cap).
+node_modules/
+dist/
+desktop/*/dist/
+desktop/*/node_modules/
+
+# ── Release installers ──
+# Served to users by desktop-updates/download.php from the filesystem.
+# They do not belong in version control.
+desktop-updates/
+
+# ── Runtime state ──
+# Written continuously by the application; not source.
+storage/
+api/lib/storage/
