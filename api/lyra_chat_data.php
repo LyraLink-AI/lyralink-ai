@@ -12,6 +12,7 @@
    illustrative values was not.
    ══════════════════════════════════════════════════════════════════════════ */
 declare(strict_types=1);
+require_once __DIR__ . '/security.php';
 
 if (!function_exists('lyra_chat_db')) {
     /** Shared connection. Returns null rather than throwing, so a database

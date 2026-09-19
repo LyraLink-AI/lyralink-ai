@@ -383,7 +383,8 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
                     </div>
                 </div>
 
-                <div class="ly-panel">
+                <?php /* LYRA_TASKS_FULL_WIDTH */ ?>
+                <div class="ly-panel" style="grid-column:1 / -1">
                     <div class="ly-panel-head">
                         <h2 class="ly-panel-title">Active Tasks</h2>
                         <span class="ly-badge"><?php echo (int) $lyraTaskCounts['open']; ?> open</span>

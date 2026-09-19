@@ -1534,3 +1534,29 @@ body.minimal-chat-shell::-webkit-scrollbar {
     .lyra-adminbtn span { display: none; }
     .lyra-adminbtn { padding: 7px 9px; }
 }
+
+/* ── Top bar polish ─────────────────────────────────────────────────────── */
+
+/* The account block was being squeezed by the flexible row and clipping its
+   second line ("Enterprise Plan" wrapped and cut off). It is the one element
+   in the bar that must never shrink. */
+.lyra-user { flex: 0 0 auto; }
+.lyra-utext { flex: 0 0 auto; }
+.lyra-utext b,
+.lyra-utext em { white-space: nowrap; }
+
+/* The admin and voice controls keep their size too, so the row distributes
+   slack into the empty middle rather than compressing the controls. */
+.lyra-adminmenu,
+.lyra-btn-voice,
+.acct-btn { flex: 0 0 auto; }
+
+/* The stage rail sits directly above the composer; without a little breathing
+   room it reads as part of the input area. */
+.lyra-stages { padding-bottom: 2px; }
+.composer-wrap { border-top: 0; }
+
+@media (max-width: 1500px) {
+    /* Drop the plan line before the name, so the block stays one line. */
+    .lyra-utext em { display: none; }
+}

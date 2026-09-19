@@ -17,6 +17,7 @@
    them are marked as not built.
    ══════════════════════════════════════════════════════════════════════════ */
 declare(strict_types=1);
+require_once __DIR__ . '/security.php';
 
 require_once __DIR__ . '/lyra_chat_data.php';
 

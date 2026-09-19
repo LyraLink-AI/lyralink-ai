@@ -20,6 +20,8 @@
    between a fast page and a slow one.
    ══════════════════════════════════════════════════════════════════════════ */
 declare(strict_types=1);
+require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/lyra_chat_data.php';
 
 if (!function_exists('lyra_ad_audit_path')) {
     /** Locate the audit log. Both known locations are checked. */

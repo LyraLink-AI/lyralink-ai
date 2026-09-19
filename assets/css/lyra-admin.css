@@ -124,3 +124,36 @@
     .lyra-modelrow-name { flex: 1 1 100%; }
     .lyra-modelrow { flex-wrap: wrap; }
 }
+
+/* ── Polish ─────────────────────────────────────────────────────────────── */
+
+/* "UNVERIFIED" was breaking across two lines in the Active Tasks table,
+   because the status cell inherited normal wrapping and the column was narrow.
+   Short values in these tables should stay on one line; only the deliberately
+   truncated description column is allowed to clip. */
+.lyra-logtable td { white-space: nowrap; }
+.lyra-logtable td.ly-truncate { overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+.lyra-logtable { table-layout: auto; }
+
+/* The conversation chart is a fixed 900x200 viewBox scaled to the panel width.
+   On a short panel that made the chart area dominate the card, so it is capped
+   and letterboxed rather than stretched. */
+.ad-chart { width: 100%; height: auto; max-height: 200px; display: block; }
+
+/* Stat card values should never wrap mid-number. */
+.lyra-stat-value { white-space: nowrap; }
+
+/* ── Grid alignment ───────────────────────────────────────────────────────
+   Grid items stretch to the height of the tallest item in their row by default.
+   With a short chart beside a long model list that produced a large empty area
+   under the chart, and after Active Tasks moved to full width it left a gap
+   beside Platform Activity.
+
+   Hugging content fixes both: each panel is only as tall as it needs to be.
+   This applies to the admin dashboard only; lyra-admin.css is loaded by just
+   admin-dashboard.php and dev-stats.php. */
+.ly-grid { align-items: start; }
+.ly-grid > .ly-panel { align-self: start; }
+
+/* The chart scales to the panel width; without a max it dominated the card. */
+.ad-chart { max-height: 190px; }
