@@ -39,17 +39,22 @@ function dataset_search_lower(string $value): string {
     return strtolower($trimmed);
 }
 
-function dataset_search_cache_key(string $query, int $limit): string {
+function dataset_search_cache_key(string $query, int $limit, ?array $scope = null): string {
+    // Scope is part of the key. Without it a scoped query could be served a
+    // cache entry written for a different tenant. Version bumped to 2 so any
+    // entry written before scoping existed is ignored.
     $signature = [
         'query' => dataset_search_lower($query),
         'limit' => max(1, $limit),
-        'version' => 1,
+        'org_id' => isset($scope['org_id']) ? (int)$scope['org_id'] : 0,
+        'user_id' => isset($scope['user_id']) ? (int)$scope['user_id'] : 0,
+        'version' => 2,
     ];
     return hash('sha256', json_encode($signature, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
-function dataset_search_cache_get(string $query, int $limit, int $ttlSeconds = 300): ?array {
-    $cacheKey = dataset_search_cache_key($query, $limit);
+function dataset_search_cache_get(string $query, int $limit, int $ttlSeconds = 300, ?array $scope = null): ?array {
+    $cacheKey = dataset_search_cache_key($query, $limit, $scope);
     $path = dataset_search_cache_dir() . '/' . $cacheKey . '.json';
     if (!is_readable($path)) {
         return null;
@@ -72,11 +77,11 @@ function dataset_search_cache_get(string $query, int $limit, int $ttlSeconds = 3
     return (array)$decoded['rows'];
 }
 
-function dataset_search_cache_set(string $query, int $limit, array $rows): void {
+function dataset_search_cache_set(string $query, int $limit, array $rows, ?array $scope = null): void {
     if ($query === '' || empty($rows)) {
         return;
     }
-    $cacheKey = dataset_search_cache_key($query, $limit);
+    $cacheKey = dataset_search_cache_key($query, $limit, $scope);
     $path = dataset_search_cache_dir() . '/' . $cacheKey . '.json';
     $payload = [
         'created_at' => time(),
@@ -85,9 +90,30 @@ function dataset_search_cache_set(string $query, int $limit, array $rows): void 
     @file_put_contents($path, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
 
+// ── TENANT SCOPE ──
+// Limits rows to what the caller may see. $scope is
+// ['org_id' => ?int, 'user_id' => ?int]; missing/zero means no tenant context,
+// in which case only global knowledge is returned.
+// Ids are cast to int and inlined, which is injection-safe for integers and
+// keeps the surrounding bind_param signatures fixed.
+function dataset_scope_clause(?array $scope): string {
+    $orgId  = isset($scope['org_id'])  ? (int)$scope['org_id']  : 0;
+    $userId = isset($scope['user_id']) ? (int)$scope['user_id'] : 0;
+
+    $clauses = ['(org_id IS NULL AND owner_user_id IS NULL)'];
+    if ($orgId > 0) {
+        $clauses[] = 'org_id = ' . $orgId;
+    }
+    if ($userId > 0) {
+        $clauses[] = 'owner_user_id = ' . $userId;
+    }
+
+    return '(' . implode(' OR ', $clauses) . ')';
+}
+
 // ── KEYWORD SEARCH ──
 // Uses MySQL FULLTEXT search for fast keyword matching
-function datasetKeywordSearch($db, $query, $limit = 5) {
+function datasetKeywordSearch($db, $query, $limit = 5, ?array $scope = null) {
     // Try FULLTEXT first
         $stmt = $db->prepare("
                 SELECT id, question, answer,
@@ -95,6 +121,7 @@ function datasetKeywordSearch($db, $query, $limit = 5) {
                 FROM dataset
                 WHERE approved = 1
                     AND MATCH(question, answer) AGAINST(? IN NATURAL LANGUAGE MODE)
+                    AND " . dataset_scope_clause($scope) . "
                 ORDER BY score DESC
                 LIMIT ?
         ");
@@ -132,7 +159,7 @@ function datasetKeywordSearch($db, $query, $limit = 5) {
         }
         if (!empty($clauses)) {
             $where  = implode(' OR ', $clauses);
-            $sql = "SELECT id, question, answer FROM dataset WHERE approved = 1 AND ($where) LIMIT ?";
+            $sql = "SELECT id, question, answer FROM dataset WHERE approved = 1 AND ($where) AND " . dataset_scope_clause($scope) . " LIMIT ?";
             $stmt = $db->prepare($sql);
             $types .= 'i';
             $params[] = $limit;
@@ -302,14 +329,14 @@ function getEmbedding($text, $groqApiKey) {
 }
 
 // ── EMBEDDING SEARCH ──
-function datasetEmbeddingSearch($db, $queryEmbedding, $limit = 5, $threshold = 0.3) {
+function datasetEmbeddingSearch($db, $queryEmbedding, $limit = 5, $threshold = 0.3, ?array $scope = null) {
     if (!$queryEmbedding) return [];
 
     $maxRows = (int)api_get_secret('DATASET_EMBEDDING_SEARCH_MAX_ROWS', '300');
     if ($maxRows < 50) $maxRows = 50;
     if ($maxRows > 5000) $maxRows = 5000;
 
-    $stmt = $db->prepare("SELECT id, question, answer, embedding FROM dataset WHERE approved = 1 AND embedding IS NOT NULL ORDER BY id DESC LIMIT ?");
+    $stmt = $db->prepare("SELECT id, question, answer, embedding FROM dataset WHERE approved = 1 AND embedding IS NOT NULL AND " . dataset_scope_clause($scope) . " ORDER BY id DESC LIMIT ?");
     $stmt->bind_param('i', $maxRows);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -339,38 +366,38 @@ function datasetEmbeddingSearch($db, $queryEmbedding, $limit = 5, $threshold = 0
 }
 
 // ── COMBINED SEARCH (keyword first, embedding fallback) ──
-function datasetSearch($db, $query, $groqApiKey, $limit = 3) {
+function datasetSearch($db, $query, $groqApiKey, $limit = 3, ?array $scope = null) {
     $normalizedQuery = trim((string)$query);
     if ($normalizedQuery === '') {
         return [];
     }
 
-    $cachedRows = dataset_search_cache_get($normalizedQuery, (int)$limit, 300);
+    $cachedRows = dataset_search_cache_get($normalizedQuery, (int)$limit, 300, $scope);
     if (is_array($cachedRows) && !empty($cachedRows)) {
         return array_slice($cachedRows, 0, max(1, (int)$limit));
     }
 
     // Step 1: keyword search
-    $keywordResults = datasetKeywordSearch($db, $normalizedQuery, $limit * 2);
+    $keywordResults = datasetKeywordSearch($db, $normalizedQuery, $limit * 2, $scope);
 
     // If keyword search found good results (score > 1), use those
     $goodKeyword = array_filter($keywordResults, fn($r) => $r['score'] > 0.8);
     if (count($goodKeyword) >= $limit) {
         $rows = array_slice(array_values($goodKeyword), 0, $limit);
-        dataset_search_cache_set($normalizedQuery, (int)$limit, $rows);
+        dataset_search_cache_set($normalizedQuery, (int)$limit, $rows, $scope);
         return $rows;
     }
 
     $embeddingFallbackEnabled = api_get_secret('DATASET_ENABLE_EMBEDDING_FALLBACK', '0') === '1';
     if (!$embeddingFallbackEnabled) {
         $rows = array_slice(array_values($keywordResults), 0, $limit);
-        dataset_search_cache_set($normalizedQuery, (int)$limit, $rows);
+        dataset_search_cache_set($normalizedQuery, (int)$limit, $rows, $scope);
         return $rows;
     }
 
     // Step 2: embedding fallback for remainder
     $queryEmbedding  = getEmbedding($normalizedQuery, $groqApiKey);
-    $embeddingResults = datasetEmbeddingSearch($db, $queryEmbedding, $limit * 2);
+    $embeddingResults = datasetEmbeddingSearch($db, $queryEmbedding, $limit * 2, 0.3, $scope);
 
     // Merge: deduplicate by id, prefer higher score
     $merged = [];
