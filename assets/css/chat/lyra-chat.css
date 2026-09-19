@@ -1011,11 +1011,10 @@ body.minimal-chat-shell {
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 1240px) {
-    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lyra-pillgroup { display: none; }
 }
 @media (max-width: 900px) {
-    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: minmax(0, 1fr); }
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lyra-modelselect { display: none; }
     .lyra-welcome-head h1 { font-size: 24px; }
     .lyra-welcome-head { flex-direction: column; gap: 12px; }
@@ -1047,4 +1046,217 @@ body.minimal-chat-shell {
     .lyra-topbar { grid-template-columns: minmax(0, 1fr) auto; }
     .lyra-topbar-mid { grid-column: 1; }
     .lyra-topbar-actions { grid-column: 2; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LAYOUT CORRECTIONS
+   ══════════════════════════════════════════════════════════════════════════
+   Three real faults found by measuring the live page at 1366x768, not by
+   looking at it.
+
+   1. DEAD GAP BETWEEN RAIL AND CHAT (44px)
+      style.css sets `.conv-panel{width:220px}` and app.css sets
+      `.minimal-chat-shell .conv-panel{width:220px}`. The second is specificity
+      (0,2,0), which beats a bare `.conv-panel`, so the rail stayed 220px inside
+      a 264px grid column and left 44px of empty page. Matching app.css's
+      selector here is what actually wins; `.conv-panel` alone did not.
+
+   2. A 10px SCROLLBAR ON A PAGE THAT SHOULD NEVER SCROLL
+      The shell is fixed height with internal scrollers, so any scrollbar is a
+      stray overflow rather than content. Pinned on html as well as body.
+
+   3. THE WELCOME OVERFLOWED ITS COLUMN AT 768px TALL
+      .lyra-welcome measured 489px inside a 410px #chatbox, so the lower
+      suggestion cards were cut off behind the composer. The welcome now scales
+      down on short viewports instead of overflowing.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. The rail fills its grid column. Both selectors are duplicated on purpose:
+      app.css uses the compound form, style.css the bare one, and whichever
+      loads last otherwise wins. */
+.minimal-chat-shell .conv-panel,
+body.minimal-chat-shell .conv-panel,
+.conv-panel {
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+/* 2. No page-level scrolling on the chat route; every column scrolls itself. */
+html:has(body.minimal-chat-shell),
+body.minimal-chat-shell {
+    height: 100%;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+/* 3. Vertical rhythm that fits a 768px-tall window. */
+.lyra-welcome { padding-bottom: 8px; }
+@media (max-height: 820px) {
+    .lyra-welcome { padding: 0 0 6px; }
+    .lyra-welcome-head { margin-bottom: 16px; }
+    .lyra-welcome-head h1 { font-size: 26px; }
+    .lyra-welcome-head p { font-size: 13px; }
+    .lyra-welcome-mark { width: 44px; height: 44px; }
+    .lyra-capgrid { gap: 10px; margin-bottom: 16px; }
+    .lyra-cap { padding: 11px; }
+    .lyra-cap i { width: 26px; height: 26px; margin-bottom: 7px; }
+    .lyra-cap i svg { width: 13px; height: 13px; }
+    .lyra-suggestgrid { gap: 9px; }
+    .lyra-suggest { padding: 10px; }
+    .lyra-suggest p { font-size: 12px; margin-bottom: 7px; }
+    .lyra-suggest-label { margin-bottom: 8px; font-size: 12px; }
+    #chatbox { padding-top: var(--ly-s4); }
+}
+@media (max-height: 660px) {
+    /* Not enough room for cards at all; the greeting plus the composer is the
+       honest minimum rather than a clipped grid. */
+    .lyra-capgrid { display: none; }
+    .lyra-welcome-head { margin-bottom: 12px; }
+    .lyra-welcome-head p { display: none; }
+}
+
+/* 4. Top bar: the pills need ~541px beside a 264px brand and a 112px action
+      group, which does not fit once the 320px rail is in play. They step down
+      in stages rather than wrapping. */
+@media (max-width: 1560px) {
+    .lyra-pillcell { padding: 6px 9px; font-size: 11px; }
+    .lyra-modelselect { padding: 6px 10px; font-size: 12px; }
+}
+@media (max-width: 1440px) {
+    .lyra-pillgroup { display: none; }
+}
+
+/* ── Shell pinned to the viewport ───────────────────────────────────────────
+   Measured at 1280x720: body was 1270px wide against a 1280px viewport, i.e. a
+   10px page scrollbar, and the top bar therefore stopped 20px short of the
+   right edge. Pinning the shell removes the possibility entirely rather than
+   chasing whichever child overflows: the shell becomes a fixed overlay covering
+   the viewport, so nothing can create a page-level scrollbar, and every column
+   scrolls inside itself. `:has()` on html was tried first and did not take
+   effect here. */
+a.minimal-chat-shell,
+div.minimal-chat-shell,
+body > .minimal-chat-shell,
+.minimal-chat-shell {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+/* The top bar is inside the fixed shell, so it spans edge to edge. */
+.minimal-chat-shell > .lyra-topbar { width: 100%; }
+
+/* ── Welcome: fit a 720px-tall window ───────────────────────────────────────
+   At 1280x720 the welcome measured 402px inside a 362px column, so the bottom
+   row of suggestion cards sat behind the composer. Trimming the greeting and
+   the card rhythm brings it under the available height without hiding the
+   capability cards, which are the point of the panel. */
+@media (max-height: 800px) {
+    .lyra-welcome-head { margin-bottom: 10px; gap: 12px; }
+    .lyra-welcome-head h1 { font-size: 24px; margin-bottom: 3px; }
+    .lyra-welcome-head p { display: none; }
+    .lyra-welcome-mark { width: 38px; height: 38px; }
+    .lyra-capgrid { margin-bottom: 12px; gap: 8px; }
+    .lyra-cap { padding: 9px; }
+    .lyra-cap i { width: 22px; height: 22px; margin-bottom: 5px; }
+    .lyra-cap b { font-size: 12.5px; margin-bottom: 2px; }
+    .lyra-cap span { font-size: 11px; line-height: 1.4; }
+    .lyra-suggest-label { margin-bottom: 6px; font-size: 11.5px; }
+    .lyra-suggest { padding: 8px 10px; }
+    .lyra-suggest p { font-size: 11.5px; margin-bottom: 6px; }
+    .lyra-suggest em { font-size: 10px; padding: 2px 7px; }
+    .composer-wrap { padding-top: var(--ly-s3); padding-bottom: var(--ly-s4); }
+}
+
+/* ── Full-bleed width and card columns ──────────────────────────────────────
+   Measured: html.clientWidth 1366 but html.scrollWidth and body width 1356, so
+   the top bar stopped 10px short of the right edge. `inset:0` plus `width:100%`
+   did not resolve it, because 100% resolves against a containing block that is
+   already 10px in. 100vw is the viewport itself and does not have that problem;
+   overflow is hidden so it cannot introduce a horizontal scrollbar.
+
+   Capability cards: below 1240px the grid was dropping to 2 columns, which made
+   it TALLER, not shorter, and at 1024x768 it overflowed the column. Card count
+   is what drives height here, so the grid keeps 4 columns while there is room
+   for readable cards and only halves when the viewport is genuinely narrow. */
+.minimal-chat-shell {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+}
+
+@media (max-width: 1240px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Narrow layout: explicit column assignment ──────────────────────────────
+   At 768px wide the rail is hidden and the shell becomes a single column, but
+   `.chat-panel { grid-column: 2 }` then had no column 2 to sit in, so the grid
+   created an implicit one and the whole page collapsed to 42px. Every child now
+   states its column for this breakpoint rather than relying on the default. */
+@media (max-width: 900px) {
+    .minimal-chat-shell,
+    body.minimal-chat-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+    .minimal-chat-shell > .lyra-topbar { grid-column: 1; grid-row: 1; }
+    .minimal-chat-shell > .chat-panel { grid-column: 1; grid-row: 2; }
+    .minimal-chat-shell > .conv-panel,
+    .minimal-chat-shell > .lyra-chatrail { display: none; }
+}
+
+/* ── Kill the page scrollbar (chat route only) ──────────────────────────────
+   A persistent 10px reserved scrollbar made the top bar stop short of the right
+   edge at every width: body measured 1366 but the top bar inside it 1356.
+   style.css sets `scrollbar-width: thin` on html, which reserves the gutter even
+   when nothing overflows. This block is safe to write here because
+   lyra-chat.css is loaded only by chat.php, so it cannot affect any other page. */
+html {
+    overflow: hidden;
+    height: 100%;
+}
+
+/* Card columns: 4 is both the design and the shortest arrangement, so it is kept
+   for as long as the cards stay readable. Only genuinely narrow viewports halve
+   it. */
+@media (max-width: 900px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+    .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Remove the reserved scrollbar gutter ───────────────────────────────────
+   style.css sets `scrollbar-width: thin` on html. Chromium then reserves a 10px
+   gutter even with `overflow: hidden` on both html and body, so the layout
+   viewport was 1356 inside a 1366 window and the top bar stopped 10px short of
+   the right edge. Measured: body offsetWidth 1366 but clientWidth 1356, i.e. the
+   gutter was inside body, not the page. `overflow: hidden` does not release it;
+   scrollbar-width does. chat.php is the only page that loads this file. */
+html,
+body.minimal-chat-shell {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+html::-webkit-scrollbar,
+body.minimal-chat-shell::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
 }
