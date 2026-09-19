@@ -2,6 +2,10 @@
 session_start();
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
+require_once __DIR__ . '/../api/lyra_chat_data.php';
+require_once __DIR__ . '/../api/lyra_admin_data.php';
+$lyraStats = lyra_ad_stats(24);
+$lyraMachine = lyra_ad_machine();
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
@@ -141,6 +145,7 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
     <meta name="robots" content="noindex, nofollow">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/lyra-ui.css">
+<link rel="stylesheet" href="/assets/css/lyra-admin.css">
     <script src="/assets/js/lyra-ui.js" defer></script>
     <style>
         .ad-top { display:flex; align-items:center; gap:16px; padding:10px 22px; border-bottom:1px solid var(--ly-border);
@@ -235,6 +240,25 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
             </div>
         </div>
 
+        <?php /* LYRA_TASK_DATA_BLOCK */
+        $lyraTasks = lyra_chat_q(
+            "SELECT objective, intent, status, priority FROM ai_os_tasks "
+            . "ORDER BY updated_at DESC, id DESC LIMIT 8"
+        );
+        $lyraTaskCounts = ['total' => 0, 'open' => 0, 'succeeded' => 0, 'failed' => 0, 'unverified' => 0];
+        foreach (lyra_chat_q('SELECT status, COUNT(*) AS n FROM ai_os_tasks GROUP BY status') as $r) {
+            $n = (int) $r['n'];
+            $lyraTaskCounts['total'] += $n;
+            $st = strtoupper((string) $r['status']);
+            if ($st === 'SUCCEEDED')      { $lyraTaskCounts['succeeded'] = $n; }
+            elseif ($st === 'FAILED')     { $lyraTaskCounts['failed'] = $n; }
+            elseif ($st === 'UNVERIFIED') { $lyraTaskCounts['unverified'] = $n; }
+            else                          { $lyraTaskCounts['open'] += $n; }
+        }
+        $lyraLogs = lyra_chat_q(
+            'SELECT created_at, event_type, ip_address FROM security_log ORDER BY id DESC LIMIT 6'
+        );
+        ?>
         <div style="padding:24px">
             <h1 style="font-size:24px;margin-bottom:4px">Admin Dashboard</h1>
             <p class="ly-muted" style="font-size:13px;margin-bottom:22px">
@@ -247,20 +271,28 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
             <div class="ly-grid ly-grid-4 ly-mb-6">
                 <?php
                 $cards = [
-                    ['Total Users',    $totals['users'],         'M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8'],
-                    ['Conversations',  $totals['conversations'], 'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],
-                    ['Messages',       $totals['messages'],      'M4 5h16v11H8l-4 4z'],
-                    ['Dataset Records',$totals['dataset'],       'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6'],
+                    ['Total Users',    $totals['users'],         'M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
+                     '', 'users table'],
+                    ['Conversations',  $totals['conversations'], 'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z',
+                     '', 'conversation history'],
+                    ['Requests (24h)', $lyraStats['requests'],   'M4 5h16v11H8l-4 4z',
+                     lyra_ad_delta_html($lyraStats['requests_delta']), 'vs previous 24h'],
+                    ['Dataset Records',$totals['dataset'],       'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6',
+                     '', 'knowledge base'],
                 ];
                 foreach ($cards as $c): ?>
-                <div class="ly-card ad-stat">
-                    <div class="ly-row-between">
+                <div class="ly-card lyra-stat">
+                    <div class="lyra-stat-top">
                         <span class="ly-tile">
                             <svg class="ly-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $c[2]; ?>"/></svg>
                         </span>
+                        <span class="lyra-stat-label"><?php echo $c[0]; ?></span>
                     </div>
-                    <div class="v" <?php echo $c[1] !== null ? 'data-ly-count="' . $c[1] . '"' : ''; ?>><?php echo nf($c[1]); ?></div>
-                    <div class="k"><?php echo $c[0]; ?></div>
+                    <div class="lyra-stat-value" <?php echo $c[1] !== null ? 'data-ly-count="' . $c[1] . '"' : ''; ?>><?php echo nf($c[1]); ?></div>
+                    <div class="lyra-stat-foot">
+                        <?php echo $c[3] ?? ''; ?>
+                        <span class="lyra-stat-note"><?php echo $c[4] ?? ''; ?></span>
+                    </div>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -345,6 +377,94 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
                             <span style="font-variant-numeric:tabular-nums"><?php echo nf($r[1]); ?></span>
                         </div>
                         <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="ly-panel">
+                    <div class="ly-panel-head">
+                        <h2 class="ly-panel-title">Active Tasks</h2>
+                        <span class="ly-badge"><?php echo (int) $lyraTaskCounts['open']; ?> open</span>
+                    </div>
+                    <div class="ly-panel-body" style="padding:0">
+                        <?php if ($lyraTasks): ?>
+                        <table class="lyra-logtable">
+                            <thead><tr><th>Task</th><th>Intent</th><th>Status</th><th>Priority</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($lyraTasks as $t):
+                                $st = strtoupper((string) $t['status']);
+                                $cls = $st === 'SUCCEEDED' ? 'ok' : ($st === 'FAILED' ? 'bad' : ''); ?>
+                            <tr>
+                                <td class="ly-truncate" style="max-width:280px" title="<?php echo htmlspecialchars((string) $t['objective']); ?>"><?php echo htmlspecialchars((string) $t['objective']); ?></td>
+                                <td class="num"><?php echo htmlspecialchars((string) $t['intent']); ?></td>
+                                <td class="<?php echo $cls; ?>"><?php echo htmlspecialchars($st); ?></td>
+                                <td class="num"><?php echo htmlspecialchars((string) $t['priority']); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <div class="lyra-legend" style="padding:10px 12px">
+                            <span><?php echo number_format($lyraTaskCounts['total']); ?> tasks recorded</span>
+                            <span><?php echo number_format($lyraTaskCounts['succeeded']); ?> succeeded</span>
+                            <span><?php echo number_format($lyraTaskCounts['failed']); ?> failed</span>
+                            <span><?php echo number_format($lyraTaskCounts['unverified']); ?> unverified</span>
+                        </div>
+                        <?php else: ?>
+                        <div class="lyra-nosource" style="padding:16px">No task records yet.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="ly-panel">
+                    <div class="ly-panel-head"><h2 class="ly-panel-title">Resource Usage</h2><span class="ly-badge">live</span></div>
+                    <div class="ly-panel-body">
+                        <?php
+                        $memPct = ($lyraMachine['mem_total'] ?? 0) > 0
+                            ? round($lyraMachine['mem_used'] / $lyraMachine['mem_total'] * 100, 1) : null;
+                        $diskPct = ($lyraMachine['disk_total'] ?? 0) > 0
+                            ? round($lyraMachine['disk_used'] / $lyraMachine['disk_total'] * 100, 1) : null;
+                        foreach ([
+                            ['CPU load',   $lyraMachine['load'] === null ? null : min(100, $lyraMachine['load'] * 100 / max(1, (int) shell_exec('nproc 2>/dev/null') ?: 4)), $lyraMachine['load']],
+                            ['Memory',     $memPct, lyra_ad_fmt_bytes($lyraMachine['mem_used']) . ' / ' . lyra_ad_fmt_bytes($lyraMachine['mem_total'])],
+                            ['Storage',    $diskPct, lyra_ad_fmt_bytes($lyraMachine['disk_used']) . ' / ' . lyra_ad_fmt_bytes($lyraMachine['disk_total'])],
+                            ['Uptime',     null, lyra_ad_fmt_uptime($lyraMachine['uptime'])],
+                        ] as $r): ?>
+                        <div class="lyra-svcrow2">
+                            <span><?php echo $r[0]; ?></span>
+                            <?php if ($r[1] !== null): ?>
+                            <div class="lyra-modelbar" style="flex:0 1 120px"><span style="width:<?php echo min(100, max(0, (float) $r[1])); ?>%"></span></div>
+                            <em><?php echo $r[1] === null ? '' : round((float) $r[1], 1) . '%'; ?></em>
+                            <?php endif; ?>
+                            <em style="color:var(--ly-text-4)"><?php echo htmlspecialchars((string) $r[2]); ?></em>
+                        </div>
+                        <?php endforeach; ?>
+                        <div class="lyra-nosource" style="margin-top:8px">
+                            Network throughput is not shown: no per-interface counter is recorded.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ly-panel">
+                    <div class="ly-panel-head">
+                        <h2 class="ly-panel-title">Recent Logs</h2>
+                        <a href="/pages/security_log.php" style="font-size:11px">View all &rarr;</a>
+                    </div>
+                    <div class="ly-panel-body" style="padding:0">
+                        <?php if ($lyraLogs): ?>
+                        <table class="lyra-logtable">
+                            <thead><tr><th>Time</th><th>Event</th><th>Source</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($lyraLogs as $l): ?>
+                            <tr>
+                                <td class="num"><?php echo htmlspecialchars((string) $l['created_at']); ?></td>
+                                <td class="ly-truncate" style="max-width:180px"><?php echo htmlspecialchars((string) ($l['event_type'] ?? '')); ?></td>
+                                <td class="num"><?php echo htmlspecialchars((string) ($l['ip_address'] ?? '')); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <?php else: ?>
+                        <div class="lyra-nosource" style="padding:16px">No log entries.</div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
