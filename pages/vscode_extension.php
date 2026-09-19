@@ -206,6 +206,7 @@ $extensionId = $publisher . '.' . $name;
         <a href="/pages/api_docs.php" class="nav-link">API Docs</a>
         <a href="/" class="nav-link">Home</a>
     </div>
+    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 
 <div class="page">

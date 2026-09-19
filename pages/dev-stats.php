@@ -1,9 +1,40 @@
 <?php
 session_start();
 require_once __DIR__ . '/../api/security.php';
+require_once __DIR__ . '/../api/lyra_ui_nav.php';
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
+}
+
+/* ADMIN ONLY.
+ * This page reports real business metrics (user and conversation counts,
+ * dataset size, host model inventory, disk headroom). It was reachable
+ * anonymously, which disclosed all of that to anyone who guessed the URL.
+ * Access follows the existing convention in pages/admin.php, except the flag
+ * is read from users.is_admin so any administrator account is handled. */
+$lyIsAdmin = false;
+if (!empty($_SESSION['username'])) {
+    try {
+        $lyCfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
+        $lyDb = new mysqli($lyCfg['host'], $lyCfg['user'], $lyCfg['pass'], $lyCfg['name']);
+        if (!$lyDb->connect_error) {
+            $lySt = $lyDb->prepare('SELECT is_admin FROM users WHERE username = ? LIMIT 1');
+            if ($lySt) {
+                $lySt->bind_param('s', $_SESSION['username']);
+                $lySt->execute();
+                $lyRes = $lySt->get_result();
+                $lyRow = $lyRes ? $lyRes->fetch_assoc() : null;
+                $lyIsAdmin = $lyRow !== null && (int) $lyRow['is_admin'] === 1;
+                $lySt->close();
+            }
+            $lyDb->close();
+        }
+    } catch (\Throwable $e) { $lyIsAdmin = false; }
+}
+if (!$lyIsAdmin) {
+    header('Location: /');
+    exit;
 }
 
 /* Developer statistics. Implements the approved devstatspage design.
@@ -183,6 +214,9 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
             <img src="/images/lyralinklogobolt.png" alt="" class="ly-logo-mark" style="border-radius:8px">
             <span style="font-size:16px">Lyralink</span>
         </a>
+        <div class="ly-sidebar-section" style="padding-top:0">Interface</div>
+        <?php echo lyra_ui_nav_render('/pages/dev-stats/'); ?>
+
         <div class="ly-sidebar-section">Main</div>
         <?php foreach ([['Dashboard','M3 10.5 12 3l9 7.5V21H3z'],['Conversations','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],['Projects','M3 7h7l2 2h9v10H3z'],['Automations','M13 2 4 14h7l-1 8 9-12h-7z'],['Files','M6 3h8l4 4v14H6z'],['Knowledge','M4 5h16v14H4z'],['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8']] as $n): ?>
         <a class="ly-navitem" href="#">

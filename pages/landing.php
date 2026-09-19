@@ -140,11 +140,12 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
 <nav class="ly-topnav lp-nav">
     <a class="ly-logo" href="/"><?php echo $lyraMark; ?> Lyralink</a>
     <div class="ly-navlinks">
-        <a class="ly-navlink is-active" href="/">Home</a>
-        <a class="ly-navlink" href="/#features">Features</a>
+        <a class="ly-navlink is-active" href="/pages/landing/">Home</a>
+        <a class="ly-navlink" href="#features">Features</a>
         <a class="ly-navlink" href="/pages/pricing/">Pricing</a>
         <a class="ly-navlink" href="/pages/api_docs/">Docs</a>
-        <a class="ly-navlink" href="/pages/about/">About</a>
+        <a class="ly-navlink" href="/pages/chat-workspace/">Chat</a>
+        <a class="ly-navlink" href="/pages/teams/">Teams</a>
     </div>
     <div class="ly-spacer"></div>
     <a class="ly-btn ly-btn-quiet ly-btn-icon" href="#" aria-label="Toggle theme" title="Theme">

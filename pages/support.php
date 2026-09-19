@@ -130,6 +130,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         <div class="agent-counter" id="agentCounter">
             <div class="agent-dot none" id="agentDot"></div>
             <span id="agentCountText">Checking...</span>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
         </div>
         <a href="/chat" class="nav-link">← Chat</a>
     </div>

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../api/security.php';
+require_once __DIR__ . '/../api/lyra_ui_nav.php';
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
 }
@@ -58,7 +59,15 @@ try {
         // Messages hang off conversations, which hang off channels:
         // social_channels <- social_channel_conversations -> social_messages
         if ($channels) {
+            // Honour ?channel=<id> so the channel list is real navigation
+            // instead of a row of links that all return the same channel.
+            $want = isset($_GET['channel']) ? (int) $_GET['channel'] : 0;
             $active = $channels[0];
+            if ($want > 0) {
+                foreach ($channels as $c) {
+                    if ((int) ($c['id'] ?? 0) === $want) { $active = $c; break; }
+                }
+            }
             $cid = (int) ($active['id'] ?? 0);
             $messages = $run(
                 'SELECT m.* FROM social_messages m '
@@ -255,15 +264,18 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 <!-- ══ SIDEBAR ══ -->
 <aside class="ly-sidebar tw-nav">
     <div class="tw-navscroll">
-        <div class="ly-sidebar-section" style="padding-top:0">Main</div>
+        <div class="ly-sidebar-section" style="padding-top:0">Interface</div>
+        <?php echo lyra_ui_nav_render('/pages/teams/'); ?>
+
+        <div class="ly-sidebar-section">Workspace</div>
         <?php foreach ([
-            ['Home','M3 10.5 12 3l9 7.5V21H3z',1],
-            ['Messages','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z',0],
-            ['Files','M6 3h8l4 4v14H6z',0],
-            ['People','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8',0],
-            ['Search','M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM21 21l-4.3-4.3',0],
-        ] as $n): ?>
-        <a class="ly-navitem<?php echo $n[2] ? ' is-active' : ''; ?>" href="#">
+            ['Messages','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z','/chat'],
+            ['People',  'M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8',''],
+            ['Files',   'M6 3h8l4 4v14H6z',''],
+            ['Search',  'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM21 21l-4.3-4.3',''],
+        ] as $n):
+            if ($n[2] === '') { echo lyra_ui_pending($n[0], $n[1]); continue; } ?>
+        <a class="ly-navitem" href="<?php echo htmlspecialchars($n[2], ENT_QUOTES); ?>">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
             <?php echo $n[0]; ?>
         </a>
@@ -274,7 +286,8 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
             $nm = pk($ch, ['name'], 'channel');
             $cc = $chanCounts[(int) ($ch['id'] ?? 0)] ?? 0;
             $isVoice = pk($ch, ['type']) === 'voice'; ?>
-        <a class="tw-chan<?php echo $i === 0 ? ' is-active' : ''; ?>" href="#"
+        <a class="tw-chan<?php echo ((int) ($ch['id'] ?? 0) === (int) ($active['id'] ?? -1)) ? ' is-active' : ''; ?>"
+           href="?channel=<?php echo (int) ($ch['id'] ?? 0); ?>"
            title="#<?php echo htmlspecialchars($nm); ?>">
             <span style="color:var(--ly-text-4);flex:0 0 auto"><?php echo $isVoice ? '&#128266;' : '#'; ?></span>
             <span class="ly-truncate"><?php echo htmlspecialchars($nm); ?></span>

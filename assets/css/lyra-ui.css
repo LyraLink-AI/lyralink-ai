@@ -490,6 +490,9 @@ body.ly > * { position: relative; z-index: 1; }
   box-shadow: inset 2px 0 0 var(--ly-primary);
 }
 .ly-navitem .ly-ico { flex: 0 0 auto; opacity: 0.85; }
+/* A nav item that is designed but not built yet. Dimmed and non-interactive so
+   it reads as unavailable rather than broken. */
+.ly-navitem.is-pending { opacity: 0.45; cursor: not-allowed; }
 .ly-navitem-count {
   margin-left: auto;
   min-width: 22px; padding: 1px 7px;

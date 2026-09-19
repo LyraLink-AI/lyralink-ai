@@ -227,6 +227,7 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
     <div class="nav-logo">⚡</div>
     <h1>Lyra<span>link</span></h1>
     <a href="/chat" class="nav-back">← Back to Chat</a>
+    <a href="/pages/landing/" class="nav-back">New UI</a>
 </nav>
 
 <div class="hero">

@@ -197,6 +197,7 @@ if (!empty($_SESSION['user_id'])) {
     <!-- ══ RIGHT: auth ══ -->
     <section class="lg-right">
         <div class="lg-toplink">
+            <a href="/pages/landing.php" style="margin-right:14px">&larr; New UI home</a>
             Don&rsquo;t have an account?
             <a href="#" id="toRegister">Sign Up
                 <svg class="ly-ico ly-ico-sm" style="vertical-align:-3px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>

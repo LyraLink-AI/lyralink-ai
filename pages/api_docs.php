@@ -167,6 +167,7 @@
     <div class="nav-links">
         <a href="/pages/api_keys.php" class="nav-link active">🔑 API Keys</a>
         <a href="/chat" class="nav-link">← Chat</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

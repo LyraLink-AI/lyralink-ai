@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once __DIR__ . '/../api/security.php';
+require_once __DIR__ . '/../api/lyra_ui_nav.php';
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
@@ -169,18 +171,26 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
                 New Chat
             </button>
 
+            <div class="ly-sidebar-section">Interface</div>
+            <?php echo lyra_ui_nav_render('/pages/chat-workspace/'); ?>
+
+            <div class="ly-sidebar-section">Workspace</div>
             <?php
+            /* [label, icon, badge, href]. An empty href means the screen is
+             * designed but not built, and is rendered as an explicit pending
+             * item rather than a link that goes nowhere. */
             $nav = [
-                ['Chat',        'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z', null, true],
-                ['Conversations','M4 5h16v11H8l-4 4z', 12, false],
-                ['Projects',    'M3 7h7l2 2h9v10H3z', 3, false],
-                ['Automations', 'M13 2 4 14h7l-1 8 9-12h-7z', null, false],
-                ['Files',       'M6 3h8l4 4v14H6z', null, false],
-                ['Knowledge',   'M4 5h16v14H4z', null, false],
-                ['Settings',    'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', null, false],
+                ['Chat',         'M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z', null, '/pages/chat-workspace/'],
+                ['Conversations','M4 5h16v11H8l-4 4z', 12, '/chat'],
+                ['Projects',     'M3 7h7l2 2h9v10H3z', 3, ''],
+                ['Automations',  'M13 2 4 14h7l-1 8 9-12h-7z', null, '/automation'],
+                ['Files',        'M6 3h8l4 4v14H6z', null, ''],
+                ['Knowledge',    'M4 5h16v14H4z', null, ''],
+                ['Settings',     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', null, ''],
             ];
-            foreach ($nav as $n): ?>
-            <a class="ly-navitem<?php echo $n[3] ? ' is-active' : ''; ?>" href="#">
+            foreach ($nav as $n):
+                if ($n[3] === '') { echo lyra_ui_pending($n[0], $n[1]); continue; } ?>
+            <a class="ly-navitem<?php echo $n[3] === '/pages/chat-workspace/' ? ' is-active' : ''; ?>" href="<?php echo htmlspecialchars($n[3], ENT_QUOTES); ?>">
                 <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
                 <?php echo $n[0]; ?>
                 <?php if ($n[2] !== null): ?><span class="ly-navitem-count"><?php echo $n[2]; ?></span><?php endif; ?>
@@ -190,14 +200,15 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
             <div class="ly-sidebar-section">Quick Access</div>
             <?php
             $quick = [
-                ['Deploy Application', 'M12 3v12M7 10l5 5 5-5M5 21h14'],
-                ['Code Assistant',     'm8 6-6 6 6 6M16 6l6 6-6 6'],
-                ['System Monitor',     'M3 12h4l3 8 4-16 3 8h4'],
-                ['Research &amp; Analyze','M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM21 21l-4.3-4.3'],
-                ['Create Documentation','M6 3h8l4 4v14H6z'],
+                ['Deploy Application', 'M12 3v12M7 10l5 5 5-5M5 21h14', ''],
+                ['Code Assistant',     'm8 6-6 6 6 6M16 6l6 6-6 6', '/pages/vscode_extension/'],
+                ['System Monitor',     'M3 12h4l3 8 4-16 3 8h4', '/pages/status'],
+                ['Research &amp; Analyze','M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM21 21l-4.3-4.3', ''],
+                ['Create Documentation','M6 3h8l4 4v14H6z', '/pages/api_docs'],
             ];
-            foreach ($quick as $q): ?>
-            <a class="ly-navitem" href="#">
+            foreach ($quick as $q):
+                if ($q[2] === '') { echo lyra_ui_pending($q[0], $q[1]); continue; } ?>
+            <a class="ly-navitem" href="<?php echo htmlspecialchars($q[2], ENT_QUOTES); ?>">
                 <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $q[1]; ?>"/></svg>
                 <?php echo $q[0]; ?>
             </a>

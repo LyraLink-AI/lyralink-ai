@@ -281,6 +281,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
         <a href="/pages/admin.php" class="nav-link">Admin</a>
         <a href="/chat" class="nav-link">Chat</a>
     </div>
+    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 
 <div class="page">

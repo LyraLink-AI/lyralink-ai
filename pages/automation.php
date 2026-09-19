@@ -156,6 +156,7 @@ select option{background:var(--surface)}
   <div class="nav-links">
     <a href="/chat" class="nav-link">Chat</a>
     <a href="/pages/pricing" class="nav-link">Upgrade</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
   </div>
 </nav>
 

@@ -95,6 +95,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         <?php else: ?>
         <a href="/?login=1" class="nav-link">Sign In</a>
         <?php endif; ?>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

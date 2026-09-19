@@ -386,6 +386,7 @@ if ($isForkMode) {
             <a href="#operators" class="nav-link">Operators</a>
             <a href="#faq" class="nav-link">FAQ</a>
             <a href="/pages/pricing/" class="nav-link">Pricing</a>
+            <a href="/pages/landing/" class="nav-link">New UI</a>
             <a href="/pages/reseller_apply.php" class="nav-link primary">Apply</a>
         </div>
     </div>
@@ -604,6 +605,10 @@ if ($isForkMode) {
                     <a href="/pages/vscode_extension/">VS Code Extension</a>
                     <a href="/pages/api_docs/">API Docs</a>
                     <a href="/pages/api_keys.php">API Keys</a>
+                    <a href="/pages/landing/">New UI &mdash; Landing</a>
+                    <a href="/pages/chat-workspace/">New UI &mdash; Chat</a>
+                    <a href="/pages/teams/">New UI &mdash; Teams</a>
+                    <a href="/pages/login/">New UI &mdash; Sign in</a>
                 </div>
                 <div class="footer-links-group">
                     <h4>Community</h4>

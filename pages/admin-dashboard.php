@@ -1,9 +1,40 @@
 <?php
 session_start();
 require_once __DIR__ . '/../api/security.php';
+require_once __DIR__ . '/../api/lyra_ui_nav.php';
 
 if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
     header('Location: /pages/maintenance.php'); exit;
+}
+
+/* ADMIN ONLY.
+ * This page reports real business metrics (user and conversation counts,
+ * dataset size, host model inventory, disk headroom). It was reachable
+ * anonymously, which disclosed all of that to anyone who guessed the URL.
+ * Access follows the existing convention in pages/admin.php, except the flag
+ * is read from users.is_admin so any administrator account is handled. */
+$lyIsAdmin = false;
+if (!empty($_SESSION['username'])) {
+    try {
+        $lyCfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
+        $lyDb = new mysqli($lyCfg['host'], $lyCfg['user'], $lyCfg['pass'], $lyCfg['name']);
+        if (!$lyDb->connect_error) {
+            $lySt = $lyDb->prepare('SELECT is_admin FROM users WHERE username = ? LIMIT 1');
+            if ($lySt) {
+                $lySt->bind_param('s', $_SESSION['username']);
+                $lySt->execute();
+                $lyRes = $lySt->get_result();
+                $lyRow = $lyRes ? $lyRes->fetch_assoc() : null;
+                $lyIsAdmin = $lyRow !== null && (int) $lyRow['is_admin'] === 1;
+                $lySt->close();
+            }
+            $lyDb->close();
+        }
+    } catch (\Throwable $e) { $lyIsAdmin = false; }
+}
+if (!$lyIsAdmin) {
+    header('Location: /');
+    exit;
 }
 
 /* Admin dashboard. Implements the approved Admin-Dashboard design.
@@ -154,7 +185,12 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
             ['Logs','M6 3h8l4 4v14H6zM9 12h6M9 16h4'],
             ['Settings','M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'],
         ];
-        foreach ($nav as $n): ?>
+        ?>
+        <div class="ly-sidebar-section" style="padding-top:0">Interface</div>
+        <?php echo lyra_ui_nav_render('/pages/admin-dashboard/'); ?>
+
+        <div class="ly-sidebar-section">Administration</div>
+        <?php foreach ($nav as $n): ?>
         <a class="ly-navitem<?php echo !empty($n[2]) ? ' is-active' : ''; ?>" href="#">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
             <?php echo $n[0]; ?>

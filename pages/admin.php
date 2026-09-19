@@ -196,6 +196,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
     <div class="nav-links">
         <a href="/pages/reseller_admin.php" class="nav-link">🏢 Operators</a>
         <a href="/chat" class="nav-link">← Chat</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

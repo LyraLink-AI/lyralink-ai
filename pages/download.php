@@ -411,6 +411,7 @@ $linuxAppImageSizeEsc = htmlspecialchars(human_bytes((int)$linuxAppImageSize), E
     <div class="nav-links">
         <a class="nav-link" href="/chat">Chat</a>
         <a class="nav-link" href="/pages/pricing/">Pricing</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

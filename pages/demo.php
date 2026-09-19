@@ -757,6 +757,7 @@ if (file_exists(__DIR__ . '/maintenance.flag') && !isset($_COOKIE['lyralink_dev'
 				<a class="nav-link" href="#tour">Tour</a>
 				<a class="nav-link" href="#embed">Embed</a>
 				<a class="nav-link nav-main" href="/chat">Open Chat</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
 			</div>
 		</nav>
 

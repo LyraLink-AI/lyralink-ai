@@ -223,6 +223,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         <span class="last-updated" id="lastUpdated">Loading...</span>
         <a href="/chat" class="nav-link"> ← Back</a>
     </div>
+    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 
 <div class="page">

@@ -55,6 +55,7 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
     <a class="nav-link" href="/automation">Automations</a>
     <a class="nav-link" href="/pages/admin.php">Admin</a>
     <a class="nav-link" href="/chat">Chat</a>
+        <a href="/pages/landing/" class="nav-link">New UI</a>
   </div>
 </nav>
 <div class="wrap">
