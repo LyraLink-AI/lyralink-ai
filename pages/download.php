@@ -402,6 +402,7 @@ $linuxAppImageSizeEsc = htmlspecialchars(human_bytes((int)$linuxAppImageSize), E
         }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <div class="noise"></div>

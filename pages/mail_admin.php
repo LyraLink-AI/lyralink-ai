@@ -48,6 +48,7 @@ if (empty($_SESSION['username']) || $_SESSION['username'] !== $devUsername) {
         @media (max-width: 980px) { .grid { grid-template-columns:1fr; } }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

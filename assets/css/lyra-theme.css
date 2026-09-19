@@ -1,0 +1,199 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK THEME — LEGACY PAGE BRIDGE
+   ══════════════════════════════════════════════════════════════════════════
+   These pages were written before the design system existed. Each one declares
+   its own `:root` with its own palette (near-black #0a0a0f, purple #7c3aed,
+   Syne typeface). Rather than rewrite 37 files and their markup, this file
+   remaps the variable names they already use onto the current design tokens.
+
+   Load order is what makes this work: every page loads this file LAST in
+   <head>, after its own inline <style>. Identical specificity means the later
+   declaration wins, so these values override the page's own :root without
+   needing !important.
+
+   To retheme the site, change assets/css/lyra-ui.css. Do not edit values here
+   unless you are deliberately overriding the design system.
+
+   Adding a new legacy-style page? Add this one line before </head>:
+     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+    /* ── Surfaces ─────────────────────────────────────────────────────────
+       The old palette was neutral near-black. The design system is navy-black,
+       so these shift hue as well as value. Every alias below is a real name
+       found in the existing pages; nothing here is speculative. */
+    --bg:              #02091A;
+    --bg-deep:         #01060F;
+    --surface:         #061027;
+    --surface2:        #0A1533;
+    --surface-2:       #0A1533;
+    --surface-strong:  #101B3D;
+    --surface-soft:    #061027;
+    --panel:           #061027;
+    --panel-2:         #0A1533;
+
+    /* ── Borders ───────────────────────────────────────────────────────── */
+    --border:          rgba(255, 255, 255, 0.075);
+    --border-2:        rgba(255, 255, 255, 0.12);
+    --border-strong:   rgba(255, 255, 255, 0.18);
+
+    /* ── Accent ───────────────────────────────────────────────────────────
+       #7c3aed was the old purple. The design system accent is #6C3AF8, a close
+       relative, so this reads as the same brand refined rather than replaced. */
+    --accent:          #6C3AF8;
+    --accent-hover:    #7D4FFF;
+    --accent-light:    #B9A4FF;
+    --accent-soft:     rgba(108, 58, 248, 0.14);
+    --accent-glow:     rgba(108, 58, 248, 0.30);
+    --accent-line:     rgba(108, 58, 248, 0.36);
+    --accent-ink:      #FFFFFF;
+    --accent-2:        #9B5CFF;
+
+    --secondary:       #38BDF8;
+    --secondary-soft:  rgba(56, 189, 248, 0.13);
+
+    /* ── Text ──────────────────────────────────────────────────────────── */
+    --text:            #F3F5FA;
+    --text-strong:     #FFFFFF;
+    --text-soft:       #A8B0C8;
+    --text-2:          #A8B0C8;
+    --text-muted:      #6E7794;
+    --text-dim:        #6E7794;
+    --muted:           #6E7794;
+    --dim:             #4A5270;
+    --text-3:          #6E7794;
+    --text-4:          #4A5270;
+
+    /* ── Semantic ─────────────────────────────────────────────────────────
+       Every alias here appeared in the existing pages. */
+    --success:         #22C55E;
+    --ok:              #22C55E;
+    --green:           #22C55E;
+    --success-soft:    rgba(34, 197, 94, 0.13);
+    --error:           #EF4444;
+    --err:             #EF4444;
+    --bad:             #EF4444;
+    --red:             #EF4444;
+    --danger:          #EF4444;
+    --error-soft:      rgba(239, 68, 68, 0.13);
+    --warn:            #F59E0B;
+    --warning:         #F59E0B;
+    --yellow:          #F59E0B;
+    --orange:          #F59E0B;
+    --warn-soft:       rgba(245, 158, 11, 0.13);
+    --info:            #38BDF8;
+    --blue:            #38BDF8;
+    --pink:            #F472B6;
+
+    /* Status aliases used by pages/status.php */
+    --op:              #22C55E;  --op-bg:  rgba(34, 197, 94, 0.10);  --op-border:  rgba(34, 197, 94, 0.25);
+    --deg:             #F59E0B;  --deg-bg: rgba(245, 158, 11, 0.10); --deg-border: rgba(245, 158, 11, 0.25);
+    --par:             #F97316;  --par-bg: rgba(249, 115, 22, 0.10); --par-border: rgba(249, 115, 22, 0.25);
+    --maj:             #EF4444;  --maj-bg: rgba(239, 68, 68, 0.10);  --maj-border: rgba(239, 68, 68, 0.25);
+    --mai:             #38BDF8;  --mai-bg: rgba(56, 189, 248, 0.10); --mai-border: rgba(56, 189, 248, 0.25);
+
+    /* ── Elevation & shape ─────────────────────────────────────────────── */
+    --shadow:          0 8px 24px rgba(0, 0, 0, 0.40);
+    --shadow-sm:       0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-lg:       0 24px 64px rgba(0, 0, 0, 0.50);
+    --shadow-glow:     0 10px 40px rgba(108, 58, 248, 0.30);
+
+    --radius:          14px;
+    --radius-sm:       10px;
+    --radius-lg:       18px;
+    --radius-xl:       24px;
+
+    /* ── Type ────────────────────────────────────────────────────────────
+       The old pages used Syne for headings and DM Mono for body. The design
+       system uses Inter for UI text and keeps DM Mono for code. */
+    --font:            "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono:       "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+
+/* The legacy pages hardcode Syne/DM Mono on body. Inter matches the design
+   system and is already loaded by the new pages, so it is safe to switch. */
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+}
+
+/* Every legacy page paints a purple radial glow behind the content. It was
+   tuned for the old #0a0a0f background and reads as a muddy smear on navy, so
+   it is replaced with the design system's own treatment. */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(1100px 620px at 50% -10%, rgba(108, 58, 248, 0.10), transparent 60%),
+        radial-gradient(900px 560px at 88% 108%, rgba(108, 58, 248, 0.07), transparent 62%);
+    display: block;
+}
+
+/* Headings used Syne; the design system uses Inter.
+
+   `!important` is deliberate and is the correct tool here, for a specific
+   reason: this file exists solely to override page-level styling. The pages
+   set their heading font in many different shapes - `.doc-section h2`,
+   `.overall-text h2`, `.page-header h1`, `.hero h1`, `.panel h3`, and others
+   inside @media blocks. Enumerating them is unbounded and silently breaks
+   whenever a page adds another one: two pages were still rendering in Syne
+   because their rule sat inside a media query that a selector scan does not see.
+
+   Scope is limited to font-family on headings under body, so nothing else is
+   affected and the cascade below still works normally. */
+body h1, body h2, body h3, body h4, body h5, body h6,
+body .page-header h1, body .hero h1, body .panel h3,
+body .doc-section h2, body .cta-bar h3, body nav h1,
+body .form-success h3, body .overall-text h2, body .card h3,
+body .section h2, body .shell h1, body .wrap h1, body .container h1 {
+    font-family: var(--font) !important;
+    letter-spacing: -0.022em;
+}
+
+/* Code stays monospace, which is the one place the old face was correct. */
+code, pre, kbd, samp,
+.mono, .nav-title, .footer-version {
+    font-family: var(--font-mono);
+}
+
+/* The legacy pages use `mix-blend-mode: lighten` on the nav logo, which makes
+   a transparent PNG nearly invisible against the new navy background.
+
+   Separately: the logo itself was already broken before this change. Several
+   pages request /assets/lyralinklogobolt.png, which returns 404. The real file
+   is /images/lyralinklogobolt.png. Not fixed here - that is page markup, not
+   theming. */
+.nav-logo {
+    mix-blend-mode: normal;
+}
+
+/* ── Common legacy components ───────────────────────────────────────────── */
+/* Repointed at the design tokens so these read as part of the same system
+   as the new pages, without changing any page's markup. */
+
+nav {
+    background: rgba(2, 9, 26, 0.88) !important;
+    border-bottom-color: var(--border) !important;
+}
+
+.footer-links-group h4,
+.footer-brand,
+.footer-tagline { font-family: var(--font); }
+
+/* Scrollbars: the legacy pages set these two properties per element. */
+* {
+    scrollbar-color: var(--accent) rgba(255, 255, 255, 0.04);
+}
+
+/* ── Printable ──────────────────────────────────────────────────────────── */
+@media print {
+    body { background: #fff; color: #000; }
+    body::before { display: none; }
+}

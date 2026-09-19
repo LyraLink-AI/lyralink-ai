@@ -48,6 +48,7 @@ if ($isMaintenance && !$isDevCookie) {
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/chat/app.css?v=<?php echo htmlspecialchars($chatCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body class="minimal-chat-shell<?php echo $isWidgetEmbed ? ' widget-chat-shell' : ''; ?>">
 

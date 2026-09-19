@@ -71,6 +71,7 @@ $username = htmlspecialchars((string)($_SESSION['username'] ?? ''), ENT_QUOTES, 
         .no-mailbox-info strong { color:var(--text); }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

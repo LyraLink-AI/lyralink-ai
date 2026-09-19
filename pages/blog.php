@@ -98,6 +98,7 @@ $pageDescription = $post
         .tag{display:inline-block;border:1px solid var(--border2);border-radius:4px;padding:2px 10px;font-size:10px;color:var(--text-muted);margin-right:6px}
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

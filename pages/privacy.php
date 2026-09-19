@@ -60,6 +60,7 @@
         @media(max-width:600px){ .contact-card { flex-direction: column; } .contact-card a { margin-left: 0; } .quick-nav { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; } .quick-nav a { white-space: nowrap; } }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <?php

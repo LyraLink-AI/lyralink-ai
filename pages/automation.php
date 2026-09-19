@@ -148,6 +148,7 @@ select option{background:var(--surface)}
 @media(max-width:640px){.quick-jump{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}.quick-jump a{white-space:nowrap}.filter-input{min-width:0;width:100%}}
 </style>
 <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

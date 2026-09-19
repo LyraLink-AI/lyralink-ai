@@ -83,6 +83,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         .status-badge.rejected{background:rgba(239,68,68,.15);color:var(--error);border:1px solid rgba(239,68,68,.3)}
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

@@ -648,7 +648,8 @@ function support_build_password_reset_email(string $username, string $tempPasswo
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Password Reset</title></head>
+<title>Password Reset</title>    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+</head>
 <body style="margin:0;padding:0;background:#0a0a0f;font-family:'Segoe UI',Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0f;padding:40px 20px">
     <tr><td align="center">

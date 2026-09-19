@@ -46,6 +46,7 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
 .pill{display:inline-flex;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:10px;color:var(--muted)}
 @media(max-width:900px){.grid{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}}
 </style>
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

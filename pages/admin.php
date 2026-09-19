@@ -187,6 +187,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
         @media(max-width:700px){ .diag-grid { grid-template-columns:1fr; } }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 

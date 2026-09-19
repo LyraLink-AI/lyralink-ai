@@ -45,6 +45,7 @@
         @media(max-width:600px){ .contact-card { flex-direction: column; } .contact-card a { margin-left: 0; } }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

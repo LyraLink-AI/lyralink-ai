@@ -122,6 +122,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         #ticketView.active,.screen.active{display:block}
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

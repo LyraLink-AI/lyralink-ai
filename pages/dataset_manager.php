@@ -115,6 +115,7 @@ if (!$isDevUser) {
         @media(max-width:700px){ .quick-jump { flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; } .quick-jump button { white-space:nowrap; } }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 

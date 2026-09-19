@@ -154,6 +154,7 @@ if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $
         @media(max-width:640px){.container{padding:16px 12px 60px}.btn-actions{flex-direction:column}}
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

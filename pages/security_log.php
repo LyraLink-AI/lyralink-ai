@@ -86,6 +86,7 @@ if (!$isDevSession && !($isForkMode && $allowUnauthForkAdmin)) {
         .btn-unblock:hover{background:rgba(239,68,68,0.1)}
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <nav>

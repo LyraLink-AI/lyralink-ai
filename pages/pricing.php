@@ -220,6 +220,7 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
         }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 

@@ -210,6 +210,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
         }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <div class="orb orb1"></div>
@@ -230,7 +231,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
 
     <!-- OVERALL BANNER -->
     <div class="overall-banner operational reveal" id="overallBanner">
-        <div class="overall-icon" id="overallIcon">\u2705</div>
+        <div class="overall-icon" id="overallIcon">&#9989;</div>
         <div class="overall-text">
             <h2 id="overallTitle">All Systems Operational</h2>
             <p id="overallSub">No incidents reported. All services running normally.</p>
@@ -286,7 +287,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_d
     <div class="section reveal" id="incidentsSection">
         <div class="section-label">Active Incidents</div>
         <div id="activeIncidents">
-            <div class="no-incidents"><div class="ni-icon">\u2705</div>No active incidents</div>
+            <div class="no-incidents"><div class="ni-icon">&#9989;</div>No active incidents</div>
         </div>
     </div>
 

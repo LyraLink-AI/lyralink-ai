@@ -416,6 +416,7 @@ if (empty($_SESSION['user_id'])) {
         }
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
+    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 </head>
 <body>
 <div class="app">
