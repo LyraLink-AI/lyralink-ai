@@ -117,8 +117,12 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^$ index.php [L]
 
 # Clean URLs for pages/
+# LYRA_PAGES_EXISTS: only rewrite when the target actually exists, so a
+# missing page falls through to a real 404 instead of a 500 from PHP-FPM.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} ^/pages/([^/]+)/?$
+RewriteCond %{DOCUMENT_ROOT}/pages/%1.php -f
 RewriteRule ^pages/([^/]+)/?$ pages/$1.php [L]
 
 # Top-level clean URLs: /slug -> pages/slug.php (only when that file exists)
