@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/../api/security.php';
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_set_cookie_params([
@@ -8,7 +9,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    session_start();
+    lyra_session_boot();
 }
 
 $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));

@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/api/session_boot.php';
+lyra_session_boot();
 require_once __DIR__ . '/api/lyra_chat_chrome.php';
 require_once __DIR__ . '/api/lyra_chat_data.php';
 $maintenanceFlag = __DIR__ . '/maintenance.flag';

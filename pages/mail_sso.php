@@ -1,6 +1,7 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/../api/security.php';
-session_start();
+lyra_session_boot();
 
 function sso_fail(string $message): void {
     http_response_code(400);

@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
 require_once __DIR__ . '/../api/lyra_teams_chrome.php';

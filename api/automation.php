@@ -1,9 +1,10 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/saas.php';
 require_once __DIR__ . '/lib/network_policy.php';
 require_once __DIR__ . '/lib/chat/os_core.php';
-session_start();
+lyra_session_boot();
 api_json_headers();
 
 $dbCfg = api_db_config(['host'=>'localhost','user'=>'app_user','pass'=>'','name'=>'aicloud']);

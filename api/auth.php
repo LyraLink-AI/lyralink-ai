@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/session_boot.php';
 require_once __DIR__ . '/saas.php';
 session_set_cookie_params([
     'lifetime' => 0,
@@ -8,7 +9,7 @@ session_set_cookie_params([
     'httponly' => true,
     'samesite' => 'Lax',
 ]);
-session_start();
+lyra_session_boot();
 api_json_headers();
 
 // Resolve action before expensive bootstrap work so frequent auth checks can
@@ -228,6 +229,8 @@ $db->query("CREATE TABLE IF NOT EXISTS user_mobile_tokens (
 const AUTH_IDLE_TIMEOUT = 540; // 9 minutes in seconds
 
 function auth_finalize_login(array $user): void {
+    // Fixation defence: the id handed out before login must not survive it.
+    lyra_session_elevate();
     $_SESSION['user_id'] = (int)$user['id'];
     $_SESSION['username'] = $user['username'];
     $_SESSION['user_email'] = $user['email'] ?? null;
@@ -795,8 +798,25 @@ function auth_log_registration_to_discord(mysqli $db, int $userId, string $usern
 }
 
 function auth_rate_limit_status(mysqli $db, string $bucket, string $identifier, int $maxAttempts, int $windowSeconds, int $lockoutSeconds): array {
-    $stmt = $db->prepare("SELECT id, attempts, window_start, blocked_until FROM auth_rate_limits WHERE bucket = ? AND identifier = ? LIMIT 1");
-    $stmt->bind_param('ss', $bucket, $identifier);
+    // Every comparison here is made by MySQL, never by PHP.
+    //
+    // The previous version mixed the two clocks: it read a MySQL datetime and
+    // compared it against PHP's time(). PHP-FPM runs UTC while MySQL runs the
+    // host timezone, so a window written moments earlier looked hours old, the
+    // reset branch fired on every request, and `attempts` never exceeded 1.
+    // Brute-force protection was configured for 8 attempts per 15 minutes and
+    // enforced nothing. Doing the arithmetic in SQL removes the whole class of
+    // bug regardless of how either clock is configured.
+    $stmt = $db->prepare(
+        'SELECT id, attempts, blocked_until, window_start, '
+        . 'CASE WHEN blocked_until IS NOT NULL AND blocked_until > NOW() '
+        . '     THEN TIMESTAMPDIFF(SECOND, NOW(), blocked_until) ELSE 0 END AS retry_after, '
+        . 'CASE WHEN window_start IS NULL '
+        . '       OR TIMESTAMPDIFF(SECOND, window_start, NOW()) > ? '
+        . '     THEN 1 ELSE 0 END AS window_expired '
+        . 'FROM auth_rate_limits WHERE bucket = ? AND identifier = ? LIMIT 1'
+    );
+    $stmt->bind_param('iss', $windowSeconds, $bucket, $identifier);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -805,38 +825,34 @@ function auth_rate_limit_status(mysqli $db, string $bucket, string $identifier, 
         return ['blocked' => false, 'retry_after' => 0, 'row_id' => null, 'attempts' => 0];
     }
 
-    $nowTs = time();
-    $windowStartTs = strtotime((string)$row['window_start']);
-    $blockedUntilTs = !empty($row['blocked_until']) ? strtotime((string)$row['blocked_until']) : 0;
+    $rowId    = (int) $row['id'];
+    $attempts = (int) $row['attempts'];
 
-    if ($blockedUntilTs > $nowTs) {
-        return [
-            'blocked' => true,
-            'retry_after' => max(1, $blockedUntilTs - $nowTs),
-            'row_id' => (int)$row['id'],
-            'attempts' => (int)$row['attempts'],
-        ];
+    // Already locked out.
+    if ((int) $row['retry_after'] > 0) {
+        return ['blocked' => true, 'retry_after' => (int) $row['retry_after'], 'row_id' => $rowId, 'attempts' => $attempts];
     }
 
-    if ($windowStartTs <= 0 || ($nowTs - $windowStartTs) > $windowSeconds) {
-        $resetStmt = $db->prepare("UPDATE auth_rate_limits SET attempts = 0, window_start = NOW(), blocked_until = NULL, last_attempt_at = NOW() WHERE id = ?");
-        $rowId = (int)$row['id'];
-        $resetStmt->bind_param('i', $rowId);
-        $resetStmt->execute();
-        $resetStmt->close();
+    // Window elapsed: start a fresh one. Uses a prepared statement because the
+    // id is bound, not interpolated.
+    if ((int) $row['window_expired'] === 1) {
+        $rst = $db->prepare('UPDATE auth_rate_limits SET attempts = 0, window_start = NOW(), blocked_until = NULL, last_attempt_at = NOW() WHERE id = ?');
+        $rst->bind_param('i', $rowId);
+        $rst->execute();
+        $rst->close();
         return ['blocked' => false, 'retry_after' => 0, 'row_id' => $rowId, 'attempts' => 0];
     }
 
-    if ((int)$row['attempts'] >= $maxAttempts) {
-        $blockStmt = $db->prepare("UPDATE auth_rate_limits SET blocked_until = DATE_ADD(NOW(), INTERVAL ? SECOND), last_attempt_at = NOW() WHERE id = ?");
-        $rowId = (int)$row['id'];
-        $blockStmt->bind_param('ii', $lockoutSeconds, $rowId);
-        $blockStmt->execute();
-        $blockStmt->close();
-        return ['blocked' => true, 'retry_after' => $lockoutSeconds, 'row_id' => $rowId, 'attempts' => (int)$row['attempts']];
+    // Threshold reached: apply the lockout now rather than waiting a request.
+    if ($attempts >= $maxAttempts) {
+        $bst = $db->prepare('UPDATE auth_rate_limits SET blocked_until = DATE_ADD(NOW(), INTERVAL ? SECOND), last_attempt_at = NOW() WHERE id = ?');
+        $bst->bind_param('ii', $lockoutSeconds, $rowId);
+        $bst->execute();
+        $bst->close();
+        return ['blocked' => true, 'retry_after' => $lockoutSeconds, 'row_id' => $rowId, 'attempts' => $attempts];
     }
 
-    return ['blocked' => false, 'retry_after' => 0, 'row_id' => (int)$row['id'], 'attempts' => (int)$row['attempts']];
+    return ['blocked' => false, 'retry_after' => 0, 'row_id' => $rowId, 'attempts' => $attempts];
 }
 
 function auth_rate_limit_fail(mysqli $db, string $bucket, string $identifier, int $maxAttempts, int $windowSeconds, int $lockoutSeconds): void {
@@ -1686,6 +1702,7 @@ if ($action === 'disable_2fa') {
 
 // ── LOGOUT ──
 if ($action === 'logout') {
+    lyra_session_elevate();
     $token = api_bearer_token();
     if ($token !== '') {
         $tokenHash = hash('sha256', $token);

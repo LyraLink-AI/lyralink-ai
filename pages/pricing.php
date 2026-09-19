@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
 $paypalClientId = htmlspecialchars(api_get_secret('PAYPAL_CLIENT_ID', ''), ENT_QUOTES, 'UTF-8');
 $usageTokensPerBlock = max(1, (int)api_get_secret('CHAT_USAGE_INPUT_TOKENS_PER_BLOCK', '100000'));

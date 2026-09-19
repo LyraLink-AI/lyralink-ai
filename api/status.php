@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
 api_json_headers();
 header('Access-Control-Allow-Origin: *');
@@ -17,7 +18,7 @@ if (in_array($action, $sessionRequiredActions, true)) {
         'samesite' => 'Lax',
     ]);
     if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
+        lyra_session_boot();
     }
 }
 

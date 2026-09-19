@@ -1,6 +1,7 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 // PayPal redirects here after subscription approval
-session_start();
+lyra_session_boot();
 
 $plan           = $_GET['plan'] ?? '';
 $subscriptionId = $_GET['subscription_id'] ?? '';

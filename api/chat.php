@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/lib/entitlements.php';
 require_once __DIR__ . '/lib/ai_safeguards.php';
@@ -21,7 +22,7 @@ if ($isDevMode && $isDebugEnabled) {
 }
 error_reporting(E_ALL);
 
-session_start();
+lyra_session_boot();
 api_json_headers();
 header('Cache-Control: no-store, private, max-age=0');
 $requestStartedAt = microtime(true);

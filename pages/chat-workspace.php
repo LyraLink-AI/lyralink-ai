@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
 /* 302 workspace shell.
  * The working chat application is /chat, and it now uses the same design
  * as this page did. Keeping two chat surfaces would mean two places to fix

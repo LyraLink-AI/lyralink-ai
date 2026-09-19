@@ -1,6 +1,7 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
-session_start();
+lyra_session_boot();
 api_json_headers();
 
 api_enforce_post_and_origin_for_actions([

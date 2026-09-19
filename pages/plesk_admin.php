@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
 $host = strtolower($_SERVER['HTTP_HOST'] ?? '');
 $isPrimaryHost = in_array($host, ['lyralinkai.com', 'www.lyralinkai.com'], true);
 $forkModeEnv = getenv('FORK_MODE') ?: ($_ENV['FORK_MODE'] ?? '');

@@ -1,7 +1,8 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/lib/network_policy.php';
-session_start();
+lyra_session_boot();
 api_json_headers();
 
 // ════════════════════════════════

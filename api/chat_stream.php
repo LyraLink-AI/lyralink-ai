@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/lib/chat/llm_routing.php';
 require_once __DIR__ . '/lib/chat/execution_foundation.php';
@@ -7,7 +8,7 @@ require_once __DIR__ . '/lib/chat/orchestrator.php';
 
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
-session_start();
+lyra_session_boot();
 
 function chat_stream_emit(array $payload): void {
     echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
