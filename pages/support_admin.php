@@ -406,9 +406,8 @@
         <div class="main-empty" id="emptyPanel">
             <div class="ei">🎫</div>
             <p class="empty-title">No ticket selected</p>
-            <p class="empty-body" id="emptyHint">Pick a ticket from the queue on the left to read it and reply.
-                If the queue is empty, nothing is waiting on a reply — tickets arrive from the public
-                support form and from in-app chat, and land here the moment they are submitted.</p>
+            <p class="empty-body" id="emptyHint">Pick a ticket from the queue to read it and reply. If the queue is empty,
+                nothing is waiting — tickets arrive from the public support form and in-app chat.</p>
             <div class="empty-links"><a href="/pages/support/" target="_blank" rel="noopener">Open the public support form ↗</a></div>
         </div>
         <div id="ticketDetail" style="display:none;display:flex;flex-direction:column;flex:1;overflow:hidden"></div>
@@ -1136,7 +1135,7 @@ async function loadOps() {
     if (hint) {
         hint.textContent = Number(t.open_total || 0) > 0
             ? 'Select a ticket from the queue on the left to read it and reply.'
-            : 'Nothing is waiting for a reply. Tickets appear here as soon as they are submitted through the public support form or in-app chat.';
+            : 'Nothing waiting for a reply. Tickets land here the moment they are submitted from the public support form or in-app chat.';
     }
 }
 

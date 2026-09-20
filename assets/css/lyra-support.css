@@ -306,3 +306,165 @@ nav {
 @media (max-width: 900px) {
     .layout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DENSITY LAYER
+   ══════════════════════════════════════════════════════════════════════════
+   The page was laid out at a very generous scale: a 2x2 counter grid, ten
+   full-width filter rows and an airy operations strip - all stacked above the
+   ticket list. At 1366x768 that pushed the two things an agent actually uses,
+   the queue and the ticket, below the fold.
+
+   Two rules were followed here:
+     1. Remove duplicated information before shrinking it. The sidebar
+        counters and the operations strip were printing overlapping numbers
+        side by side, both at full size.
+     2. No element id is touched. Hiding or resizing via CSS leaves the markup
+        and therefore getElementById() intact, so the page's own bindings and
+        its SUPPORT_BOOT_IDS guard keep working.
+
+   Sizes come from the shared scale in lyra-ui.css (--ly-s*, --ly-fs*,
+   --ly-r-*) rather than new magic numbers, so this stays consistent with the
+   rest of the product as that scale changes.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Page height ─────────────────────────────────────────────────────────
+   The layout was measured against a 53px nav, but lyra-theme.css sets the nav
+   to --ly-topbar-h (64px). The page was therefore always 11px taller than the
+   viewport, so it carried a permanent scrollbar. */
+.layout { height: calc(100vh - var(--ly-topbar-h)); }
+
+/* ── Top bar: a toolbar rather than a wall of pills ──────────────────────
+   Ten identically-weighted pills competed with the title. Same buttons, same
+   ids, quieter treatment: the border only appears on hover, so the row reads
+   as a toolbar and the eye lands on the page instead. */
+.nav-right { gap: var(--ly-s1); }
+.nav-right .btn-sm {
+    padding: 5px 10px;
+    border-color: transparent;
+    background: transparent;
+    border-radius: var(--ly-r-sm);
+    font-family: var(--ly-font);
+    font-size: var(--ly-fs-xs);
+}
+.nav-right .btn-sm:hover {
+    background: var(--ly-glass);
+    border-color: var(--ly-border-2);
+}
+.nav-title { font-size: var(--ly-fs-sm); }
+
+/* ── Sidebar chrome ────────────────────────────────────────────────────── */
+.sidebar-section { padding: 10px 12px; }
+.sidebar-label { margin-bottom: 6px; }
+.search-input { padding: 7px 10px; font-size: var(--ly-fs-sm); }
+.filter-btn { padding: 5px 8px; }
+.tool-chip { padding: 4px 10px; font-size: var(--ly-fs-xs); }
+.ticket-list { padding: 6px; }
+.ticket-row { padding: 9px 11px; }
+
+/* The ten counters in the rail were a 2x2 grid of ~60px boxes - on a fresh
+   install, four large zeros costing about 110px of rail. One compact row
+   costs about 45px and still sits where an agent looks for it, directly above
+   the queue. Scoped to #statsRow because .stat-mini is also used inside the
+   manager panels, where the roomier treatment is correct. */
+.sidebar-section:has(> #statsRow) { padding: 10px 8px; }
+#statsRow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+}
+#statsRow .stat-mini {
+    padding: 6px 3px;
+    text-align: center;
+    border-radius: var(--ly-r-sm);
+    min-width: 0;
+}
+#statsRow .stat-mini .val { font-size: 15px; }
+/* The rail is 260px wide, so each counter gets roughly 51px of text width.
+   Measured: "CRITICAL" at the skin's inherited 10.5px with 0.1em tracking
+   needed 40px inside a 33px box and was clipped, so the tracking is removed
+   here and the size dropped. Deliberately NOT hidden with overflow:hidden -
+   an overflowing label should be visible in a measurement, not concealed. */
+#statsRow .stat-mini .lbl {
+    font-size: 8.5px;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+/* Status and Priority were ten full-width stacked rows, roughly 360px of rail
+   spent on two filter groups. As wrapping chips they cost about a third of
+   that, and the active state reads as a filled chip instead of a left bar.
+
+   :has() is a progressive enhancement here - without support the rows simply
+   stay stacked exactly as before, so nothing breaks on an older engine. */
+.sidebar-section:has(> .filter-btn) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.sidebar-section:has(> .filter-btn) > .sidebar-label {
+    flex: 0 0 100%;
+    margin-bottom: 2px;
+}
+.sidebar-section:has(> .filter-btn) > .filter-btn {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 4px 9px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-full);
+    font-size: var(--ly-fs-xs);
+}
+.sidebar-section:has(> .filter-btn) > .filter-btn.active {
+    box-shadow: none;
+    border-color: var(--ly-primary-line);
+    background: var(--ly-primary-soft);
+    color: var(--ly-primary-text);
+}
+.sidebar-section:has(> .filter-btn) > .filter-btn .count { margin-left: 2px; }
+
+/* ── One warning, not two ────────────────────────────────────────────────
+   #opsAlert exists to stand in for the operations strip while the mobile
+   list pane is showing - the strip lives in the pane that view hides. On
+   desktop both were rendering, so the same failure was reported twice.
+   !important is required because the script sets display:block inline; the
+   media query keeps the mobile behaviour exactly as intended. */
+@media (min-width: 901px) {
+    #opsAlert { display: none !important; }
+}
+
+/* ── Operations strip ──────────────────────────────────────────────────── */
+.ops-strip { padding: 10px 14px; }
+.ops-strip-head { margin-bottom: 8px; }
+.ops-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.ops-card { padding: 8px 10px; border-radius: var(--ly-r-md); }
+.ops-tiles { gap: 4px; }
+.ops-val { font-size: 15px; }
+.ops-note { margin-top: 6px; line-height: 1.45; }
+.ops-warnings { gap: 4px; margin-top: 8px; }
+.ops-warn { padding: 5px 9px; font-size: var(--ly-fs-xs); }
+
+/* ── Empty state: informative, not a full-pane poster ──────────────────── */
+.main-empty { gap: 6px; }
+.main-empty .ei { font-size: 26px; }
+.empty-title { font-size: var(--ly-fs-base); }
+.empty-body { font-size: var(--ly-fs-sm); max-width: 420px; line-height: 1.55; }
+
+/* ── Mobile: stop reserving height that is not there ─────────────────────
+   The mobile panes were sized with a hardcoded 150px of chrome - more than
+   the nav (64px) plus the pane toggle (54px measured) actually occupy, so the
+   page was always taller than the viewport and carried a permanent scrollbar.
+   Deriving it from the tokens fixes the overflow and hands the reclaimed
+   height to the ticket list, which is the only thing on screen that scrolls.
+   The panes then fill the layout rather than each computing their own sum. */
+@media (max-width: 900px) {
+    .layout {
+        height: calc(100vh - var(--ly-topbar-h) - 54px);
+    }
+    #dashScreen.dash-pane-list .sidebar,
+    #dashScreen.dash-pane-detail .main-panel {
+        height: 100%;
+    }
+    /* A touch device has no "/" or Esc key, so the shortcut hint is noise
+       sitting between the filters and the queue. */
+    .kbd-hint { display: none; }
+    .tool-chip { padding: 3px 9px; font-size: var(--ly-fs-xs); }
+}

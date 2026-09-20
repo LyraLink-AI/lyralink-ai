@@ -2532,12 +2532,26 @@ if ($action === 'ops_overview') {
     }
     // The worker gives up after 5 attempts, so those rows are terminal and the
     // rest are still worth retrying. Conflating the two makes the number useless.
+    //
+    // Terminal failures are additionally split by age. This count is cumulative
+    // and never decays, so a few un-deliverable rows - an invalid recipient from
+    // a probe, for instance - raised a permanent red banner. A warning that is
+    // always on is a warning nobody reads, which is how the previous silent
+    // failure survived as long as it did.
     $failedFinal = 0;
     $failedRetry = 0;
-    if ($r = $db->query("SELECT SUM(attempts >= 5) AS final_n, SUM(attempts < 5) AS retry_n FROM support_notification_queue WHERE status = 'failed'")) {
+    $failedRecent = 0;
+    $failedLastAt = null;
+    if ($r = $db->query("SELECT SUM(attempts >= 5) AS final_n,
+                                SUM(attempts < 5) AS retry_n,
+                                SUM(attempts >= 5 AND updated_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS recent_n,
+                                MAX(CASE WHEN attempts >= 5 THEN updated_at END) AS last_final_at
+                           FROM support_notification_queue WHERE status = 'failed'")) {
         $row = $r->fetch_assoc();
         $failedFinal = (int)($row['final_n'] ?? 0);
         $failedRetry = (int)($row['retry_n'] ?? 0);
+        $failedRecent = (int)($row['recent_n'] ?? 0);
+        $failedLastAt = $row['last_final_at'] ?? null;
     }
     $oldestQueuedAt = null;
     if ($r = $db->query("SELECT MIN(created_at) AS oldest FROM support_notification_queue WHERE status IN ('pending','processing')")) {
@@ -2595,10 +2609,19 @@ if ($action === 'ops_overview') {
             'text'  => 'No Discord webhook is set, so new tickets will not be announced in the support channel.',
         ];
     }
-    if ($failedFinal > 0) {
+    if ($failedRecent > 0) {
         $warnings[] = [
             'level' => 'bad',
-            'text'  => $failedFinal . ' notification(s) failed permanently after 5 attempts and will not be retried.',
+            'text'  => $failedRecent . ' notification(s) gave up after 5 failed attempts in the last 7 days and will not be retried.',
+        ];
+    } elseif ($failedFinal > 0) {
+        // Nothing new is broken. Say so without claiming an active failure, so
+        // the red treatment still means "act on this" everywhere else.
+        $warnings[] = [
+            'level' => 'info',
+            'text'  => 'No recent delivery failures. ' . $failedFinal . ' older notification(s) were abandoned'
+                     . ($failedLastAt ? ' (most recently ' . $failedLastAt . ')' : '')
+                     . '; nothing is being retried.',
         ];
     }
     $openTotal = $ticketCounts['open'] + $ticketCounts['in_progress'] + $ticketCounts['waiting'];
