@@ -116,6 +116,38 @@ function tw_when(string $s): string {
 
 $nCh = count($channels); $nMsg = count($messages); $nMem = count($members);
 $activeName = $active ? pk($active, ['name'], 'channel') : '';
+
+/* LYRA_TEAMS_VIEWER_BLOCK -- idempotency marker; this exact string appears
+ * only in the inserted block, never in the text it replaced, so a second run
+ * of the patch cannot match its own output and insert a duplicate.
+ *
+ * Who is looking at this page. Both the top bar and the greeting previously
+ * embedded a literal name and initials, so every account saw the same
+ * identity regardless of who was signed in. Resolve it from the session,
+ * falling back to an explicit guest label rather than a name that is wrong.
+ * (The literal strings are deliberately not repeated in this comment, so that
+ * searching for them finds markup, not prose.) */
+$sessUid     = (int) ($_SESSION['user_id'] ?? 0);
+$sessUname   = trim((string) ($_SESSION['username'] ?? ''));
+$viewerName  = '';
+$viewerPlan  = '';
+if ($sessUid > 0 && isset($users[$sessUid])) {
+    $viewerName = trim((string) ($users[$sessUid]['username'] ?? ''));
+    $viewerPlan = trim((string) ($users[$sessUid]['plan'] ?? ''));
+}
+if ($viewerName === '' && $sessUname !== '') { $viewerName = $sessUname; }
+$isGuest        = ($viewerName === '');
+$viewerLabel    = $isGuest ? 'Guest' : $viewerName;
+$viewerInitials = inits($viewerLabel);
+$viewerStatus   = $isGuest
+    ? 'Not signed in'
+    : ($viewerPlan !== '' ? ucfirst($viewerPlan) . ' plan' : 'Online');
+
+/* Time-of-day greeting, computed rather than written into the markup. */
+$hourAtRender = (int) date('G');
+$greetingWord = $hourAtRender < 12
+    ? 'Good morning'
+    : ($hourAtRender < 18 ? 'Good afternoon' : 'Good evening');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -161,9 +193,14 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 
 /* Center column: hero + tiles are fixed height, the channel fills the rest
    and scrolls, the composer sits below it and never moves. */
-.tw-hero{background:linear-gradient(120deg,rgba(80,40,224,.55),rgba(155,92,255,.28) 55%,rgba(2,9,26,0) 100%),var(--ly-surface);border:1px solid var(--ly-primary-line);border-radius:var(--ly-r-xl);padding:18px 22px}
+/* The h1/p sizes and the 14px gaps were inline styles, so no media query
+   could adjust them and the hero could not respond to a short viewport.
+   They are classes here so the max-height block below can reach them. */
+.tw-hero{background:linear-gradient(120deg,rgba(80,40,224,.55),rgba(155,92,255,.28) 55%,rgba(2,9,26,0) 100%),var(--ly-surface);border:1px solid var(--ly-primary-line);border-radius:var(--ly-r-xl);padding:18px 22px;margin-bottom:14px}
+.tw-hero-h1{font-size:22px;margin:0 0 5px;color:#fff;letter-spacing:-.02em;line-height:1.2}
+.tw-hero-p{font-size:13px;color:rgba(255,255,255,.78);margin:0}
 .tw-pad{padding:18px 22px 0}
-.tw-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tw-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .tw-tile{padding:13px;border:1px solid var(--ly-border);border-radius:var(--ly-r-md);background:var(--ly-glass);min-width:0}
 .tw-tile b{display:block;font-size:20px;font-weight:800;letter-spacing:-.03em;line-height:1.2}
 .tw-tile span{display:block;font-size:11px;color:var(--ly-text-4);overflow-wrap:anywhere;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -235,6 +272,31 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 @media (max-width:420px){
   .tw-tiles{grid-template-columns:minmax(0,1fr)}
 }
+
+/* ── SHORT VIEWPORTS ────────────────────────────────────────────────────
+   The centre column is a fixed-height stack: hero and tiles are fixed, the
+   channel list takes the remainder, and the composer is pinned below it. At
+   1366x768 the fixed parts consumed 439px of the 704px column - hero 205,
+   channel head 53, tabs 39, composer 142 - leaving the message list only
+   265px, so the newest post was clipped against the tab row and the column
+   felt cramped. These rules compact the fixed chrome so the message list
+   keeps the majority of the column, as the approved design shows.
+   Scoped to min-width:821px so it cannot fight the small-screen rules above,
+   which own the side padding at those widths. */
+@media (max-height:860px) and (min-width:821px){
+  .tw-pad{padding-top:10px}
+  .tw-hero{padding:13px 18px;margin-bottom:10px}
+  .tw-hero-h1{font-size:19px;margin-bottom:3px}
+  .tw-hero-p{font-size:12.5px}
+  .tw-tiles{gap:10px;margin-bottom:10px}
+  .tw-tile{padding:10px}
+  .tw-tile b{font-size:17px}
+  .tw-chanhead{padding-top:9px;padding-bottom:9px}
+  .lyra-tw-tab{padding-top:9px;padding-bottom:9px}
+  .lyra-tw-chips{margin-bottom:4px}
+  .tw-feed{padding-top:4px;padding-bottom:2px}
+  .tw-compose{padding-top:8px;padding-bottom:10px}
+}
 </style>
 </head>
 <body class="ly">
@@ -256,10 +318,10 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
     </div>
 
     <div class="tw-user">
-        <span class="ly-avatar ly-avatar-sm">AW</span>
+        <span class="ly-avatar ly-avatar-sm"><?php echo htmlspecialchars($viewerInitials, ENT_QUOTES, 'UTF-8'); ?></span>
         <div style="min-width:0">
-            <div style="font-size:12.5px;font-weight:600" class="ly-truncate">Alex West</div>
-            <div style="font-size:11px;color:var(--ly-text-4)">Online</div>
+            <div style="font-size:12.5px;font-weight:600" class="ly-truncate"><?php echo htmlspecialchars($viewerLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div style="font-size:11px;color:var(--ly-text-4)"><?php echo htmlspecialchars($viewerStatus, ENT_QUOTES, 'UTF-8'); ?></div>
         </div>
     </div>
 </header>
@@ -312,12 +374,12 @@ $activeName = $active ? pk($active, ['name'], 'channel') : '';
 <main class="tw-center">
 
     <div class="tw-pad">
-        <div class="tw-hero" style="margin-bottom:14px">
-            <h1 style="font-size:22px;margin-bottom:5px;color:#fff">Good morning, Alex</h1>
-            <p style="font-size:13px;color:rgba(255,255,255,.78);margin:0">Here&rsquo;s what&rsquo;s happening across your workspace today.</p>
+        <div class="tw-hero">
+            <h1 class="tw-hero-h1"><?php echo htmlspecialchars($greetingWord, ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars($viewerLabel, ENT_QUOTES, 'UTF-8'); ?></h1>
+            <p class="tw-hero-p">Here&rsquo;s what&rsquo;s happening across your workspace today.</p>
         </div>
 
-        <div class="tw-tiles" style="margin-bottom:14px">
+        <div class="tw-tiles">
             <div class="tw-tile"><b data-ly-count="<?php echo $nCh; ?>"><?php echo $nCh; ?></b><span>Channels</span></div>
             <div class="tw-tile"><b data-ly-count="<?php echo $nMsg; ?>"><?php echo $nMsg; ?></b><span title="Messages in #<?php echo htmlspecialchars($activeName !== '' ? $activeName : '—'); ?>">Messages in #<?php echo htmlspecialchars($activeName !== '' ? $activeName : '—'); ?></span></div>
             <div class="tw-tile"><b data-ly-count="<?php echo $nMem; ?>"><?php echo $nMem; ?></b><span>Members</span></div>
