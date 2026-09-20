@@ -243,7 +243,11 @@
         if (!panel || !panel.classList.contains('is-open')) { return; }
         var t = e.target;
         if (panel.contains(t)) { return; }
-        if (t && t.closest && t.closest('[aria-label="Notifications"]')) { return; }
+        /* Any element marked as a toggle must be excluded, not just the bell.
+           This previously tested for the bell's aria-label alone, so opening the
+           panel from any OTHER button fell through to close() on the very same
+           click that opened it - it opened and shut instantly. */
+        if (t && t.closest && t.closest('[data-lyra-notify-toggle]')) { return; }
         close();
     });
     document.addEventListener('keydown', function (e) {

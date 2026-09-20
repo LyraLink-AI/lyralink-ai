@@ -259,10 +259,86 @@ body::after {
     border: 1px solid rgba(239, 68, 68, 0.32);
     border-radius: var(--ly-r-sm);
     background: var(--ly-danger-soft);
-    color: #FCA5A5;
+    color: var(--ly-danger);
     font-family: inherit;
     font-size: 11px;
     cursor: pointer;
+}
+
+/* ── Chat sidebar footer pills ─────────────────────────────────────────────
+   app.css paints .footer-link with hardcoded dark literals:
+       border: 1px solid rgba(39,52,73,0.9)
+       background: rgba(15,23,42,0.38)
+   A literal is not reachable by the variable bridge, so in light mode these
+   stayed dark pills with muted text on them - measured 2.05:1. Declared with
+   tokens here, and this file loads after app.css. */
+.minimal-chat-shell .conv-panel .footer-link,
+.conv-panel .footer-link {
+    border-color: var(--ly-border);
+    background: var(--ly-glass);
+    color: var(--ly-text-3);
+}
+
+/* ── Model picker ─────────────────────────────────────────────────────────
+   Anchored under the model selector in the top bar. */
+.lyra-modelpick {
+    position: fixed; top: 56px; left: 16px; z-index: 210;
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(60vh, 440px);
+    display: flex; flex-direction: column;
+    background: var(--ly-surface);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-lg);
+    box-shadow: var(--ly-shadow-lg);
+    overflow: hidden;
+}
+.lyra-mp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--ly-border);
+    font-size: var(--ly-fs-sm); color: var(--ly-text);
+}
+.lyra-mp-x {
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--ly-text-3); font-size: 18px; line-height: 1; padding: 2px 6px;
+    border-radius: var(--ly-r-xs);
+}
+.lyra-mp-x:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.lyra-mp-body { overflow-y: auto; padding: 6px; flex: 1 1 auto; }
+.lyra-mp-provider {
+    padding: 8px 9px 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ly-text-4);
+}
+.lyra-mp-item {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--ly-s2);
+    width: 100%; text-align: left;
+    padding: 9px 10px;
+    border: 0; border-radius: var(--ly-r-sm);
+    background: transparent; color: var(--ly-text);
+    font-family: inherit; font-size: 12.5px; cursor: pointer;
+}
+.lyra-mp-item:hover { background: var(--ly-glass); }
+.lyra-mp-item.is-on { background: var(--ly-primary-soft); color: var(--ly-primary-text); }
+.lyra-mp-tick { color: var(--ly-success); }
+.lyra-mp-note { padding: 14px 10px; font-size: 12px; color: var(--ly-text-3); text-align: center; line-height: 1.6; }
+.lyra-mp-foot {
+    border-top: 1px solid var(--ly-border);
+    padding: 9px 13px;
+    font-size: 11.5px; color: var(--ly-text-4);
+}
+
+/* ── Chat column background ───────────────────────────────────────────────
+   app.css paints .chat-panel with a hardcoded dark gradient:
+       linear-gradient(180deg, rgba(10,14,23,.86), rgba(10,14,23,.96))
+   then a later, darker one at rgba(8,11,20,...). Being literals they cannot be
+   reached by the variable bridge, and nothing here overrode the background - so
+   in light mode this column stayed dark while the text tokens went dark too,
+   which is what made the chat unreadable. Declared with a token here, and this
+   file loads after app.css. */
+.chat-panel,
+.minimal-chat-shell .chat-panel {
+    background: var(--ly-bg);
 }
 
 /* A rail row with no destination. aria-disabled alone was invisible to the
@@ -572,7 +648,7 @@ body::after {
 .chat-attachment-remove {
     border: 1px solid rgba(239, 68, 68, 0.32);
     background: var(--ly-danger-soft);
-    color: #FCA5A5;
+    color: var(--ly-danger);
     border-radius: var(--ly-r-full);
     font-family: inherit;
 }
@@ -650,7 +726,7 @@ body::after {
 }
 .auth-tab.active { color: var(--ly-text); border-bottom-color: var(--ly-primary); }
 .auth-modal-link, .auth-help-link { color: var(--ly-primary-text); }
-.auth-modal-error { color: #FCA5A5; }
+.auth-modal-error { color: var(--ly-danger); }
 .auth-code-item {
     background: var(--ly-bg);
     border: 1px solid var(--ly-border);
@@ -804,7 +880,9 @@ body.minimal-chat-shell {
     height: var(--ly-topbar-h);
     padding: 0 var(--ly-s5) 0 var(--ly-s4);
     border-bottom: 1px solid var(--ly-border);
-    background: rgba(2, 9, 26, 0.92);
+    /* Was a hardcoded dark literal, so the top bar ignored the theme and stayed
+       navy in light mode while everything around it turned white. */
+    background: var(--ly-topbar-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     position: relative;

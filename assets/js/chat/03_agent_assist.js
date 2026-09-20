@@ -441,11 +441,15 @@ function buildEdgeChatCacheKey(messages, opts = {}) {
 }
 
 function setAiToolsOpen(open) {
+    /* Only the wrap is required. This used to demand the toggle button as well,
+     * so when that button was removed from the chat chrome the composer's own
+     * Tools chip silently stopped working. The aria write is optional now: if
+     * there is no toggle control, there is nothing to announce. */
     const wrap = document.getElementById('aiToolsWrap');
-    const btn = document.getElementById('aiToolsToggleBtn');
-    if (!wrap || !btn) return;
+    if (!wrap) return;
     wrap.classList.toggle('open', !!open);
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const btn = document.getElementById('aiToolsToggleBtn');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function startImagePrompt() {

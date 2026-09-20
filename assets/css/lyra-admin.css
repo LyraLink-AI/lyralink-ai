@@ -24,8 +24,8 @@
     font-size: 10.5px; font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
-.lyra-delta-up   { background: rgba(34,197,94,0.13);  color: #6EE7A0; }
-.lyra-delta-down { background: rgba(239,68,68,0.13);  color: #FCA5A5; }
+.lyra-delta-up   { background: rgba(34,197,94,0.13);  color: var(--ly-success); }
+.lyra-delta-down { background: rgba(239,68,68,0.13);  color: var(--ly-danger); }
 .lyra-delta-flat { background: var(--ly-glass-strong); color: var(--ly-text-4); font-weight: 600; }
 
 /* ── Sparkline panel ────────────────────────────────────────────────────── */
@@ -82,15 +82,15 @@
 .lyra-logtable td { padding: 8px 10px; border-bottom: 1px solid var(--ly-border); color: var(--ly-text-2); }
 .lyra-logtable tr:last-child td { border-bottom: 0; }
 .lyra-logtable td.num { font-variant-numeric: tabular-nums; color: var(--ly-text-4); white-space: nowrap; }
-.lyra-logtable .ok { color: #6EE7A0; }
-.lyra-logtable .bad { color: #FCA5A5; }
+.lyra-logtable .ok { color: var(--ly-success); }
+.lyra-logtable .bad { color: var(--ly-danger); }
 
 /* ── Rail status / activity lists ───────────────────────────────────────── */
 .lyra-svcrow2 { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 11.5px; color: var(--ly-text-2); border-bottom: 1px solid var(--ly-border); }
 .lyra-svcrow2:last-child { border-bottom: 0; }
 .lyra-svcrow2 span { flex: 1 1 auto; min-width: 0; }
-.lyra-svcrow2 em { font-style: normal; font-size: 11px; color: #6EE7A0; flex: 0 0 auto; }
-.lyra-svcrow2 em.warn { color: #FCD34D; }
+.lyra-svcrow2 em { font-style: normal; font-size: 11px; color: var(--ly-success); flex: 0 0 auto; }
+.lyra-svcrow2 em.warn { color: var(--ly-warning); }
 .lyra-actrow2 { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; min-width: 0; }
 .lyra-actrow2 + .lyra-actrow2 { border-top: 1px solid var(--ly-border); }
 .lyra-actrow2 i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; margin-top: 5px; }

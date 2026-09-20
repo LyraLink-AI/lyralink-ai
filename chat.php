@@ -142,7 +142,6 @@ if ($isMaintenance && !$isDevCookie) {
 <div class="chat-panel">
     <header class="lyra-chathead">
         <button class="mobile-menu-btn" onclick="openDrawer()">☰</button>
-        <div class="chat-title" id="chatTitle">New Chat</div>
         <div class="header-right" id="headerRight" data-lyra-moved="">
             <button class="btn-small" onclick="openVoicePanel()" title="AI Voice">🎤 Voice</button>
             <button class="btn-small" onclick="clearCurrentChat()">✕ Clear</button>
@@ -183,7 +182,6 @@ if ($isMaintenance && !$isDevCookie) {
 
     <div class="chat-top-tools">
         <div class="ai-tools-wrap" id="aiToolsWrap">
-            <button type="button" class="ai-tools-toggle-btn" id="aiToolsToggleBtn" onclick="toggleAiTools()" aria-expanded="false">Tools</button>
             <div class="ai-tools-row">
                 <label class="ai-tool-toggle">
                     <input type="checkbox" id="taskModeToggle">
@@ -246,7 +244,7 @@ if ($isMaintenance && !$isDevCookie) {
 
                 <div class="lyra-settingrow">
                     <div class="lyra-settingtext"><b>Notifications</b><em>Service incidents and account alerts.</em></div>
-                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" onclick="if(window.LyraNotify){LyraNotify.toggle();}">Open notifications</button>
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" data-lyra-notify-toggle onclick="if(window.LyraNotify){LyraNotify.toggle();}">Open notifications</button>
                 </div>
 
                 <div class="lyra-settingrow">
@@ -281,7 +279,6 @@ if ($isMaintenance && !$isDevCookie) {
         </div>
         <?php echo lyra_chat_composer_chips(); ?>
         <div class="input-area">
-            <button type="button" id="attachBtn" class="chat-attach-btn" onclick="openChatAttachmentPicker()" title="Attach image or file">📎</button>
             <input type="file" id="chatAttachmentInput" style="display:none" accept=".txt,.md,.markdown,.pdf,.csv,.json,.docx,.png,.jpg,.jpeg,.gif,.webp,.svg,.js,.ts,.py,.php,.html,.css,.xml,.log" onchange="onChatAttachmentSelected(event)">
             <div
                 id="userInput"
@@ -726,5 +723,210 @@ window.LYRALINK_IS_ADMIN = <?php
     }
 })();
 </script>
+<?php
+/* ══════════════════════════════════════════════════════════════════════════
+   LYRALINK — MODEL PICKER
+   ══════════════════════════════════════════════════════════════════════════
+   Clicking the model selector used to call openAccountModal(), which is the
+   profile panel — so choosing a model meant opening your account settings and
+   finding the model section inside it. This opens a small list of models
+   directly, as asked.
+
+   It does NOT invent a new selection mechanism. The chat already has one, in
+   05_auth_session_molt.js:
+
+       availableModelProviders   filled by loadModelOptions()
+       selectedLlmProvider/model the globals the send path reads
+       04_send_message.js        const modelToSend = selectedLlmModel || stored.model
+       modelPrefKey(suffix)      'lyralink_model_<suffix>_<username>'
+       saveModelPreference()     persists via those keys
+
+   So this picker drives that existing system rather than shadowing it: it sets
+   the globals, calls saveModelPreference() when the account-modal elements are
+   present, and writes the same localStorage keys itself if they are not. The
+   label in the selector is updated to match. Nothing about the server's default
+   is changed until the user actually picks something.
+   ══════════════════════════════════════════════════════════════════════════ */
+?>
+<div class="lyra-modelpick" id="lyraModelPick" hidden>
+    <div class="lyra-mp-head">
+        <b>Model</b>
+        <button type="button" class="lyra-mp-x" id="lyraModelPickClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="lyra-mp-body" id="lyraModelPickBody">
+        <div class="lyra-mp-note">Loading models&hellip;</div>
+    </div>
+    <div class="lyra-mp-foot">
+        <span id="lyraModelPickCurrent"></span>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var pick = document.getElementById('lyraModelPick');
+    var body = document.getElementById('lyraModelPickBody');
+    var currentOut = document.getElementById('lyraModelPickCurrent');
+    if (!pick || !body) { return; }
+
+    var providers = Array.isArray(window.availableModelProviders) ? window.availableModelProviders : [];
+    var open = false;
+
+    function esc(v) {
+        return String(v == null ? '' : v).replace(/[&<>"']/g, function (s) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s];
+        });
+    }
+
+    function currentProvider() {
+        try { if (typeof selectedLlmProvider !== 'undefined' && selectedLlmProvider) return String(selectedLlmProvider); } catch (e) {}
+        var sel = document.getElementById('modelProviderSelect');
+        return sel && sel.value ? sel.value : '';
+    }
+    function currentModel() {
+        try { if (typeof selectedLlmModel !== 'undefined' && selectedLlmModel) return String(selectedLlmModel); } catch (e) {}
+        var sel = document.getElementById('modelNameSelect');
+        return sel && sel.value ? sel.value : '';
+    }
+
+    function setLabel(text) {
+        var el = document.querySelector('.lyra-msel-label');
+        if (el) { el.textContent = text; }
+        var cur = document.getElementById('lyraModelCurrent');
+        if (cur) { cur.textContent = text; }
+    }
+
+    function render() {
+        if (!providers.length) {
+            body.innerHTML = '<div class="lyra-mp-note">'
+                + (window.LYRALINK_SIGNED_IN === false
+                    ? 'Sign in to choose a model.'
+                    : 'No model providers are configured yet.')
+                + '</div>';
+            return;
+        }
+        var cp = currentProvider();
+        var cm = currentModel();
+        var html = '';
+        providers.forEach(function (p) {
+            var models = Array.isArray(p.models) ? p.models : [];
+            html += '<div class="lyra-mp-provider">' + esc(p.label || p.id) + '</div>';
+            if (!models.length) {
+                html += '<div class="lyra-mp-note">No models listed for this provider.</div>';
+                return;
+            }
+            models.forEach(function (m) {
+                var on = (m === cm) && (cp === '' || cp === p.id);
+                html += '<button type="button" class="lyra-mp-item' + (on ? ' is-on' : '') + '"'
+                     + ' data-provider="' + esc(p.id) + '" data-model="' + esc(m) + '">'
+                     + '<span>' + esc(m) + '</span>'
+                     + (on ? '<span class="lyra-mp-tick">&#10003;</span>' : '')
+                     + '</button>';
+            });
+        });
+        body.innerHTML = html;
+    }
+
+    function apply(provider, model) {
+        /* Drive the existing system: the globals the send path reads, then the
+           same persistence the account modal uses. */
+        try { selectedLlmProvider = provider; } catch (e) {}
+        try { selectedLlmModel = model; } catch (e) {}
+
+        var ps = document.getElementById('modelProviderSelect');
+        var ms = document.getElementById('modelNameSelect');
+        if (ps && provider) { ps.value = provider; }
+        if (ps) {
+            ps.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (ms) {
+            /* After the provider change the options have been rebuilt, so the
+               model must be set afterwards. */
+            var found = Array.prototype.some.call(ms.options, function (o) { return o.value === model; });
+            if (!found) {
+                var o = document.createElement('option');
+                o.value = model; o.textContent = model;
+                ms.appendChild(o);
+            }
+            ms.value = model;
+            ms.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (typeof saveModelPreference === 'function') {
+            try { saveModelPreference(); } catch (e) {}
+        } else {
+            /* The account modal is not in this page, so persist with the same
+               keys the chat itself uses. */
+            try {
+                if (typeof modelPrefKey === 'function') {
+                    localStorage.setItem(modelPrefKey('provider'), provider);
+                    localStorage.setItem(modelPrefKey('name'), model);
+                }
+            } catch (e) {}
+        }
+
+        setLabel(model);
+        render();
+        var foot = document.getElementById('lyraModelPickCurrent');
+        if (foot) { foot.textContent = 'Using ' + model; }
+    }
+
+    function load() {
+        body.innerHTML = '<div class="lyra-mp-note">Loading models&hellip;</div>';
+        var fd = new FormData();
+        fd.append('action', 'get_model_options');
+        fetch('/api/auth.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || d.success !== true) { throw new Error(d && d.error ? d.error : 'Could not load models'); }
+                providers = Array.isArray(d.providers) ? d.providers : [];
+                /* Keep the shared global in step so the rest of the app agrees. */
+                try { availableModelProviders = providers; } catch (e) {}
+                render();
+            })
+            .catch(function (e) {
+                providers = [];
+                body.innerHTML = '<div class="lyra-mp-note">' + esc(e.message) + '</div>';
+            });
+    }
+
+    body.addEventListener('click', function (e) {
+        var item = e.target.closest ? e.target.closest('[data-model]') : null;
+        if (!item) { return; }
+        apply(item.getAttribute('data-provider'), item.getAttribute('data-model'));
+    });
+
+    function show() {
+        open = true;
+        pick.hidden = false;
+        load();
+    }
+    function hide() {
+        open = false;
+        pick.hidden = true;
+    }
+
+    /* The selector, and the rail's Change action, both open this. */
+    document.addEventListener('click', function (e) {
+        var trigger = e.target.closest ? e.target.closest('[data-lyra-model-pick]') : null;
+        if (trigger) {
+            e.preventDefault();
+            open ? hide() : show();
+            return;
+        }
+        if (!open) { return; }
+        if (pick.contains(e.target)) { return; }
+        hide();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { hide(); } });
+    var x = document.getElementById('lyraModelPickClose');
+    if (x) { x.addEventListener('click', hide); }
+
+    var cur = document.getElementById('lyraModelCurrent');
+    if (cur && currentModel()) { setLabel(currentModel()); }
+})();
+</script>
+
 </body>
 </html>

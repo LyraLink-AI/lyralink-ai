@@ -299,8 +299,11 @@ async function sendMessage() {
 
         await saveMessage('assistant', reply, aiThinking);
         const conv = convCache.find(c => c.conv_id === activeConvId);
-        document.getElementById('chatTitle').textContent = conv?.title || 'Chat';
-        document.getElementById('chatTitle').className   = 'chat-title has-msgs';
+        const lyTitleEl = document.getElementById('chatTitle');
+        if (lyTitleEl) {
+            lyTitleEl.textContent = conv?.title || 'Chat';
+            lyTitleEl.className   = 'chat-title has-msgs';
+        }
         if (data.debug) renderDebug(data.debug);
 
     } catch (e) {

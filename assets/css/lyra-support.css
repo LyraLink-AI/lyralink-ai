@@ -135,7 +135,7 @@ nav {
     box-shadow: var(--ly-shadow-glow);
 }
 .btn-full:hover { filter: brightness(1.08); }
-.err-msg { color: #FCA5A5; font-size: var(--ly-fs-sm); }
+.err-msg { color: var(--ly-danger); font-size: var(--ly-fs-sm); }
 
 /* ── Layout: filter rail + main panel ───────────────────────────────────── */
 .layout { gap: 0; }
@@ -203,9 +203,9 @@ nav {
     background: var(--ly-glass);
     color: var(--ly-text-2);
 }
-.dock-pill.ok   { border-color: rgba(34,197,94,0.35);  background: rgba(34,197,94,0.13);  color: #6EE7A0; }
-.dock-pill.warn { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.13); color: #FCD34D; }
-.dock-pill.bad  { border-color: rgba(239,68,68,0.35);  background: rgba(239,68,68,0.13);  color: #FCA5A5; }
+.dock-pill.ok   { border-color: rgba(34,197,94,0.35);  background: rgba(34,197,94,0.13);  color: var(--ly-success); }
+.dock-pill.warn { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.13); color: var(--ly-warning); }
+.dock-pill.bad  { border-color: rgba(239,68,68,0.35);  background: rgba(239,68,68,0.13);  color: var(--ly-danger); }
 .dock-table { width: 100%; border-collapse: collapse; font-size: var(--ly-fs-sm); }
 .dock-table th {
     padding: 8px 10px;

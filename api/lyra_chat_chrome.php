@@ -228,14 +228,16 @@ if (!function_exists('lyra_chat_topbar_mid')) {
         $tc = lyra_chat_tool_counts();
 
         return '<div class="lyra-topbar-mid">'
-             . '<button type="button" class="lyra-modelselect" onclick="openAccountModal()" title="Model settings">'
+             /* Opens the model picker, not the profile panel. Choosing a model
+              * should not mean finding your account settings first. */
+             . '<button type="button" class="lyra-modelselect" data-lyra-model-pick title="Choose a model">'
              . '<span class="lyra-mdot">' . lyra_chat_icon($ic['bolt'], 2) . '</span>'
              . '<span class="lyra-msel-label">' . htmlspecialchars($model['name']) . '</span>'
              . lyra_chat_icon($ic['chev'], 2) . '</button>'
              . '<div class="lyra-pillgroup">'
-             . '<div class="lyra-pillcell"><span class="lyra-pdot"></span><span>Workspace<b>Production</b></span></div>'
-             . '<div class="lyra-pillcell">' . lyra_chat_icon($ic['set']) . '<span>Tools<b>' . $tc['active'] . ' Enabled</b></span></div>'
-             . '<div class="lyra-pillcell">' . lyra_chat_icon($ic['auto']) . '<span>Task Mode<b>Autonomous</b></span></div>'
+             . '<div class="lyra-pillcell"><span class="lyra-pdot"></span><span>Workspace <b>Production</b></span></div>'
+             . '<div class="lyra-pillcell">' . lyra_chat_icon($ic['set']) . '<span>Tools <b>' . $tc['active'] . ' Enabled</b></span></div>'
+             . '<div class="lyra-pillcell">' . lyra_chat_icon($ic['auto']) . '<span>Task Mode <b>Autonomous</b></span></div>'
              . '</div></div>';
     }
 }
@@ -272,7 +274,10 @@ if (!function_exists('lyra_chat_topbar_actions')) {
               * not throw; the control is inert until they arrive, and each has a
               * title saying what it will do. */
              . '<button type="button" class="lyra-iconbtn" title="Appearance: switch dark / light" aria-label="Appearance" onclick="if(window.LyraTheme){LyraTheme.toggle();}">' . lyra_chat_icon($ic['sun']) . '</button>'
-             . '<button type="button" class="lyra-iconbtn" title="Notifications" aria-label="Notifications" aria-expanded="false" onclick="if(window.LyraNotify){LyraNotify.toggle();}">' . lyra_chat_icon($ic['bell']) . '</button>'
+             /* data-lyra-notify-toggle matters: lyra-theme.js uses it to tell a
+              * toggle click from a click-outside, so opening from anywhere other
+              * than this exact button does not immediately close the panel. */
+             . '<button type="button" class="lyra-iconbtn" data-lyra-notify-toggle title="Notifications" aria-label="Notifications" aria-expanded="false" onclick="if(window.LyraNotify){LyraNotify.toggle();}">' . lyra_chat_icon($ic['bell']) . '</button>'
              . $account;
     }
 }
@@ -285,7 +290,7 @@ if (!function_exists('lyra_chat_rail_model')) {
         $m = lyra_chat_model_info();
         return '<div class="lyra-rail-head-row">'
              . '<span class="lyra-rail-label">Current Models</span>'
-             . '<button type="button" class="lyra-rail-action" onclick="openAccountModal()">Change</button>'
+             . '<button type="button" class="lyra-rail-action" data-lyra-model-pick>Change</button>'
              . '</div>'
              . '<div class="lyra-rail-card">'
              . '<span class="lyra-rail-dot">' . lyra_chat_icon(lyra_chat_icons()['bolt'], 2) . '</span>'

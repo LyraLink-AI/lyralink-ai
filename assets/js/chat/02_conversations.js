@@ -260,17 +260,24 @@ function renderChat() {
     const conv      = convCache.find(c => c.conv_id === activeConvId);
     const widgetMode = document.body.classList.contains('widget-chat-shell');
 
+    /* The heading is no longer rendered in the chat chrome, so chatTitle is null.
+       Every write is guarded: an unguarded .textContent on null throws, which
+       would take out renderChat() and the whole conversation with it. */
     if (!msgs.length) {
         chatbox.innerHTML = widgetMode
             ? (window.LYRA_WELCOME_HTML || "<div class='empty-state' id='emptyState'><div class='icon'>&#9889;</div><p>Ask Lyralink anything to get started.</p></div>")
             : (window.LYRA_WELCOME_HTML || "<div class='empty-state' id='emptyState'><div class='icon'>&#9889;</div><p>Ask Lyralink anything to get started.</p></div>");
-        chatTitle.textContent = conv?.title || 'New Chat';
-        chatTitle.className   = 'chat-title';
+        if (chatTitle) {
+            chatTitle.textContent = conv?.title || 'New Chat';
+            chatTitle.className   = 'chat-title';
+        }
         return;
     }
 
-    chatTitle.textContent = conv?.title || 'Chat';
-    chatTitle.className   = 'chat-title has-msgs';
+    if (chatTitle) {
+        chatTitle.textContent = conv?.title || 'Chat';
+        chatTitle.className   = 'chat-title has-msgs';
+    }
     chatbox.innerHTML     = '';
     msgs.forEach(msg => {
         if (msg.role === 'user') {
