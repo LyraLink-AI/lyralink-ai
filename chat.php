@@ -604,12 +604,18 @@ if ($isMaintenance && !$isDevCookie) {
     });
     if (closeBtn) { closeBtn.addEventListener('click', close); }
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
-    /* Clicking the chat area behind the panel dismisses it, but a click inside
-       the panel must not. */
+    /* Clicking the backdrop dismisses the panel; clicking its content does not.
+
+       This previously tested `host.contains(e.target)`, but the host IS the
+       full-area backdrop, so a click anywhere on the dimmed area counted as
+       "inside" and the panel could only be closed by Escape or the X. The check
+       is now against the panel box, which is the thing that should swallow
+       clicks. */
     document.addEventListener('click', function (e) {
         if (!openName) { return; }
-        if (host.contains(e.target)) { return; }
         if (e.target.closest && e.target.closest('[data-lyra-panel]')) { return; }
+        var box = host.querySelector('.lyra-panelbox');
+        if (box && box.contains(e.target)) { return; }
         close();
     });
     /* The theme can change from the top bar while this panel is open. */

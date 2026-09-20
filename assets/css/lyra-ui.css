@@ -12,6 +12,25 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── 1. TOKENS ──────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   AUTHOR DISPLAY DEFEATS [hidden]
+   ══════════════════════════════════════════════════════════════════════════
+   A component rule that sets `display` silently stops the `hidden` attribute
+   working, because a class and an attribute selector have identical specificity
+   and author styles beat the user agent's `[hidden] { display: none }`.
+
+   That produced a panel on the chat page which could be opened and never
+   closed - Escape, the close button and clicking outside all set the flag and
+   none of them hid anything - plus a form that stayed on screen after use.
+
+   Three components here had already hit this and worked around it one selector
+   at a time (.ly-tabpanel, .lyra-rail-body, .lg-panel). This is the general fix,
+   which is also what normalize.css does. `!important` is appropriate because
+   `[hidden]` means "do not display"; every use of it in this codebase intends
+   hiding, so nothing needs to override it.
+   ────────────────────────────────────────────────────────────────────────── */
+[hidden] { display: none !important; }
+
 :root {
   /* Surfaces — sampled from the mockups: #02091A / #02091B / #030D1F / #030A28 */
   --ly-bg:            #02091A;
