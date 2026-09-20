@@ -27,6 +27,19 @@ if ($chatJsModuleFiles) {
     );
 }
 $chatJsVersion = !empty($chatJsVersionCandidates) ? (string)max($chatJsVersionCandidates) : '1';
+
+/* LYRA_ASSET_VERSIONS — every stylesheet/script the chat page loads is
+ * versioned from its own mtime. Three of these previously carried a fixed
+ * query string, so editing the file did not change its URL and clients kept
+ * rendering the cached copy. */
+$assetVersionOf = static function (string $relPath): string {
+    $full = __DIR__ . $relPath;
+    return file_exists($full) ? (string)filemtime($full) : '1';
+};
+$lyraChatDesignCssVersion = $assetVersionOf('/assets/css/chat/lyra-chat.css');
+$lyraUiCssVersion         = $assetVersionOf('/assets/css/lyra-ui.css');
+$lyraChatRailJsVersion    = $assetVersionOf('/assets/js/chat/lyra-chat-rail.js');
+
 $isWidgetEmbed = isset($_GET['widget']) && (string)$_GET['widget'] === '1';
 if ($isMaintenance && !$isDevCookie) {
     header('Location: /pages/maintenance.php'); exit;
@@ -51,9 +64,9 @@ if ($isMaintenance && !$isDevCookie) {
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/chat/app.css?v=<?php echo htmlspecialchars($chatCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
-    <link rel="stylesheet" href="/assets/css/lyra-ui.css?v=1">
-    <link rel="stylesheet" href="/assets/css/chat/lyra-chat.css?v=2">
-    <script src="/assets/js/chat/lyra-chat-rail.js?v=1" defer></script>
+    <link rel="stylesheet" href="/assets/css/lyra-ui.css?v=<?php echo htmlspecialchars($lyraUiCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/assets/css/chat/lyra-chat.css?v=<?php echo htmlspecialchars($lyraChatDesignCssVersion, ENT_QUOTES, 'UTF-8'); ?>">
+    <script src="/assets/js/chat/lyra-chat-rail.js?v=<?php echo htmlspecialchars($lyraChatRailJsVersion, ENT_QUOTES, 'UTF-8'); ?>" defer></script>
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 <script>window.LYRA_WELCOME_HTML = <?php echo json_encode(lyra_chat_welcome(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;</script>
 </head>
@@ -92,9 +105,14 @@ if ($isMaintenance && !$isDevCookie) {
 <nav class="conv-panel">
     <div class="conv-header" hidden aria-hidden="true"></div>
     <?php echo lyra_chat_brand(); ?>
-    <?php echo lyra_chat_rail_chrome(); ?>
     <button class="new-chat-btn" onclick="newConversation()">+ New Chat</button>
-    <div class="conv-list" id="convList"></div>
+    <?php
+    /* The history belongs under the Conversations row, not after every nav
+     * group: at 1366x768 the fixed rows above it already filled the rail, so it
+     * was pushed below the fold and appeared to be missing. */
+    $convListHtml = '<div class="conv-list" id="convList"></div>';
+    echo lyra_chat_rail_chrome($convListHtml);
+    ?>
     <?php echo lyra_chat_promo(); ?>
 <div class="conv-footer">
         <div class="conv-footer-status">

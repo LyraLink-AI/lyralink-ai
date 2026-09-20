@@ -100,13 +100,21 @@ if (!function_exists('lyra_chat_navitem')) {
 }
 
 if (!function_exists('lyra_chat_rail_chrome')) {
-    function lyra_chat_rail_chrome(): string
+    /**
+     * $convListHtml is emitted directly beneath the Conversations row so the
+     * saved conversations read as that row's contents. Before this, the history
+     * was rendered after both nav groups and was pushed below the fold at
+     * 1366x768, making it look as though no conversations existed.
+     * The parameter is optional so existing callers keep working.
+     */
+    function lyra_chat_rail_chrome(string $convListHtml = ''): string
     {
         return '<div class="lyra-railhead">Main</div>'
              . '<div class="lyra-railnav">'
              . '<a class="lyra-navitem is-active" href="#" onclick="return false;">'
              . '<span class="lyra-navicon">' . lyra_chat_icon(lyra_chat_icons()['conv']) . '</span>'
              . '<span>Conversations</span><span class="lyra-count" id="lyraCountConv"></span></a>'
+             . $convListHtml
              . lyra_chat_navitem('proj', 'Projects')
              . lyra_chat_navitem('auto', 'Automations')
              . lyra_chat_navitem('files', 'Files')

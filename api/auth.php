@@ -2096,7 +2096,14 @@ if ($action === 'list_convs') {
     if (empty($_SESSION['user_id'])) { echo json_encode(['success' => false, 'convs' => []]); exit; }
     $uid = (int)$_SESSION['user_id'];
 
-    $stmt = $db->prepare("\
+    /* Nowdoc, not a double-quoted string: the previous version opened the
+     * literal with a backslash followed by a real newline. PHP does not treat
+     * that as an escaped newline in a double-quoted string, so the driver
+     * received the bytes 5c 0a before SELECT and rejected the statement.
+     * Because mysqli_report() is OFF here, prepare() returned false and the
+     * endpoint answered with a generic error that the client did not surface,
+     * which made a broken query look like an empty conversation list. */
+    $listConvsSql = <<<'SQL'
         SELECT c.conv_id, c.title, c.updated_at,
                COUNT(m.id) AS msg_count
         FROM user_convs c
@@ -2105,8 +2112,11 @@ if ($action === 'list_convs') {
         GROUP BY c.conv_id, c.title, c.updated_at
         ORDER BY c.updated_at DESC
         LIMIT 50
-    ");
+    SQL;
+    $stmt = $db->prepare($listConvsSql);
     if (!$stmt) {
+        // Never swallow the reason: errno/error is what makes this diagnosable.
+        error_log('lyralink list_convs prepare failed: [' . $db->errno . '] ' . $db->error);
         echo json_encode(['success' => false, 'convs' => [], 'error' => 'Failed to prepare conversation list']);
         exit;
     }

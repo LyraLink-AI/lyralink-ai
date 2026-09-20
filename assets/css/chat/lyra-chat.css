@@ -55,7 +55,13 @@ body::after {
     gap: var(--ly-s2);
     padding: var(--ly-s5) var(--ly-s4);
     min-height: 0;
-    overflow: hidden;
+    /* Was `overflow: hidden`, which silently cut off the bottom of the rail.
+       The fixed children already exceed the panel height at 1366x768, so the
+       footer pills were unreachable. The rail scrolls instead; .conv-list
+       keeps its own scroll so the list never grows without bound. */
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
 }
 
 .conv-header { padding: 0 var(--ly-s2) var(--ly-s5); }
@@ -90,6 +96,40 @@ body::after {
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* LYRA_SIDEBAR_HISTORY */
+/* The list now lives inside .lyra-railnav, which is flex:0 0 auto. It must not
+   grow (the panel's own .conv-list is the growing child) and it must not run
+   unbounded, or it would push the remaining nav rows out of view — the exact
+   failure this change fixes. It scrolls within a bounded box instead. */
+.lyra-railnav .conv-list {
+    flex: 0 0 auto;
+    max-height: 224px;          /* ~5 rows at 44px, then scroll */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 2px 0 6px;
+    padding-left: 10px;         /* indent so it reads as Conversations' children */
+    border-left: 1px solid var(--ly-border);
+}
+
+/* LYRA_CONV_TITLE_ELLIPSIS */
+/* Titles come from the first user message, so they are frequently longer than
+   the 264px rail. Without this the text was simply cut off mid-word by
+   .conv-panel{overflow-x:hidden}, with no visual indication. min-width:0 is
+   required on the flex child or it refuses to shrink below its content. */
+.conv-item { min-width: 0; }
+.conv-item-text { min-width: 0; }
+.conv-item-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.conv-item-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* The conversation rows are built by JavaScript, so this targets whatever
@@ -225,9 +265,24 @@ body::after {
     cursor: pointer;
 }
 
-/* ── Tools strip ────────────────────────────────────────────────────────── */
+/* ── Tools strip ──────────────────────────────────────────────────────────
+   Both states are declared here on purpose. app.css sets
+   `.ai-tools-wrap.open .ai-tools-row{display:flex}` at specificity (0,3,0),
+   and this file loads after app.css. A bare `.ai-tools-row{display:flex}`
+   here therefore won the cascade against app.css's closed state and the row
+   was visible from page load, with the toggle appearing to do nothing.
+   The compound selectors below resolve to (0,4,0), which beats (0,3,0), so
+   the collapsed default actually applies and the toggle works. */
 .chat-top-tools { padding: var(--ly-s3) var(--ly-s5) 0; }
-.ai-tools-row { display: flex; align-items: center; gap: var(--ly-s3); flex-wrap: wrap; }
+.ai-tools-row,
+.minimal-chat-shell .ai-tools-wrap:not(.open) .ai-tools-row { display: none; }
+.ai-tools-wrap.open .ai-tools-row,
+.minimal-chat-shell .ai-tools-wrap.open .ai-tools-row {
+    display: flex;
+    align-items: center;
+    gap: var(--ly-s3);
+    flex-wrap: wrap;
+}
 .ai-tool-toggle {
     display: inline-flex;
     align-items: center;
@@ -585,7 +640,11 @@ body.widget-chat-shell { grid-template-columns: minmax(0, 1fr); }
    Every id in the chat modules is untouched; these are new elements only. */
 
 body.minimal-chat-shell {
-    grid-template-columns: 264px minmax(0, 1fr) 320px;
+    /* --ly-trail-w is shared with the top bar so the rail and the top-bar
+       action cluster end on the same edge, as they do in the mockup. The old
+       literal 320px here and a different 320px in the bar is why they did not
+       line up. */
+    grid-template-columns: var(--ly-rail-w) minmax(0, 1fr) var(--ly-trail-w);
     grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -593,7 +652,10 @@ body.minimal-chat-shell {
     grid-column: 1 / -1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: 264px minmax(0, 1fr) 320px;
+    /* Three tracks, not four. The deleted 264px first track previously held
+       nothing at all, because .lyra-topbar-brand is display:none — it just
+       pushed the model selector 288px from the left edge for no reason. */
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     height: var(--ly-topbar-h);
     padding: 0 var(--ly-s5) 0 var(--ly-s4);
@@ -762,7 +824,15 @@ body.minimal-chat-shell {
     letter-spacing: 0.01em;
 }
 
-.lyra-railnav, .lyra-quick { display: flex; flex-direction: column; gap: 2px; }
+/* flex:0 0 auto stops the rail from compressing these groups to fit; without
+   it they shrink and their labels overlap rather than the rail scrolling. */
+.lyra-railnav, .lyra-quick {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-height: 0;
+}
 .lyra-railhead {
     padding: var(--ly-s4) var(--ly-s3) var(--ly-s2);
     font-size: 10.5px;
@@ -858,19 +928,33 @@ body.minimal-chat-shell {
 }
 .lyra-modelselect svg { width: 12px; height: 12px; opacity: 0.6; flex: 0 0 auto; }
 
-.lyra-pillgroup { display: flex; align-items: center; gap: 0; border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); background: var(--ly-glass); overflow: hidden; }
+.lyra-pillgroup {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+/* Single line, not two. The stacked label/value form cost ~62px per cell and
+   was the reason the pills had to be hidden below 1440px. The mockup reads as
+   one line per pill, so this is also closer to the design. */
 .lyra-pillcell {
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 6px 12px;
+    gap: 6px;
+    padding: 7px 11px;
     font-size: 11.5px;
-    color: var(--ly-text-4);
+    line-height: 1.2;
+    color: var(--ly-text-3);
     border-right: 1px solid var(--ly-border);
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 .lyra-pillcell:last-child { border-right: 0; }
-.lyra-pillcell b { display: block; font-size: 12px; font-weight: 600; color: var(--ly-text); }
+.lyra-pillcell b { font-size: 11.5px; font-weight: 600; color: var(--ly-text); }
 .lyra-pillcell .lyra-pdot { width: 6px; height: 6px; border-radius: 50%; background: var(--ly-success); flex: 0 0 auto; }
 .lyra-pillcell svg { width: 13px; height: 13px; flex: 0 0 auto; opacity: 0.7; }
 
@@ -1010,9 +1094,6 @@ body.minimal-chat-shell {
 .lyra-chip.is-on { background: var(--ly-primary-soft); border-color: var(--ly-primary-line); color: var(--ly-primary-text); }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
-@media (max-width: 1240px) {
-    .lyra-pillgroup { display: none; }
-}
 @media (max-width: 900px) {
     .lyra-capgrid, .lyra-suggestgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lyra-modelselect { display: none; }
@@ -1029,19 +1110,18 @@ body.minimal-chat-shell {
 
    The global search field is not part of the Chat-Page design, so it is hidden
    here rather than removed from the markup, keeping the element available. */
-.lyra-topbar { grid-template-columns: 264px auto minmax(0, 1fr) auto; }
-.lyra-topbar-search { display: none; }
-.lyra-topbar-mid { grid-column: 2; display: flex; align-items: center; gap: var(--ly-s3); min-width: 0; }
-.lyra-topbar-actions { grid-column: 4; }
+/* Rail/rail widths in variables so the shell grid, the top bar and the
+   right rail cannot drift apart again. */
+:root, body {
+    --ly-rail-w: 264px;
+    --ly-trail-w: 312px;
+}
 
-@media (max-width: 1240px) {
-    .lyra-topbar { grid-template-columns: 230px auto minmax(0, 1fr) auto; }
-}
-@media (max-width: 1100px) {
-    /* Not enough room for the pills next to the model selector. */
-    .lyra-pillgroup { display: none; }
-    .lyra-topbar { grid-template-columns: 230px auto minmax(0, 1fr) auto; }
-}
+.lyra-topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
+.lyra-topbar-search { display: none; }
+.lyra-topbar-mid { grid-column: 1; display: flex; align-items: center; gap: var(--ly-s2); min-width: 0; }
+.lyra-topbar-actions { grid-column: 3; }
+
 @media (max-width: 900px) {
     .lyra-topbar { grid-template-columns: minmax(0, 1fr) auto; }
     .lyra-topbar-mid { grid-column: 1; }
@@ -1125,9 +1205,6 @@ body.minimal-chat-shell {
 @media (max-width: 1560px) {
     .lyra-pillcell { padding: 6px 9px; font-size: 11px; }
     .lyra-modelselect { padding: 6px 10px; font-size: 12px; }
-}
-@media (max-width: 1440px) {
-    .lyra-pillgroup { display: none; }
 }
 
 /* ── Shell pinned to the viewport ───────────────────────────────────────────
@@ -1559,4 +1636,29 @@ body.minimal-chat-shell::-webkit-scrollbar {
 @media (max-width: 1500px) {
     /* Drop the plan line before the name, so the block stays one line. */
     .lyra-utext em { display: none; }
+}
+
+/* LYRA_TOPBAR_REDESIGN_V1 */
+/* Measure before hiding: model select (~186) + pills (~340 with padding) +
+   gaps + the full action cluster (~453) + bar padding is ~1030px, so the pills
+   fit comfortably from about 1100px up. 1180 leaves headroom for a scrollbar
+   and for the longest model name. Below that only the pills go; the model
+   selector stays, unlike before. */
+@media (max-width: 1180px) {
+    .lyra-pillgroup { display: none; }
+}
+
+/* The action cluster steps down rather than wrapping. Each stage drops the
+   least-important item and keeps the account reachable, so the top bar never
+   wraps to a second row at any width. */
+@media (max-width: 1400px) {
+    .lyra-btn-voice span { display: none; }
+    .lyra-btn-voice { padding: 0 10px; }
+}
+@media (max-width: 1330px) {
+    .lyra-topbar-actions > .lyra-iconbtn { display: none; }
+}
+@media (max-width: 1150px) {
+    .lyra-user .lyra-utext { display: none; }
+    .lyra-user { padding: 5px; }
 }
