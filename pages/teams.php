@@ -117,31 +117,15 @@ function tw_when(string $s): string {
 $nCh = count($channels); $nMsg = count($messages); $nMem = count($members);
 $activeName = $active ? pk($active, ['name'], 'channel') : '';
 
-/* LYRA_TEAMS_VIEWER_BLOCK -- idempotency marker; this exact string appears
- * only in the inserted block, never in the text it replaced, so a second run
- * of the patch cannot match its own output and insert a duplicate.
- *
- * Who is looking at this page. Both the top bar and the greeting previously
- * embedded a literal name and initials, so every account saw the same
- * identity regardless of who was signed in. Resolve it from the session,
- * falling back to an explicit guest label rather than a name that is wrong.
- * (The literal strings are deliberately not repeated in this comment, so that
- * searching for them finds markup, not prose.) */
-$sessUid     = (int) ($_SESSION['user_id'] ?? 0);
-$sessUname   = trim((string) ($_SESSION['username'] ?? ''));
-$viewerName  = '';
-$viewerPlan  = '';
-if ($sessUid > 0 && isset($users[$sessUid])) {
-    $viewerName = trim((string) ($users[$sessUid]['username'] ?? ''));
-    $viewerPlan = trim((string) ($users[$sessUid]['plan'] ?? ''));
-}
-if ($viewerName === '' && $sessUname !== '') { $viewerName = $sessUname; }
-$isGuest        = ($viewerName === '');
-$viewerLabel    = $isGuest ? 'Guest' : $viewerName;
-$viewerInitials = inits($viewerLabel);
-$viewerStatus   = $isGuest
-    ? 'Not signed in'
-    : ($viewerPlan !== '' ? ucfirst($viewerPlan) . ' plan' : 'Online');
+/* Viewer identity comes from api/lyra_ui_nav.php (already required above).
+ * This page previously had its own copy of the lookup; two implementations of
+ * "who is the viewer" is exactly how the pages drifted apart, so it now shares
+ * the single one. $viewerLabel / $viewerInitials / $viewerStatus keep their
+ * names because the markup below references them. */
+$lyViewer       = lyra_ui_viewer();
+$viewerLabel    = (string) $lyViewer['label'];
+$viewerInitials = (string) $lyViewer['initials'];
+$viewerStatus   = (string) $lyViewer['status'];
 
 /* Time-of-day greeting, computed rather than written into the markup. */
 $hourAtRender = (int) date('G');

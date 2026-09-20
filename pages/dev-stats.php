@@ -256,10 +256,11 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                 <div style="font-size:11px;color:var(--ly-text-4)">Build &middot; Automate &middot; Scale</div>
             </div>
             <div class="ly-spacer"></div>
-            <span class="ly-avatar ly-avatar-sm">AW</span>
+            <?php $lyViewer = lyra_ui_viewer(); ?>
+            <span class="ly-avatar ly-avatar-sm"><?php echo htmlspecialchars($lyViewer['initials'], ENT_QUOTES, 'UTF-8'); ?></span>
             <div>
-                <div style="font-size:12.5px;font-weight:600">Alex West</div>
-                <div style="font-size:11px;color:var(--ly-text-4)">Developer</div>
+                <div style="font-size:12.5px;font-weight:600"><?php echo htmlspecialchars($lyViewer['label'], ENT_QUOTES, 'UTF-8'); ?></div>
+                <div style="font-size:11px;color:var(--ly-text-4)">Administrator</div>
             </div>
         </div>
 

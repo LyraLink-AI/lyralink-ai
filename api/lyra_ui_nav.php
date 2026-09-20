@@ -17,10 +17,110 @@
  */
 declare(strict_types=1);
 
+/* LYRA_UI_VIEWER_HELPER -- idempotency marker; this string is introduced only by
+ * this block, never present in the text it replaced, so a re-run is a no-op.
+ *
+ * This library calls api_db_config(), which lives in security.php. It previously
+ * relied on the caller having included that first. A shared library must declare
+ * its own dependencies: when it does not, an undefined function surfaces as a
+ * fatal that a surrounding try/catch can swallow into a silent empty result.
+ * require_once is a no-op when the caller already loaded it. */
+require_once __DIR__ . '/security.php';
+
+if (!function_exists('lyra_ui_viewer_row')) {
+    /**
+     * The users row for the signed-in session, cached per request.
+     *
+     * Returns null when there is no session, no matching row, or the lookup
+     * fails. Callers must treat null as "unknown viewer", never as an admin, and
+     * must not fall back to a hardcoded name.
+     */
+    function lyra_ui_viewer_row(): ?array
+    {
+        static $row = false;   // false = not looked up yet, null = looked up empty
+        if ($row !== false) {
+            return $row;
+        }
+        $row = null;
+
+        $user = trim((string) ($_SESSION['username'] ?? ''));
+        if ($user === '') {
+            return $row;
+        }
+
+        try {
+            $cfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
+            $db = new mysqli($cfg['host'], $cfg['user'], $cfg['pass'], $cfg['name']);
+            if ($db->connect_error) {
+                return $row;
+            }
+            $st = $db->prepare('SELECT username, is_admin, plan FROM users WHERE username = ? LIMIT 1');
+            if ($st) {
+                $st->bind_param('s', $user);
+                $st->execute();
+                $res = $st->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                $st->close();
+            }
+            $db->close();
+        } catch (\Throwable $e) {
+            // Never let a failed lookup invent an identity; fall through to guest.
+            $row = null;
+        }
+
+        return $row;
+    }
+}
+
+if (!function_exists('lyra_ui_viewer')) {
+    /**
+     * Who is viewing this page. The single source of truth for the new UI's
+     * identity chrome, so the top bar and any greeting cannot disagree.
+     *
+     * 'label' and 'initials' fall back to an explicit Guest rather than a name
+     * taken from a template, because a wrong name shown as fact is worse than
+     * an honest placeholder.
+     */
+    function lyra_ui_viewer(): array
+    {
+        static $viewer = null;
+        if ($viewer !== null) {
+            return $viewer;
+        }
+
+        $row  = lyra_ui_viewer_row();
+        $sess = trim((string) ($_SESSION['username'] ?? ''));
+
+        $name = $row !== null ? trim((string) ($row['username'] ?? '')) : '';
+        if ($name === '') {
+            $name = $sess;
+        }
+
+        $plan    = $row !== null ? trim((string) ($row['plan'] ?? '')) : '';
+        $isGuest = ($name === '');
+
+        $letters  = preg_replace('/[^A-Za-z]/', '', $name);
+        $initials = $isGuest ? 'GU' : strtoupper(substr($letters !== '' ? $letters : 'U', 0, 2));
+
+        $viewer = [
+            'name'     => $name,
+            'label'    => $isGuest ? 'Guest' : $name,
+            'initials' => $initials,
+            'plan'     => $plan,
+            'is_guest' => $isGuest,
+            'status'   => $isGuest
+                ? 'Not signed in'
+                : ($plan !== '' ? ucfirst($plan) . ' plan' : 'Online'),
+        ];
+
+        return $viewer;
+    }
+}
+
 if (!function_exists('lyra_ui_is_admin')) {
     /**
      * True when the current session belongs to an administrator.
-     * Result is cached per request; the lookup is a single indexed row.
+     * Reads the same cached row as lyra_ui_viewer(), so this costs no extra query.
      */
     function lyra_ui_is_admin(): bool
     {
@@ -28,33 +128,8 @@ if (!function_exists('lyra_ui_is_admin')) {
         if ($cached !== null) {
             return $cached;
         }
-        $cached = false;
-
-        $user = (string) ($_SESSION['username'] ?? '');
-        if ($user === '') {
-            return false;
-        }
-
-        try {
-            $cfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
-            $db = new mysqli($cfg['host'], $cfg['user'], $cfg['pass'], $cfg['name']);
-            if ($db->connect_error) {
-                return false;
-            }
-            $st = $db->prepare('SELECT is_admin FROM users WHERE username = ? LIMIT 1');
-            if ($st) {
-                $st->bind_param('s', $user);
-                $st->execute();
-                $res = $st->get_result();
-                $row = $res ? $res->fetch_assoc() : null;
-                $cached = $row !== null && (int) $row['is_admin'] === 1;
-                $st->close();
-            }
-            $db->close();
-        } catch (\Throwable $e) {
-            $cached = false;
-        }
-
+        $row = lyra_ui_viewer_row();
+        $cached = $row !== null && (int) ($row['is_admin'] ?? 0) === 1;
         return $cached;
     }
 }
