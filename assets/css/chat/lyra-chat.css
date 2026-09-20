@@ -282,6 +282,18 @@ body::after {
     align-items: center;
     gap: var(--ly-s3);
     flex-wrap: wrap;
+    /* app.css sets this element's border, background, colour, size and font
+       with hardcoded values rather than var(--...), so the legacy bridge in
+       lyra-theme.css cannot retheme it. Declaring the design tokens here keeps
+       the strip on the current theme whatever app.css says. */
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+    color: var(--ly-text-3);
+    font-family: inherit;
+    font-size: var(--ly-fs-sm);
 }
 .ai-tool-toggle {
     display: inline-flex;
