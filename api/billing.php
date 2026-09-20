@@ -486,9 +486,12 @@ function billing_client_ip(): string {
 }
 
 function billing_is_admin(): bool {
-    $devUsername = api_get_secret('ADMIN_DEV_USERNAME', 'developer') ?? 'developer';
-    $sessionUser = trim((string)($_SESSION['username'] ?? ''));
-    return !empty($_SESSION['is_admin']) || ($sessionUser !== '' && $sessionUser === $devUsername);
+    /* This OR'd $_SESSION['is_admin'] with a hardcoded developer username.
+     * Nothing in the codebase ever SETS that session key, so the first branch
+     * was dead and this was in practice dev-username-only - the second
+     * administrator account was refused. lyra_admin_ok() reads users.is_admin,
+     * which is the authoritative flag. */
+    return lyra_admin_ok();
 }
 
 function billing_transfer_ref(): string {

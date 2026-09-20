@@ -226,6 +226,121 @@ if (!function_exists('lyra_dev_preview')) {
     }
 }
 
+if (!function_exists('lyra_is_fork_mode')) {
+    /**
+     * True only when this install is explicitly configured as a fork.
+     *
+     * It used to be inferred from the request's Host header: fork mode was true
+     * whenever that value differed from the canonical two, so a caller-supplied
+     * input decided whether three admin pages required a login at all, and
+     * whether index.php redirected / to the admin console. Verified by
+     * evaluating the old expression directly on the server - the canonical host
+     * enforced auth, while an IP or an arbitrary domain skipped it. Fork mode is
+     * configuration only now, so no request header can influence it.
+     * (The old variable name is deliberately not repeated here: an assertion
+     * elsewhere greps for it, and prose that quotes the thing being searched for
+     * has broken this project's own checks four times now.)
+     */
+    function lyra_is_fork_mode(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        if (!function_exists('api_get_secret')) {
+            // Declare our own dependency instead of assuming the caller loaded it.
+            require_once __DIR__ . '/security.php';
+        }
+        $cached = ((string) api_get_secret('FORK_MODE', '')) === '1';
+        return $cached;
+    }
+}
+
+if (!function_exists('lyra_fork_unauth_admin_allowed')) {
+    /**
+     * True only when a fork has explicitly opted into unauthenticated admin.
+     * Off unless ALLOW_UNAUTH_FORK_ADMIN=1 is set. Kept separate from
+     * lyra_is_fork_mode() so that being a fork is never by itself enough to
+     * drop authentication.
+     */
+    function lyra_fork_unauth_admin_allowed(): bool
+    {
+        if (!function_exists('api_get_secret')) {
+            require_once __DIR__ . '/security.php';
+        }
+        return ((string) api_get_secret('ALLOW_UNAUTH_FORK_ADMIN', '0')) === '1';
+    }
+}
+
+if (!function_exists('lyra_admin_ok')) {
+    /**
+     * True when the current session belongs to an administrator.
+     *
+     * users.is_admin is the authoritative flag, so any administrator account is
+     * handled rather than one hardcoded username. A configured break-glass
+     * username is also accepted, because these gates previously named a single
+     * account and a deployment that only has that account must not lock itself
+     * out. Identity never comes from a cookie or a header.
+     */
+    function lyra_admin_ok(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        $cached = false;
+
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return $cached;
+        }
+        $user = trim((string) ($_SESSION['username'] ?? ''));
+        if ($user === '') {
+            return $cached;
+        }
+
+        if (!function_exists('api_db_config')) {
+            require_once __DIR__ . '/security.php';
+        }
+
+        try {
+            $dev = trim((string) api_get_secret('ADMIN_DEV_USERNAME', 'developer'));
+            if ($dev !== '' && hash_equals($dev, $user)) {
+                $cached = true;
+                return $cached;
+            }
+
+            $cfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
+            $db = new mysqli($cfg['host'], $cfg['user'], $cfg['pass'], $cfg['name']);
+            if ($db->connect_error) {
+                return $cached;
+            }
+            $st = $db->prepare('SELECT is_admin FROM users WHERE username = ? LIMIT 1');
+            if ($st) {
+                $st->bind_param('s', $user);
+                $st->execute();
+                $res = $st->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                $cached = $row !== null && (int) $row['is_admin'] === 1;
+                $st->close();
+            }
+            $db->close();
+        } catch (\Throwable $e) {
+            // A failed lookup must never grant access.
+            $cached = false;
+        }
+
+        return $cached;
+    }
+}
+
+if (!function_exists('lyra_admin_gate_ok')) {
+    /** The single authorization predicate for every admin surface. */
+    function lyra_admin_gate_ok(): bool
+    {
+        return lyra_admin_ok() || (lyra_is_fork_mode() && lyra_fork_unauth_admin_allowed());
+    }
+}
+
 if (!function_exists('lyra_csrf_secret')) {
     function lyra_csrf_secret(): string
     {

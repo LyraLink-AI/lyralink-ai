@@ -15,15 +15,10 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 api_json_headers();
 
-$host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
-$isPrimaryHost = in_array($host, ['lyralinkai.com', 'www.lyralinkai.com'], true);
-$forkModeEnv = (string)api_get_secret('FORK_MODE', '');
-$isForkMode = ($forkModeEnv === '1') || ($host !== '' && !$isPrimaryHost);
-$allowUnauthForkAdmin = api_get_secret('ALLOW_UNAUTH_FORK_ADMIN', '0') === '1';
-$devUsername = (string)api_get_secret('ADMIN_DEV_USERNAME', 'developer');
-$isDevSession = !empty($_SESSION['username']) && (string)$_SESSION['username'] === $devUsername;
+/* Fork mode from configuration only; the Host header is caller-controlled. */
+$isForkMode = lyra_is_fork_mode();
 
-if (!$isDevSession && !($isForkMode && $allowUnauthForkAdmin)) {
+if (!lyra_admin_gate_ok()) {
     api_fail('Forbidden', 403);
 }
 

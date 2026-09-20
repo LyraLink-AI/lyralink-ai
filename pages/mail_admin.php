@@ -1,8 +1,9 @@
 <?php
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
-$devUsername = 'developer';
-if (empty($_SESSION['username']) || $_SESSION['username'] !== $devUsername) {
+/* Was a comparison against the literal 'developer', so any other administrator
+ * account was refused. users.is_admin is the authoritative flag. */
+if (!lyra_admin_ok()) {
     header('Location: /');
     exit;
 }

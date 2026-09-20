@@ -1,12 +1,10 @@
 <?php
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
-$host = strtolower($_SERVER['HTTP_HOST'] ?? '');
-$isPrimaryHost = in_array($host, ['lyralinkai.com', 'www.lyralinkai.com'], true);
-$forkModeEnv = getenv('FORK_MODE') ?: ($_ENV['FORK_MODE'] ?? '');
-$isForkMode = ($forkModeEnv === '1') || ($host !== '' && !$isPrimaryHost);
-$devUsername = 'developer';
-if (!$isForkMode && (empty($_SESSION['username']) || $_SESSION['username'] !== $devUsername)) {
+/* Fork mode from configuration only - it used to be inferred from the Host
+ * header, and in that state this page skipped the login check below entirely. */
+$isForkMode = lyra_is_fork_mode();
+if (!lyra_admin_gate_ok()) {
     header('Location: /'); exit;
 }
 ?>

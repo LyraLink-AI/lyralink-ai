@@ -1,5 +1,17 @@
 <?php
-if (file_exists(__DIR__ . '/maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+// Definitions only; this does not start a session.
+require_once __DIR__ . '/api/session_boot.php';
+
+/* Maintenance bypass requires a developer SESSION. It used to test the
+ * presence of the lyralink_dev cookie, which anyone could set - and this was
+ * the last place that mechanism survived after it was removed everywhere else.
+ * A session is only continued when the visitor already had one, so the landing
+ * page still creates no session for an anonymous visitor. */
+$lyraHadSession = isset($_COOKIE['LYRASESS']) || isset($_COOKIE[session_name()]);
+if ($lyraHadSession) {
+    lyra_session_boot();
+}
+if (file_exists(__DIR__ . '/maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php');
     exit;
 }
@@ -8,10 +20,10 @@ if (!empty($_GET['ref']) && preg_match('/^[a-f0-9]{48}$/', $_GET['ref'])) {
     setcookie('reseller_ref', $_GET['ref'], time() + 30 * 86400, '/', '', true, true);
 }
 
-$host = strtolower($_SERVER['HTTP_HOST'] ?? '');
-$isPrimaryHost = in_array($host, ['lyralinkai.com', 'www.lyralinkai.com'], true);
-$forkModeEnv = getenv('FORK_MODE') ?: ($_ENV['FORK_MODE'] ?? '');
-$isForkMode = ($forkModeEnv === '1') || ($host !== '' && !$isPrimaryHost);
+/* Fork mode is configuration only. It used to be inferred from the Host
+ * header, which the caller controls - and this redirect pointed / at the admin
+ * console, which then skipped its own login check in the same state. */
+$isForkMode = lyra_is_fork_mode();
 if ($isForkMode) {
     header('Location: /pages/admin.php');
     exit;

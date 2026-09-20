@@ -4,11 +4,11 @@ require_once __DIR__ . '/security.php';
 lyra_session_boot();
 api_json_headers();
 
-$host = strtolower($_SERVER['HTTP_HOST'] ?? '');
-$isPrimaryHost = in_array($host, ['lyralinkai.com', 'www.lyralinkai.com'], true);
-$forkModeEnv = api_get_secret('FORK_MODE', '');
-$isForkMode = ($forkModeEnv === '1') || ($host !== '' && !$isPrimaryHost);
-$allowUnauthForkAdmin = api_get_secret('ALLOW_UNAUTH_FORK_ADMIN', '0') === '1';
+/* Fork mode from configuration only; the Host header is caller-controlled.
+ * Both flags are read explicitly so that being a fork is never by itself
+ * enough to drop authentication. */
+$isForkMode = lyra_is_fork_mode();
+$allowUnauthForkAdmin = lyra_fork_unauth_admin_allowed();
 
 // ── AUTH CHECK — dev only ──
 $dbHost = 'localhost';
@@ -28,7 +28,7 @@ $dbUser = $dbCfg['user'];
 $dbPass = $dbCfg['pass'];
 $dbName = $dbCfg['name'];
 
-if ((empty($_SESSION['username']) || $_SESSION['username'] !== $devUsername) && !($isForkMode && $allowUnauthForkAdmin)) {
+if (!lyra_admin_gate_ok()) {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']); exit;
 }
 
