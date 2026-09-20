@@ -269,6 +269,63 @@ body::after {
    user, so the disabled affordance is explicit here too. */
 .lyra-navitem.is-pending { opacity: .45; cursor: not-allowed; }
 
+/* ── Rail rows that act on the page rather than navigating ─────────────────
+   Rendered as <button>, so they need the anchor's look reset explicitly. */
+.lyra-navitem-btn {
+    width: 100%; text-align: left; font: inherit;
+    background: transparent; border: 0; cursor: pointer;
+}
+
+/* ── Workspace panels (Files / Projects / Settings) ────────────────────────
+   A panel over the chat column, because these are contextual to a
+   conversation rather than separate destinations. */
+.lyra-panelhost {
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 40;
+    display: flex; justify-content: flex-end;
+    background: rgba(2, 9, 26, 0.32);
+}
+[data-theme="light"] .lyra-panelhost { background: rgba(11, 16, 32, 0.18); }
+.lyra-panelbox {
+    position: relative;
+    width: min(420px, 100%);
+    height: 100%;
+    overflow-y: auto;
+    padding: var(--ly-s6) var(--ly-s5);
+    background: var(--ly-surface);
+    border-left: 1px solid var(--ly-border-2);
+    box-shadow: var(--ly-shadow-lg);
+}
+.lyra-panelclose {
+    position: absolute; top: 10px; right: 12px;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--ly-text-3); font-size: 20px; line-height: 1; padding: 2px 7px;
+    border-radius: var(--ly-r-xs);
+}
+.lyra-panelclose:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.lyra-paneltitle { margin: 0 0 6px; font-size: var(--ly-fs-lg); color: var(--ly-text); }
+.lyra-panelnote { margin: 0 0 var(--ly-s5); font-size: 12.5px; color: var(--ly-text-3); line-height: 1.6; }
+.lyra-panelempty {
+    display: flex; flex-direction: column; gap: 7px;
+    padding: var(--ly-s5); text-align: center;
+    border: 1px dashed var(--ly-border-2);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+    font-size: 12.5px; color: var(--ly-text-3); line-height: 1.6;
+}
+.lyra-panelempty b { color: var(--ly-text); font-size: 13.5px; }
+.lyra-settingrow {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--ly-s4);
+    padding: 13px 0;
+    border-bottom: 1px solid var(--ly-border);
+}
+.lyra-settingrow:last-child { border-bottom: 0; }
+.lyra-settingtext { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lyra-settingtext b { font-size: 13px; color: var(--ly-text); }
+.lyra-settingtext em { font-style: normal; font-size: 11.5px; color: var(--ly-text-4); }
+@media (max-width: 720px) { .lyra-panelbox { width: 100%; border-left: 0; } }
+
 /* ── Tools panel: a box above the composer ─────────────────────────────────
    The toggle lives at the top of the chat column, so the panel used to open
    there and push the message list down - nowhere near the composer the user is
