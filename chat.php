@@ -5,7 +5,7 @@ require_once __DIR__ . '/api/lyra_chat_chrome.php';
 require_once __DIR__ . '/api/lyra_chat_data.php';
 $maintenanceFlag = __DIR__ . '/maintenance.flag';
 $isMaintenance   = file_exists($maintenanceFlag);
-$isDevCookie     = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
+$isDevCookie     = lyra_dev_preview();   // was a cookie any visitor could set
 $devUsername     = 'developer';
 $sessionUsername = (string)($_SESSION['username'] ?? '');
 $isDevUser       = ($sessionUsername === $devUsername);

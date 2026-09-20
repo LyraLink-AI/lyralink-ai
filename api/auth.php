@@ -238,9 +238,12 @@ function auth_finalize_login(array $user): void {
     $_SESSION['last_active'] = time();
     unset($_SESSION['pending_2fa_user_id'], $_SESSION['pending_2fa_expires']);
 
-    if (($user['username'] ?? '') === 'developer') {
-        setcookie('lyralink_dev', 'bypass', 0, '/', '', false, false);
-    }
+    /* The `lyralink_dev` cookie is no longer issued. It was set with
+     * secure=false and httponly=false, carried the public constant "bypass", and
+     * was accepted on presence alone - including three times as an
+     * authentication decision, which let anyone reach a user-data screen. The
+     * developer's maintenance preview now comes from lyra_dev_preview(), which
+     * reads the session. */
 }
 
 function auth_check_idle(): void {

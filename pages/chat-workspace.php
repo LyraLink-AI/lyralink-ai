@@ -17,7 +17,8 @@ exit;
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
 
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+/* Was isset($_COOKIE['lyralink_dev']), which any visitor could set. */
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 

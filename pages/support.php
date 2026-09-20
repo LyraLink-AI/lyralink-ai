@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) { header('Location: /pages/maintenance.php'); exit; }
+/* Was isset($_COOKIE['lyralink_dev']), which any visitor could set. */
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) { header('Location: /pages/maintenance.php'); exit; }
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -1,5 +1,9 @@
 <?php
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
+/* Was isset($_COOKIE['lyralink_dev']), which any visitor could set. This page
+ * previously started no session, so the check could not have used one. */
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 ?>

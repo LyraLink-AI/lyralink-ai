@@ -206,6 +206,26 @@ if (!function_exists('lyra_session_elevate')) {
    at privilege change via lyra_session_elevate().
    ──────────────────────────────────────────────────────────────────────── */
 
+if (!function_exists('lyra_dev_preview')) {
+    /**
+     * True when the current request is the developer account previewing the site
+     * while maintenance mode is on.
+     *
+     * Replaced a test for the `lyralink_dev` cookie. The server set that cookie
+     * with secure=false and httponly=false, its value was the public constant
+     * "bypass", and every check accepted it on presence alone - so any visitor
+     * could set it and skip maintenance. A cookie is not evidence of identity;
+     * the session is.
+     */
+    function lyra_dev_preview(): bool
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return false;
+        }
+        return ((string) ($_SESSION['username'] ?? '')) === 'developer';
+    }
+}
+
 if (!function_exists('lyra_csrf_secret')) {
     function lyra_csrf_secret(): string
     {
