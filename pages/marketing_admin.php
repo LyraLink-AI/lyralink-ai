@@ -152,7 +152,7 @@ async function refresh() {
     <td>${esc(r.audience || 'general')}</td>
     <td>${esc(r.recommendation || '')}</td>
     <td><button class="btn" onclick="promoteRecommendation('${packed}')">Promote</button></td>
-  </tr>`).join('');
+  </tr>`;
   }).join('');
   document.getElementById('recommendationTable').innerHTML = recHead + (recRows || '<tr><td colspan="4">No recommendations available.</td></tr>');
 
