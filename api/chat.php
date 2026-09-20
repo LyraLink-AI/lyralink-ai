@@ -11,7 +11,11 @@ require_once __DIR__ . '/lib/finance.php';
 // computed alongside the trace id, above the remaining routing requires.
 require_once __DIR__ . '/lib/chat/orchestrator.php';
 
-$isDevMode = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
+/* Was a cookie check, which anyone could satisfy. This only allows
+ * display_errors when APP_DEBUG=1, so it is a display toggle rather than an
+ * authorization, but it keyed off a cookie nobody had to authenticate for. A
+ * session check is the honest source. */
+$isDevMode = ((string)($_SESSION['username'] ?? '') === 'developer');
 $isDebugEnabled = api_get_secret('APP_DEBUG', '0') === '1';
 if ($isDevMode && $isDebugEnabled) {
     ini_set('display_errors', '1');

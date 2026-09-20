@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
-$devCookieBypass = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
-$isDevUser = (($_SESSION['username'] ?? '') === 'developer') || $devCookieBypass;
+/* The `lyralink_dev` cookie used to grant access here with no session at all.
+ * Its value is a public constant, so this page - which renders user_message and
+ * ip_address - was reachable by anyone. Session only. */
+$isDevUser = (($_SESSION['username'] ?? '') === 'developer');
 if (!$isDevUser) {
     http_response_code(403);
     die('Unauthorized');

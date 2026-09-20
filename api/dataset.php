@@ -23,9 +23,13 @@ $groqApiKey = api_get_secret('GROQ_API_KEY', '');
 // ════════════════════════════════
 // DEV ONLY — all dataset management requires developer login
 // ════════════════════════════════
+// The `lyralink_dev` cookie used to be accepted here as an alternative to a
+// session. Its value is a public constant, so that made this endpoint readable
+// by anyone who set one cookie: verified live, ?action=stats returned real
+// dataset totals with no account, and pages/dataset_manager.php rendered a
+// user-data screen. A cookie cannot be evidence of identity. Session only.
 $devUsername = 'developer';
-$devCookieBypass = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
-$isDevUser = (($_SESSION['username'] ?? '') === $devUsername) || $devCookieBypass;
+$isDevUser = (($_SESSION['username'] ?? '') === $devUsername);
 
 require_once __DIR__ . '/dataset_search.php';
 

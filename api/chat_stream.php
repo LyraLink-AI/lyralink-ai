@@ -326,8 +326,9 @@ ob_implicit_flush(true);
 
 $devUsername = 'developer';
 $sessionUsername = (string)($_SESSION['username'] ?? '');
-$devCookieBypass = isset($_COOKIE['lyralink_dev']) && $_COOKIE['lyralink_dev'] === 'bypass';
-$isDevUser = ($sessionUsername === $devUsername) || $devCookieBypass;
+// Cookie bypass removed: it accepted a public constant as a credential, so the
+// dev stream was open to anyone who set it. Session only.
+$isDevUser = ($sessionUsername === $devUsername);
 
 if (!$isDevUser) {
     http_response_code(403);
