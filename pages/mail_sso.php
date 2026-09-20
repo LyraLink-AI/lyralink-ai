@@ -8,6 +8,7 @@ function sso_fail(string $message): void {
     header('Content-Type: text/html; charset=UTF-8');
     echo '<!doctype html><html><head><meta charset="utf-8"><title>Mail SSO Error</title>    <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head><body style="font-family:monospace;background:#0b0d14;color:#e5e7eb;padding:24px">';
     echo '<h2 style="margin:0 0 12px">Mail SSO failed</h2>';
     echo '<div style="color:#fca5a5">' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</div>';

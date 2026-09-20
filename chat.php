@@ -70,6 +70,7 @@ if ($isMaintenance && !$isDevCookie) {
     <script src="/assets/js/chat/lyra-chat-rail.js?v=<?php echo htmlspecialchars($lyraChatRailJsVersion, ENT_QUOTES, 'UTF-8'); ?>" defer></script>
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 <script>window.LYRA_WELCOME_HTML = <?php echo json_encode(lyra_chat_welcome(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;</script>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="minimal-chat-shell<?php echo $isWidgetEmbed ? ' widget-chat-shell' : ''; ?>">
 

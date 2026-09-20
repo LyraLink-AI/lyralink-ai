@@ -20,6 +20,8 @@
   --ly-surface-2:     #0A1533;
   --ly-surface-3:     #101B3D;
   --ly-rail:          #030C20;
+  /* Sticky top bar: an opaque-ish scrim so content scrolls under it. */
+  --ly-topbar-bg:     rgba(2, 9, 26, 0.82);
 
   /* Translucent surfaces for cards on top of the page background */
   --ly-glass:         rgba(255, 255, 255, 0.024);
@@ -268,7 +270,7 @@ body.ly > * { position: relative; z-index: 1; }
 .ly-btn-quiet { background: transparent; border-color: transparent; color: var(--ly-text-2); }
 .ly-btn-quiet:hover { background: var(--ly-glass); color: var(--ly-text); }
 
-.ly-btn-danger { background: var(--ly-danger-soft); border-color: rgba(239,68,68,0.32); color: #FCA5A5; }
+.ly-btn-danger { background: var(--ly-danger-soft); border-color: rgba(239,68,68,0.32); color: var(--ly-danger); }
 .ly-btn-danger:hover { background: rgba(239,68,68,0.20); }
 
 .ly-btn-sm { padding: 7px 13px; font-size: var(--ly-fs-sm); border-radius: var(--ly-r-sm); }
@@ -378,10 +380,10 @@ body.ly > * { position: relative; z-index: 1; }
   color: var(--ly-text-2);
 }
 .ly-badge-primary { background: var(--ly-primary-soft); border-color: var(--ly-primary-line); color: var(--ly-primary-text); }
-.ly-badge-success { background: var(--ly-success-soft); border-color: rgba(34,197,94,0.30);  color: #6EE7A0; }
-.ly-badge-warning { background: var(--ly-warning-soft); border-color: rgba(245,158,11,0.30); color: #FCD34D; }
-.ly-badge-danger  { background: var(--ly-danger-soft);  border-color: rgba(239,68,68,0.30);  color: #FCA5A5; }
-.ly-badge-info    { background: var(--ly-info-soft);    border-color: rgba(56,189,248,0.30); color: #7DD3FC; }
+.ly-badge-success { background: var(--ly-success-soft); border-color: rgba(34,197,94,0.30);  color: var(--ly-success); }
+.ly-badge-warning { background: var(--ly-warning-soft); border-color: rgba(245,158,11,0.30); color: var(--ly-warning); }
+.ly-badge-danger  { background: var(--ly-danger-soft);  border-color: rgba(239,68,68,0.30);  color: var(--ly-danger); }
+.ly-badge-info    { background: var(--ly-info-soft);    border-color: rgba(56,189,248,0.30); color: var(--ly-info); }
 
 .ly-pill {
   display: inline-flex;
@@ -401,14 +403,14 @@ body.ly > * { position: relative; z-index: 1; }
 .ly-dot-offline { background: var(--ly-danger);  box-shadow: 0 0 0 3px var(--ly-danger-soft); }
 
 .ly-status { display: inline-flex; align-items: center; gap: var(--ly-s2); font-size: var(--ly-fs-sm); font-weight: 600; }
-.ly-status-online  { color: #6EE7A0; }
-.ly-status-offline { color: #FCA5A5; }
-.ly-status-warn    { color: #FCD34D; }
+.ly-status-online  { color: var(--ly-success); }
+.ly-status-offline { color: var(--ly-danger); }
+.ly-status-warn    { color: var(--ly-warning); }
 
 /* Delta indicators (▲ 20%) */
 .ly-delta { font-size: var(--ly-fs-xs); font-weight: 700; }
-.ly-delta-up   { color: #6EE7A0; }
-.ly-delta-down { color: #FCA5A5; }
+.ly-delta-up   { color: var(--ly-success); }
+.ly-delta-down { color: var(--ly-danger); }
 .ly-delta-flat { color: var(--ly-text-4); }
 
 /* ── 9. ICON TILES ──────────────────────────────────────────────────────── */
@@ -434,7 +436,7 @@ body.ly > * { position: relative; z-index: 1; }
   height: var(--ly-topbar-h);
   padding: 0 var(--ly-s6);
   border-bottom: 1px solid var(--ly-border);
-  background: rgba(2, 9, 26, 0.82);
+  background: var(--ly-topbar-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -792,3 +794,196 @@ body.ly > * { position: relative; z-index: 1; }
     text-overflow: clip;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME
+   ══════════════════════════════════════════════════════════════════════════
+   Every colour in this interface is a --ly-* token on :root, and
+   assets/css/lyra-theme.css maps the legacy pages onto those same tokens. So
+   redefining them here rethemes the new pages AND the 31 bridged legacy pages
+   without touching a single page's markup.
+
+   Two blocks, deliberately:
+
+     1. prefers-color-scheme  the automatic default. Pure CSS, no script, so
+                              there is nothing to flash on first paint.
+     2. [data-theme="light"]  an explicit choice, written by lyra-theme.js.
+
+   A selector list cannot contain a media query, so the declarations appear
+   twice. That duplication is cheaper than a build step, and it means the
+   automatic path works even with JavaScript disabled.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    /* Surfaces */
+    --ly-bg:            #F5F7FC;
+    --ly-bg-deep:       #FFFFFF;
+    --ly-surface:       #FFFFFF;
+    --ly-surface-2:     #F0F3FA;
+    --ly-surface-3:     #E6EAF4;
+    --ly-rail:          #FFFFFF;
+    --ly-topbar-bg:     rgba(255, 255, 255, 0.86);
+
+    /* On a light background the "glass" overlays have to darken, not lighten.
+       These were rgba(255,255,255,...) tuned for a dark page; left alone they
+       would be invisible. */
+    --ly-glass:         rgba(11, 16, 32, 0.028);
+    --ly-glass-hover:   rgba(11, 16, 32, 0.055);
+    --ly-glass-strong:  rgba(11, 16, 32, 0.075);
+
+    --ly-border:        rgba(11, 16, 32, 0.10);
+    --ly-border-2:      rgba(11, 16, 32, 0.16);
+    --ly-border-3:      rgba(11, 16, 32, 0.24);
+
+    /* Brand violet, deepened so it keeps contrast against white rather than
+       glowing on it. */
+    --ly-primary:       #5B2BE0;
+    --ly-primary-hover: #6C3AF8;
+    --ly-primary-press: #4A1FC4;
+    --ly-primary-soft:  rgba(91, 43, 224, 0.10);
+    --ly-primary-line:  rgba(91, 43, 224, 0.30);
+    --ly-primary-glow:  rgba(91, 43, 224, 0.26);
+    --ly-primary-text:  #4C1FC0;
+    --ly-primary-ink:   #FFFFFF;
+
+    --ly-grad-soft:     linear-gradient(135deg, rgba(91,43,224,0.12), rgba(155,92,255,0.07));
+    --ly-grad-text:     linear-gradient(100deg, #17102E 0%, #4C1FC0 55%, #7830F8 100%);
+
+    --ly-success:       #15803D;
+    --ly-success-soft:  rgba(21, 128, 61, 0.11);
+    --ly-warning:       #B45309;
+    --ly-warning-soft:  rgba(180, 83, 9, 0.11);
+    --ly-danger:        #B91C1C;
+    --ly-danger-soft:   rgba(185, 28, 28, 0.09);
+    --ly-info:          #0369A1;
+    --ly-info-soft:     rgba(3, 105, 161, 0.09);
+
+    --ly-text:          #0B1020;
+    --ly-text-2:        #3D4661;
+    --ly-text-3:        #5C647C;
+    --ly-text-4:        #868EA3;
+
+    --ly-shadow-sm:     0 1px 2px rgba(11, 16, 32, 0.07);
+    --ly-shadow:        0 8px 24px rgba(11, 16, 32, 0.09);
+    --ly-shadow-lg:     0 24px 64px rgba(11, 16, 32, 0.14);
+    --ly-shadow-glow:   0 10px 40px rgba(91, 43, 224, 0.16);
+  }
+}
+
+[data-theme="light"] {
+  /* Surfaces */
+  --ly-bg:            #F5F7FC;
+  --ly-bg-deep:       #FFFFFF;
+  --ly-surface:       #FFFFFF;
+  --ly-surface-2:     #F0F3FA;
+  --ly-surface-3:     #E6EAF4;
+  --ly-rail:          #FFFFFF;
+  --ly-topbar-bg:     rgba(255, 255, 255, 0.86);
+
+  /* On a light background the "glass" overlays have to darken, not lighten.
+     These were rgba(255,255,255,...) tuned for a dark page; left alone they
+     would be invisible. */
+  --ly-glass:         rgba(11, 16, 32, 0.028);
+  --ly-glass-hover:   rgba(11, 16, 32, 0.055);
+  --ly-glass-strong:  rgba(11, 16, 32, 0.075);
+
+  --ly-border:        rgba(11, 16, 32, 0.10);
+  --ly-border-2:      rgba(11, 16, 32, 0.16);
+  --ly-border-3:      rgba(11, 16, 32, 0.24);
+
+  /* Brand violet, deepened so it keeps contrast against white rather than
+     glowing on it. */
+  --ly-primary:       #5B2BE0;
+  --ly-primary-hover: #6C3AF8;
+  --ly-primary-press: #4A1FC4;
+  --ly-primary-soft:  rgba(91, 43, 224, 0.10);
+  --ly-primary-line:  rgba(91, 43, 224, 0.30);
+  --ly-primary-glow:  rgba(91, 43, 224, 0.26);
+  --ly-primary-text:  #4C1FC0;
+  --ly-primary-ink:   #FFFFFF;
+
+  --ly-grad-soft:     linear-gradient(135deg, rgba(91,43,224,0.12), rgba(155,92,255,0.07));
+  --ly-grad-text:     linear-gradient(100deg, #17102E 0%, #4C1FC0 55%, #7830F8 100%);
+
+  --ly-success:       #15803D;
+  --ly-success-soft:  rgba(21, 128, 61, 0.11);
+  --ly-warning:       #B45309;
+  --ly-warning-soft:  rgba(180, 83, 9, 0.11);
+  --ly-danger:        #B91C1C;
+  --ly-danger-soft:   rgba(185, 28, 28, 0.09);
+  --ly-info:          #0369A1;
+  --ly-info-soft:     rgba(3, 105, 161, 0.09);
+
+  --ly-text:          #0B1020;
+  --ly-text-2:        #3D4661;
+  --ly-text-3:        #5C647C;
+  --ly-text-4:        #868EA3;
+
+  --ly-shadow-sm:     0 1px 2px rgba(11, 16, 32, 0.07);
+  --ly-shadow:        0 8px 24px rgba(11, 16, 32, 0.09);
+  --ly-shadow-lg:     0 24px 64px rgba(11, 16, 32, 0.14);
+  --ly-shadow-glow:   0 10px 40px rgba(91, 43, 224, 0.16);
+}
+
+/* An explicit dark choice against a light OS. The dark values are the defaults,
+   so only the top-bar scrim and the scheme hint need restating here. */
+[data-theme="dark"] { color-scheme: dark; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NOTIFICATIONS PANEL
+   ══════════════════════════════════════════════════════════════════════════
+   Built and toggled by assets/js/lyra-theme.js. Anchored under the bell, closed
+   by click-outside or Escape. */
+.ly-notify {
+  position: fixed; top: 64px; right: 16px; z-index: 200;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 520px);
+  display: none; flex-direction: column;
+  background: var(--ly-surface);
+  border: 1px solid var(--ly-border-2);
+  border-radius: var(--ly-r-lg);
+  box-shadow: var(--ly-shadow-lg);
+  overflow: hidden;
+}
+.ly-notify.is-open { display: flex; }
+.ly-notify-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ly-s3);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ly-border);
+  font-size: var(--ly-fs-sm); color: var(--ly-text);
+}
+.ly-notify-x {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--ly-text-3); font-size: 18px; line-height: 1;
+  padding: 2px 6px; border-radius: var(--ly-r-xs);
+}
+.ly-notify-x:hover { background: var(--ly-glass-hover); color: var(--ly-text); }
+.ly-notify-body { overflow-y: auto; padding: 6px; flex: 1 1 auto; }
+.ly-notify-row {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 11px; border-radius: var(--ly-r-md);
+  text-decoration: none; border-left: 3px solid var(--ly-border-2);
+}
+.ly-notify-row:hover { background: var(--ly-glass); }
+.ly-notify-row.is-bad  { border-left-color: var(--ly-danger); }
+.ly-notify-row.is-warn { border-left-color: var(--ly-warning); }
+.ly-notify-row.is-info { border-left-color: var(--ly-info); }
+.ly-notify-row.is-ok   { border-left-color: var(--ly-success); }
+.ly-notify-title { font-size: var(--ly-fs-sm); color: var(--ly-text); font-weight: 600; }
+.ly-notify-meta { font-size: 11px; color: var(--ly-text-3); }
+.ly-notify-empty {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 22px 16px; text-align: center;
+  font-size: var(--ly-fs-sm); color: var(--ly-text-3);
+}
+.ly-notify-empty b { color: var(--ly-text); }
+.ly-notify-empty span { font-size: 12px; color: var(--ly-text-4); }
+.ly-notify-foot {
+  border-top: 1px solid var(--ly-border);
+  padding: 10px 14px; font-size: 12px;
+}
+.ly-notify-foot a { color: var(--ly-primary-text); text-decoration: none; }
+.ly-notify-foot a:hover { text-decoration: underline; }

@@ -108,6 +108,7 @@ $eta = file_exists($infoFile) ? trim(file_get_contents($infoFile)) : '';
     </style>
     <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
 <div class="card">

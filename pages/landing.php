@@ -133,6 +133,7 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
             .lp-feat > div { border-left:0; padding: 0; }
         }
     </style>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="ly">
 

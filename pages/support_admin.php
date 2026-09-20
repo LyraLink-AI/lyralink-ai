@@ -258,6 +258,7 @@
     <link rel="stylesheet" href="/assets/css/lyra-ui.css">
 <link rel="stylesheet" href="/assets/css/lyra-theme.css">
 <link rel="stylesheet" href="/assets/css/lyra-support.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
 

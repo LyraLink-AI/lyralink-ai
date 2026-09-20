@@ -746,6 +746,7 @@ if (file_exists(__DIR__ . '/maintenance.flag') && !isset($_COOKIE['lyralink_dev'
 	</style>
 	<link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
 	<div class="noise"></div>

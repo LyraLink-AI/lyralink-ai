@@ -282,6 +282,7 @@ $greetingWord = $hourAtRender < 12
   .tw-compose{padding-top:8px;padding-bottom:10px}
 }
 </style>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="ly">
 <div class="tw-shell">

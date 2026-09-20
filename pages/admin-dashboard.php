@@ -170,6 +170,7 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
         .ad-svc .ly-spacer { flex:1; }
         @media (max-width:1100px){ .ad-search{ display:none; } }
     </style>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="ly">
 <div class="ly-shell ly-shell-has-rail">

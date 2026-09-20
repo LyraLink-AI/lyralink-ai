@@ -150,6 +150,7 @@ select option{background:var(--surface)}
 </style>
 <link rel="stylesheet" href="/assets/css/mobile.css">
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
 <nav>

@@ -145,6 +145,7 @@ if (!empty($_SESSION['user_id'])) {
             .lg-toplink { position: static; text-align: right; margin-bottom: 12px; }
         }
     </style>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="ly">
 

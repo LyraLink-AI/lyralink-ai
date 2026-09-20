@@ -48,6 +48,7 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
 @media(max-width:900px){.grid{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}}
 </style>
     <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
 <nav>

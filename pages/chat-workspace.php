@@ -168,6 +168,7 @@ $initials = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $userLabel) ?: 'OP
             .cw-head { margin-bottom: 18px; }
         }
     </style>
+    <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body class="ly">
 

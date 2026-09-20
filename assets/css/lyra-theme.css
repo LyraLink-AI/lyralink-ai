@@ -24,6 +24,9 @@
        so these shift hue as well as value. Every alias below is a real name
        found in the existing pages; nothing here is speculative. */
     --bg:              #02091A;
+    /* Sticky top bar scrim. Was a literal in the nav rule below, which
+       made it unreachable by the theme. */
+    --nav-bg:          rgba(2, 9, 26, 0.88);
     --bg-deep:         #01060F;
     --surface:         #061027;
     --surface2:        #0A1533;
@@ -179,7 +182,7 @@ code, pre, kbd, samp,
    as the new pages, without changing any page's markup. */
 
 nav {
-    background: rgba(2, 9, 26, 0.88) !important;
+    background: var(--nav-bg) !important;
     border-bottom-color: var(--border) !important;
 }
 
@@ -196,4 +199,141 @@ nav {
 @media print {
     body { background: #fff; color: #000; }
     body::before { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT PALETTE
+   ══════════════════════════════════════════════════════════════════════════
+   The :root block above copies the DARK values into the legacy names, and the
+   pages that use them do not load lyra-ui.css, so they have no --ly-* token to
+   inherit. Redefining the same names here is what actually rethemes them.
+
+   This file loads last in <head> on every bridged page, so these values win by
+   source order alone - no !important, no specificity escalation.
+
+   Written twice on purpose: a selector list cannot contain a media query, so
+   the automatic OS default needs its own copy. That keeps the no-JavaScript
+   path working rather than making the theme a script-only feature.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg:              #F5F7FC;
+    --nav-bg:          rgba(255, 255, 255, 0.88);
+    --bg-deep:         #FFFFFF;
+    --surface:         #FFFFFF;
+    --surface2:        #F0F3FA;
+    --surface-2:       #F0F3FA;
+    --surface-strong:  #E6EAF4;
+    --surface-soft:    #FFFFFF;
+    --panel:           #FFFFFF;
+    --panel-2:         #F0F3FA;
+
+    --border:          rgba(11, 16, 32, 0.10);
+    --border-2:        rgba(11, 16, 32, 0.16);
+    --border-strong:   rgba(11, 16, 32, 0.24);
+
+    --accent:          #5B2BE0;
+    --accent-hover:    #6C3AF8;
+    --accent-light:    #4C1FC0;
+    --accent-soft:     rgba(91, 43, 224, 0.10);
+    --accent-glow:     rgba(91, 43, 224, 0.26);
+    --accent-line:     rgba(91, 43, 224, 0.30);
+    --accent-2:        #7830F8;
+    --secondary:       #0369A1;
+    --secondary-soft:  rgba(3, 105, 161, 0.09);
+
+    --text:            #0B1020;
+    --text-strong:     #06091A;
+    --text-soft:       #3D4661;
+    --text-2:          #3D4661;
+    --text-muted:      #5C647C;
+    --text-dim:        #5C647C;
+    --muted:           #5C647C;
+    --dim:             #868EA3;
+    --text-3:          #5C647C;
+    --text-4:          #868EA3;
+
+    --success:         #15803D;  --ok:  #15803D;  --green: #15803D;
+    --success-soft:    rgba(21, 128, 61, 0.11);
+    --error:           #B91C1C;  --err: #B91C1C;  --bad:   #B91C1C;
+    --red:             #B91C1C;  --danger: #B91C1C;
+    --error-soft:      rgba(185, 28, 28, 0.09);
+    --warn:            #B45309;  --warning: #B45309;
+    --yellow:          #B45309;  --orange:  #B45309;
+    --warn-soft:       rgba(180, 83, 9, 0.11);
+    --info:            #0369A1;  --blue: #0369A1;
+    --pink:            #DB2777;
+
+    --op: #15803D;  --op-bg:  rgba(21, 128, 61, 0.10);  --op-border:  rgba(21, 128, 61, 0.30);
+    --deg: #B45309; --deg-bg: rgba(180, 83, 9, 0.10);   --deg-border: rgba(180, 83, 9, 0.30);
+    --par: #C2410C; --par-bg: rgba(194, 65, 12, 0.10);  --par-border: rgba(194, 65, 12, 0.30);
+    --maj: #B91C1C; --maj-bg: rgba(185, 28, 28, 0.10);  --maj-border: rgba(185, 28, 28, 0.30);
+    --mai: #0369A1; --mai-bg: rgba(3, 105, 161, 0.10);  --mai-border: rgba(3, 105, 161, 0.30);
+
+    --shadow:      0 8px 24px rgba(11, 16, 32, 0.09);
+    --shadow-sm:   0 1px 2px rgba(11, 16, 32, 0.07);
+    --shadow-lg:   0 24px 64px rgba(11, 16, 32, 0.14);
+    --shadow-glow: 0 10px 40px rgba(91, 43, 224, 0.16);
+  }
+}
+
+[data-theme="light"] {
+  --bg:              #F5F7FC;
+  --nav-bg:          rgba(255, 255, 255, 0.88);
+  --bg-deep:         #FFFFFF;
+  --surface:         #FFFFFF;
+  --surface2:        #F0F3FA;
+  --surface-2:       #F0F3FA;
+  --surface-strong:  #E6EAF4;
+  --surface-soft:    #FFFFFF;
+  --panel:           #FFFFFF;
+  --panel-2:         #F0F3FA;
+
+  --border:          rgba(11, 16, 32, 0.10);
+  --border-2:        rgba(11, 16, 32, 0.16);
+  --border-strong:   rgba(11, 16, 32, 0.24);
+
+  --accent:          #5B2BE0;
+  --accent-hover:    #6C3AF8;
+  --accent-light:    #4C1FC0;
+  --accent-soft:     rgba(91, 43, 224, 0.10);
+  --accent-glow:     rgba(91, 43, 224, 0.26);
+  --accent-line:     rgba(91, 43, 224, 0.30);
+  --accent-2:        #7830F8;
+  --secondary:       #0369A1;
+  --secondary-soft:  rgba(3, 105, 161, 0.09);
+
+  --text:            #0B1020;
+  --text-strong:     #06091A;
+  --text-soft:       #3D4661;
+  --text-2:          #3D4661;
+  --text-muted:      #5C647C;
+  --text-dim:        #5C647C;
+  --muted:           #5C647C;
+  --dim:             #868EA3;
+  --text-3:          #5C647C;
+  --text-4:          #868EA3;
+
+  --success:         #15803D;  --ok:  #15803D;  --green: #15803D;
+  --success-soft:    rgba(21, 128, 61, 0.11);
+  --error:           #B91C1C;  --err: #B91C1C;  --bad:   #B91C1C;
+  --red:             #B91C1C;  --danger: #B91C1C;
+  --error-soft:      rgba(185, 28, 28, 0.09);
+  --warn:            #B45309;  --warning: #B45309;
+  --yellow:          #B45309;  --orange:  #B45309;
+  --warn-soft:       rgba(180, 83, 9, 0.11);
+  --info:            #0369A1;  --blue: #0369A1;
+  --pink:            #DB2777;
+
+  --op: #15803D;  --op-bg:  rgba(21, 128, 61, 0.10);  --op-border:  rgba(21, 128, 61, 0.30);
+  --deg: #B45309; --deg-bg: rgba(180, 83, 9, 0.10);   --deg-border: rgba(180, 83, 9, 0.30);
+  --par: #C2410C; --par-bg: rgba(194, 65, 12, 0.10);  --par-border: rgba(194, 65, 12, 0.30);
+  --maj: #B91C1C; --maj-bg: rgba(185, 28, 28, 0.10);  --maj-border: rgba(185, 28, 28, 0.30);
+  --mai: #0369A1; --mai-bg: rgba(3, 105, 161, 0.10);  --mai-border: rgba(3, 105, 161, 0.30);
+
+  --shadow:      0 8px 24px rgba(11, 16, 32, 0.09);
+  --shadow-sm:   0 1px 2px rgba(11, 16, 32, 0.07);
+  --shadow-lg:   0 24px 64px rgba(11, 16, 32, 0.14);
+  --shadow-glow: 0 10px 40px rgba(91, 43, 224, 0.16);
 }
