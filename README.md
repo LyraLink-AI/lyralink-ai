@@ -13,6 +13,8 @@ LyraLink is more than a PHP chat app with a local model attached. It is a layere
 
 This README explains how the system behaves as an actual AI runtime, not just a web wrapper around a model.
 
+For where runtime and user artefacts live on disk, and the two separate storage roots this repository has, see [STORAGE.md](STORAGE.md).
+
 ## What is LyraLink?
 
 LyraLink is a local-first AI operator platform designed to behave like a controllable runtime rather than a single chatbot. It is built around the idea that a useful AI system must coordinate:
