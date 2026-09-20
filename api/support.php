@@ -2568,10 +2568,19 @@ if ($action === 'ops_overview') {
 
     $warnings = [];
     if ($queuedCount > 0 && $queuedOldMin > 30) {
+        // Deliberately not asserting "the cron is missing". This worker also runs
+        // opportunistically from triggerNotificationWorker() whenever a support
+        // action queues something, so a queue that never drains means the sends
+        // themselves are failing - which is a different fix entirely.
+        $lastDelivery = $lastSentAt !== null
+            ? 'Last successful delivery was ' . $lastSentAt . '.'
+            : 'Nothing has ever been delivered from this queue.';
         $warnings[] = [
             'level' => 'bad',
-            'text'  => $queuedCount . ' notification(s) have been waiting ' . support_human_duration($queuedOldMin)
-                     . ' without being delivered. The delivery worker (cron/support_notifications.php) is probably not scheduled or not running.',
+            'text'  => $queuedCount . ' notification(s) have been queued for ' . support_human_duration($queuedOldMin)
+                     . ' without being delivered. ' . $lastDelivery
+                     . ' The sender is invoked both by cron and opportunistically when support activity queues a message,'
+                     . ' so check last_error on each queued entry rather than assuming nothing tried.',
         ];
     }
     if (!$emailReady) {

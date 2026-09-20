@@ -157,17 +157,62 @@ function sendDiscordWebhook($db, array $job) {
     }
 }
 
-$jobs = $db->query("SELECT id, channel, payload, attempts FROM support_notification_queue WHERE status IN ('pending','failed') AND available_at <= NOW() AND attempts < 5 ORDER BY id ASC LIMIT 20");
+// ── Single-run guard ────────────────────────────────────────────────────────
+// This worker is reachable from two directions: cron, and the opportunistic
+// triggerNotificationWorker() call inside api/support.php. Two copies running at
+// the same time would both pick up the same rows and deliver them twice, so a
+// second copy exits instead of duplicating notifications.
+// GET_LOCK is used rather than a file lock because the two callers run as
+// different users (root via cron, the site user via a web request), and a lock
+// file in /tmp cannot be flock()ed dependably across both.
+$lockRes = $db->query("SELECT GET_LOCK('lyra_support_notifications', 0) AS got");
+$gotLock = $lockRes ? (int)($lockRes->fetch_assoc()['got'] ?? 0) : 0;
+if ($gotLock !== 1) {
+    echo date('c') . " another worker holds the lock; exiting without claiming work\n";
+    exit(0);
+}
+
+// ── Reclaim rows orphaned by a worker that stopped mid-send ─────────────────
+// A fatal error, OOM kill or hard timeout leaves a row in 'processing' forever,
+// because the claim below only ever looks at pending/failed. 15 minutes is well
+// past the 5s SMTP / 3s webhook timeouts, so anything older is genuinely stuck.
+$db->query("UPDATE support_notification_queue
+               SET status = 'pending',
+                   last_error = 'reclaimed: a previous worker stopped mid-send'
+             WHERE status = 'processing'
+               AND updated_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+               AND attempts < 5");
+
+// ── Atomic claim ────────────────────────────────────────────────────────────
+// Claim and fetch in one statement. The previous SELECT-then-UPDATE-per-row
+// pattern left a window in which a concurrent run could claim the same row.
+$claimToken = 'claim:' . bin2hex(random_bytes(8));
+$token = $db->real_escape_string($claimToken);
+$claimed = $db->query("UPDATE support_notification_queue
+                          SET status = 'processing',
+                              attempts = attempts + 1,
+                              last_error = '$token'
+                        WHERE status IN ('pending','failed')
+                          AND available_at <= NOW()
+                          AND attempts < 5
+                        ORDER BY id ASC
+                        LIMIT 20");
+if (!$claimed) {
+    exit(1);
+}
+
+$jobs = $db->query("SELECT id, channel, payload, attempts FROM support_notification_queue WHERE last_error = '$token' ORDER BY id ASC");
 if (!$jobs) {
     exit(1);
 }
+
+$sentCount     = 0;
+$deferredCount = 0;
 
 while ($job = $jobs->fetch_assoc()) {
     $id = (int)$job['id'];
     $attempts = (int)$job['attempts'];
     $payload = json_decode($job['payload'], true);
-
-    $db->query("UPDATE support_notification_queue SET status = 'processing', attempts = attempts + 1, last_error = NULL WHERE id = $id");
 
     try {
         if (!is_array($payload)) {
@@ -183,10 +228,21 @@ while ($job = $jobs->fetch_assoc()) {
         }
 
         $db->query("UPDATE support_notification_queue SET status = 'sent', processed_at = NOW(), last_error = NULL WHERE id = $id");
+        $sentCount++;
+        echo date('c') . " #$id {$job['channel']} sent\n";
     } catch (Throwable $e) {
-        $delayMinutes = min(30, max(1, $attempts + 1));
+        // $attempts is the attempt number we have just made, because the claim
+        // increments it before the send. So 5 failed attempts is terminal, and
+        // the backoff runs 1..30 minutes.
+        $delayMinutes = min(30, max(1, $attempts));
         $error = $db->real_escape_string(substr($e->getMessage(), 0, 1000));
-        $status = ($attempts + 1) >= 5 ? 'failed' : 'pending';
+        $status = $attempts >= 5 ? 'failed' : 'pending';
         $db->query("UPDATE support_notification_queue SET status = '$status', last_error = '$error', available_at = DATE_ADD(NOW(), INTERVAL $delayMinutes MINUTE) WHERE id = $id");
+        $deferredCount++;
+        // Logged, not swallowed: a delivery failure that leaves no trace is how
+        // this class of bug stayed invisible before.
+        echo date('c') . " #$id {$job['channel']} $status: " . $e->getMessage() . "\n";
     }
 }
+
+echo date('c') . " done: sent=$sentCount deferred=$deferredCount\n";
