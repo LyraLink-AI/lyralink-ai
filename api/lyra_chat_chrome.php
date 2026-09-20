@@ -80,18 +80,39 @@ if (!function_exists('lyra_chat_brand')) {
     }
 }
 
+if (!function_exists('lyra_chat_login_url')) {
+    /**
+     * Where to send a signed-out visitor, returning to the chat page afterwards.
+     * Built here rather than calling lyra_ui_next_url() from api/lyra_ui_nav.php,
+     * because chat.php does not load that file and a shared partial should not
+     * depend on a caller having included something else - the failure mode that
+     * has already produced one silent bug in this codebase.
+     */
+    function lyra_chat_login_url(string $next = '/chat/'): string
+    {
+        return '/pages/login.php?next=' . rawurlencode($next);
+    }
+}
+
 if (!function_exists('lyra_chat_navitem')) {
     /**
      * $href null  -> inert row (designed, not built) with an explanatory title
      * $count null -> no badge
      */
-    function lyra_chat_navitem(string $icon, string $label, ?int $count = null, ?string $href = null, bool $active = false): string
+    function lyra_chat_navitem(string $icon, string $label, ?int $count = null, ?string $href = null, bool $active = false, ?string $reason = null): string
     {
         $ic = lyra_chat_icons()[$icon] ?? '';
         $cls = 'lyra-navitem' . ($active ? ' is-active' : '');
+        /* A row with no destination is non-interactive, and now says why. The
+         * generic "Not built yet" told the user nothing; a specific reason is the
+         * difference between a dead control and an explained one. */
+        $title = ($reason !== null && $reason !== '') ? $reason : 'Not built yet';
+        if ($href === null) {
+            $cls .= ' is-pending';
+        }
         $attrs = $href !== null
             ? ' href="' . htmlspecialchars($href, ENT_QUOTES) . '"'
-            : ' href="#" onclick="return false;" aria-disabled="true" title="Not built yet"';
+            : ' href="#" onclick="return false;" aria-disabled="true" title="' . htmlspecialchars($title, ENT_QUOTES) . '"';
         $badge = $count !== null ? '<span class="lyra-count" id="lyraCount' . preg_replace('/[^a-z]/i', '', $label) . '">' . $count . '</span>' : '';
         return '<a class="' . $cls . '"' . $attrs . '>'
              . '<span class="lyra-navicon">' . lyra_chat_icon($ic) . '</span>'
@@ -109,24 +130,38 @@ if (!function_exists('lyra_chat_rail_chrome')) {
      */
     function lyra_chat_rail_chrome(string $convListHtml = ''): string
     {
+        /* Knowledge maps to the dataset manager, which is admin-gated. Offering
+         * that link to a non-admin would send them to a 403, so it is only
+         * linked for an admin and explained for everyone else. */
+        $railViewer = lyra_chat_viewer();
+        $knowHref = ($railViewer !== null && !empty($railViewer['is_admin']))
+            ? '/pages/dataset_manager/'
+            : null;
+
         return '<div class="lyra-railhead">Main</div>'
              . '<div class="lyra-railnav">'
              . '<a class="lyra-navitem is-active" href="#" onclick="return false;">'
              . '<span class="lyra-navicon">' . lyra_chat_icon(lyra_chat_icons()['conv']) . '</span>'
              . '<span>Conversations</span><span class="lyra-count" id="lyraCountConv"></span></a>'
              . $convListHtml
-             . lyra_chat_navitem('proj', 'Projects')
-             . lyra_chat_navitem('auto', 'Automations')
-             . lyra_chat_navitem('files', 'Files')
-             . lyra_chat_navitem('know', 'Knowledge')
-             . lyra_chat_navitem('set', 'Settings')
+             . lyra_chat_navitem('proj', 'Projects', null, null, false,
+                   'There is no projects store in this database yet, so there is nothing to list')
+             . lyra_chat_navitem('auto', 'Automations', null, '/pages/automation/')
+             . lyra_chat_navitem('files', 'Files', null, null, false,
+                   'There is no files table in this database yet, so there is nothing to list')
+             . lyra_chat_navitem('know', 'Knowledge', null,
+                   $knowHref, false,
+                   $knowHref === null ? 'The knowledge base is administrator-only' : null)
+             . lyra_chat_navitem('set', 'Settings', null, null, false,
+                   'Chat settings are not built yet; account settings are under your avatar')
              . '</div>'
              . '<div class="lyra-railhead">Quick access</div>'
              . '<div class="lyra-quick">'
              . lyra_chat_navitem('deploy', 'Deploy Application', null, '/automation')
              . lyra_chat_navitem('code', 'Code Assistant', null, '/pages/vscode_extension/')
              . lyra_chat_navitem('mon', 'System Monitor', null, '/pages/status')
-             . lyra_chat_navitem('res', 'Research &amp; Analyze')
+             . lyra_chat_navitem('res', 'Research &amp; Analyze', null, null, false,
+                   'Use the chat composer to research; there is no separate research screen yet')
              . lyra_chat_navitem('doc', 'Create Documentation', null, '/pages/api_docs/')
              . '</div>';
     }
@@ -198,15 +233,23 @@ if (!function_exists('lyra_chat_topbar_actions')) {
                      . '<em>' . ($plan !== '' ? htmlspecialchars(ucfirst($plan)) . ' Plan' : 'Signed in') . '</em></span>'
                      . lyra_chat_icon($ic['chev'], 2) . '</button>';
         } else {
-            $account = '<button type="button" class="acct-btn" id="headerAcctBtn" onclick="openAccountModal()">'
-                     . lyra_chat_icon($ic['mic'], 1.7) . 'Sign in</button>';
+            /* A signed-out visitor clicking this must reach the login page.
+             * It previously opened the account modal, which cannot sign anyone
+             * in, so the chat page had no route to /pages/login/ at all. An
+             * anchor also makes middle-click and open-in-new-tab work. */
+            $account = '<a class="acct-btn" id="headerAcctBtn" href="' . htmlspecialchars(lyra_chat_login_url(), ENT_QUOTES) . '">'
+                     . lyra_chat_icon($ic['mic'], 1.7) . 'Sign in</a>';
         }
 
         return lyra_chat_admin_menu()
              . '<button type="button" class="lyra-btn-voice" onclick="openVoicePanel()" title="Voice">'
              . lyra_chat_icon($ic['mic']) . '<span>Voice</span></button>'
-             . '<button type="button" class="lyra-iconbtn" title="Appearance" aria-label="Appearance">' . lyra_chat_icon($ic['sun']) . '</button>'
-             . '<button type="button" class="lyra-iconbtn" title="Notifications" aria-label="Notifications">' . lyra_chat_icon($ic['bell']) . '</button>'
+             /* Call sites for the theme and notification systems, which ship
+              * separately. Guarded so a page that has not loaded them yet does
+              * not throw; the control is inert until they arrive, and each has a
+              * title saying what it will do. */
+             . '<button type="button" class="lyra-iconbtn" title="Appearance: switch dark / light" aria-label="Appearance" onclick="if(window.LyraTheme){LyraTheme.toggle();}">' . lyra_chat_icon($ic['sun']) . '</button>'
+             . '<button type="button" class="lyra-iconbtn" title="Notifications" aria-label="Notifications" aria-expanded="false" onclick="if(window.LyraNotify){LyraNotify.toggle();}">' . lyra_chat_icon($ic['bell']) . '</button>'
              . $account;
     }
 }

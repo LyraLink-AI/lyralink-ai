@@ -598,9 +598,17 @@ function showLoggedIn(username) {
     load2FAStatus();
     loadModelOptions();
     refreshOperatorDashboardAccess();
-    // Show admin link for dev account
-    if (username === DEV_USERNAME) {
-        document.getElementById('adminLink').style.display = 'inline-block';
+    /* Was: `if (username === DEV_USERNAME)` then an unguarded
+     * getElementById('adminLink'). Two defects - a hardcoded username, so any
+     * other administrator was missed, and no null guard, on an element whose
+     * parent is display:none so it could never appear anyway.
+     *
+     * The visible admin entry is the top bar's server-rendered menu, which is
+     * already gated on users.is_admin and needs no refresh. This only keeps the
+     * flag handy for anything else that asks, reading the server's answer. */
+    const adminLink = document.getElementById('adminLink');
+    if (adminLink) {
+        adminLink.style.display = window.LYRALINK_IS_ADMIN ? 'inline-block' : 'none';
     }
 }
 

@@ -151,9 +151,19 @@ if ($isMaintenance && !$isDevCookie) {
             <button class="btn-small" onclick="endImpersonation()">↩ Return Admin</button>
             <?php endif; ?>
             <a href="/pages/pricing" style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,107,53,0.4);color:#ff6b35;text-decoration:none;font-family:'DM Mono',monospace;">⚡ Plans</a>
-            <a href="/pages/admin" id="adminLink" style="display:none;font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid rgba(124,58,237,0.4);color:#a78bfa;text-decoration:none;font-family:'DM Mono',monospace;">⚙ Admin</a>
+            <?php /* The admin entry used to live here, inside .header-right, which
+                     lyra-chat.css hides outright - so it could never have been
+                     shown. The top bar carries a working admin menu, rendered
+                     server-side from users.is_admin. Removed rather than left as a
+                     misleading hook for the next reader. (The element's id is not
+                     repeated here: an assertion greps for it, and a comment that
+                     quotes the thing being searched for has broken this project's
+                     own checks repeatedly.) */ ?>
                 <span class="badge badge-groq">Lyra-1</span>
-                <button class="acct-btn" id="headerAcctBtn" onclick="openAccountModal()">👤 Sign in</button>
+                <?php /* No id here: the top bar renders the live #headerAcctBtn,
+                         and two elements sharing that id made getElementById
+                         resolve by document order. */ ?>
+                <a class="acct-btn" href="/pages/login.php?next=%2Fchat%2F">👤 Sign in</a>
         </div>
     </header>
 
@@ -489,6 +499,12 @@ if ($isMaintenance && !$isDevCookie) {
 <script>
 window.LYRALINK_WIDGET_MODE = <?php echo $isWidgetEmbed ? 'true' : 'false'; ?>;
 window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;
+/* The authoritative admin answer, from users.is_admin. The client previously
+   compared a username, so any other administrator was not recognised. */
+window.LYRALINK_IS_ADMIN = <?php
+    $lyViewer = function_exists('lyra_chat_viewer') ? lyra_chat_viewer() : null;
+    echo ($lyViewer !== null && !empty($lyViewer['is_admin'])) ? 'true' : 'false';
+?>;
 </script>
 <!-- Loaded before the chat modules so the fetch/XHR patch is in place before
      anything calls the API. Carries no authority of its own; see the file. -->

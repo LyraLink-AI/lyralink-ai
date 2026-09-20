@@ -265,6 +265,10 @@ body::after {
     cursor: pointer;
 }
 
+/* A rail row with no destination. aria-disabled alone was invisible to the
+   user, so the disabled affordance is explicit here too. */
+.lyra-navitem.is-pending { opacity: .45; cursor: not-allowed; }
+
 /* ── Tools strip ──────────────────────────────────────────────────────────
    Both states are declared here on purpose. app.css sets
    `.ai-tools-wrap.open .ai-tools-row{display:flex}` at specificity (0,3,0),
