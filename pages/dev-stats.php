@@ -226,16 +226,33 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
         <?php echo lyra_ui_nav_render('/pages/dev-stats/'); ?>
 
         <div class="ly-sidebar-section">Main</div>
-        <?php foreach ([['Dashboard','M3 10.5 12 3l9 7.5V21H3z'],['Conversations','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],['Projects','M3 7h7l2 2h9v10H3z'],['Automations','M13 2 4 14h7l-1 8 9-12h-7z'],['Files','M6 3h8l4 4v14H6z'],['Knowledge','M4 5h16v14H4z'],['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8']] as $n): ?>
-        <a class="ly-navitem" href="#">
+        <?php /* [label, icon, href]; an empty href renders as an explicit pending row. */ ?>
+        <?php foreach ([
+            ['Dashboard','M3 10.5 12 3l9 7.5V21H3z','/pages/admin-dashboard/'],
+            ['Conversations','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z','/chat/'],
+            ['Projects','M3 7h7l2 2h9v10H3z',''],
+            ['Automations','M13 2 4 14h7l-1 8 9-12h-7z','/pages/automation/'],
+            ['Files','M6 3h8l4 4v14H6z',''],
+            ['Knowledge','M4 5h16v14H4z','/pages/dataset_manager/'],
+            ['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8','/pages/admin/'],
+        ] as $n): ?>
+        <?php if ($n[2] === '') { echo lyra_ui_pending($n[0], $n[1], 'Designed, no screen built yet'); continue; } ?>
+        <a class="ly-navitem" href="<?php echo htmlspecialchars($n[2], ENT_QUOTES); ?>">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
             <?php echo $n[0]; ?>
         </a>
         <?php endforeach; ?>
 
         <div class="ly-sidebar-section">Developer</div>
-        <?php foreach ([['API Docs','M6 3h8l4 4v14H6z',0],['Logs','M6 3h8l4 4v14H6zM9 12h6',0],['Statistics','M4 20V10M10 20V4M16 20v-7M22 20H2',1],['System Health','M3 12h4l3 8 4-16 3 8h4',0],['Deployments','M12 3v12M8 11l4 4 4-4',0]] as $n): ?>
-        <a class="ly-navitem<?php echo $n[2] ? ' is-active' : ''; ?>" href="#">
+        <?php foreach ([
+            ['API Docs','M6 3h8l4 4v14H6z','/pages/api_docs/'],
+            ['Logs','M6 3h8l4 4v14H6zM9 12h6','/pages/security_log/'],
+            ['Statistics','M4 20V10M10 20V4M16 20v-7M22 20H2','/pages/dev-stats/'],
+            ['System Health','M3 12h4l3 8 4-16 3 8h4','/pages/status/'],
+            ['Deployments','M12 3v12M8 11l4 4 4-4',''],
+        ] as $n): ?>
+        <?php if ($n[2] === '') { echo lyra_ui_pending($n[0], $n[1], 'Designed, no screen built yet'); continue; } ?>
+        <a class="ly-navitem<?php echo $n[2] === '/pages/dev-stats/' ? ' is-active' : ''; ?>" href="<?php echo htmlspecialchars($n[2], ENT_QUOTES); ?>">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
             <?php echo $n[0]; ?>
         </a>

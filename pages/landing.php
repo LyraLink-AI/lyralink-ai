@@ -148,7 +148,10 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
         <a class="ly-navlink" href="/pages/teams/">Teams</a>
     </div>
     <div class="ly-spacer"></div>
-    <a class="ly-btn ly-btn-quiet ly-btn-icon" href="#" aria-label="Toggle theme" title="Theme">
+    <?php /* No theme system exists yet (no data-theme, no light palette), so this
+             is inert rather than a control that swallows a click. */ ?>
+    <a class="ly-btn ly-btn-quiet ly-btn-icon" href="#" aria-label="Theme" aria-disabled="true"
+       title="Light theme is not built yet" onclick="return false;" style="opacity:.55;cursor:not-allowed">
         <svg class="ly-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
     </a>
     <a class="ly-btn ly-btn-ghost ly-btn-sm" href="/pages/login.php">Sign In</a>
@@ -199,10 +202,14 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
                 <?php
                 $sideItems = [['Home','M3 10.5 12 3l9 7.5V21H3z'],['Chat','M21 12a8 8 0 0 1-12 7l-5 1 1-5a8 8 0 1 1 16-3z'],['Projects','M3 7h7l2 2h9v10H3z'],['Automations','M13 2 4 14h7l-1 8 9-12h-7z'],['Knowledge','M4 5h16v14H4z'],['Files','M6 3h8l4 4v14H6z']];
                 foreach ($sideItems as $i => $it): ?>
-                <a class="ly-navitem<?php echo $i === 1 ? ' is-active' : ''; ?>" href="#">
+                <?php /* Decoration, not navigation. The container is role="img",
+                         so these must not be focusable or clickable: a link you
+                         cannot follow reads as broken, and focusable anchors
+                         inside role="img" are an accessibility fault. */ ?>
+                <span class="ly-navitem<?php echo $i === 1 ? ' is-active' : ''; ?>" aria-hidden="true">
                     <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $it[1]; ?>"/></svg>
                     <?php echo $it[0]; ?>
-                </a>
+                </span>
                 <?php endforeach; ?>
             </div>
 

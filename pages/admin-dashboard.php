@@ -180,18 +180,22 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
             <span style="font-size:16px">Lyralink</span>
         </a>
         <?php
+        /* [label, icon, href]. An empty href means the screen is designed but
+         * has no destination, and is rendered as an explicit pending row rather
+         * than a link that goes nowhere. Only destinations confirmed to exist
+         * are used here. */
         $nav = [
-            ['Dashboard','M3 10.5 12 3l9 7.5V21H3z', true],
-            ['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8'],
-            ['Models','M12 3 3 7.5 12 12l9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5'],
-            ['Tools','M14 6a4 4 0 0 1-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-4 1-1-4Z'],
-            ['Knowledge Base','M4 5h16v14H4zM4 9h16'],
-            ['Workflows','M5 6h6v6H5zM13 12h6v6h-6zM11 9h4'],
-            ['Automations','M13 2 4 14h7l-1 8 9-12h-7z'],
-            ['Deployments','M12 3v12M8 11l4 4 4-4M5 21h14'],
-            ['Monitoring','M3 12h4l3 8 4-16 3 8h4'],
-            ['Logs','M6 3h8l4 4v14H6zM9 12h6M9 16h4'],
-            ['Settings','M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'],
+            ['Dashboard','M3 10.5 12 3l9 7.5V21H3z', '/pages/admin-dashboard/'],
+            ['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8', '/pages/admin/'],
+            ['Models','M12 3 3 7.5 12 12l9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5', ''],
+            ['Tools','M14 6a4 4 0 0 1-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-4 1-1-4Z', ''],
+            ['Knowledge Base','M4 5h16v14H4zM4 9h16', '/pages/dataset_manager/'],
+            ['Workflows','M5 6h6v6H5zM13 12h6v6h-6zM11 9h4', ''],
+            ['Automations','M13 2 4 14h7l-1 8 9-12h-7z', '/pages/automation/'],
+            ['Deployments','M12 3v12M8 11l4 4 4-4M5 21h14', ''],
+            ['Monitoring','M3 12h4l3 8 4-16 3 8h4', '/pages/status/'],
+            ['Logs','M6 3h8l4 4v14H6zM9 12h6M9 16h4', '/pages/security_log/'],
+            ['Settings','M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', ''],
         ];
         ?>
         <div class="ly-sidebar-section" style="padding-top:0">Interface</div>
@@ -199,7 +203,8 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
 
         <div class="ly-sidebar-section">Administration</div>
         <?php foreach ($nav as $n): ?>
-        <a class="ly-navitem<?php echo !empty($n[2]) ? ' is-active' : ''; ?>" href="#">
+        <?php if (($n[2] ?? '') === '') { echo lyra_ui_pending($n[0], $n[1], 'Designed, no screen built yet'); continue; } ?>
+        <a class="ly-navitem<?php echo $n[2] === '/pages/admin-dashboard/' ? ' is-active' : ''; ?>" href="<?php echo htmlspecialchars($n[2], ENT_QUOTES); ?>">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $n[1]; ?>"/></svg>
             <?php echo $n[0]; ?>
         </a>
@@ -207,12 +212,13 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
 
         <div class="ly-sidebar-section">Quick Actions</div>
         <?php foreach ([
-            ['Create User','M12 5v14M5 12h14'],
-            ['Deploy Model','M12 3v12M8 11l4 4 4-4M5 21h14'],
-            ['Run Backup','M4 7v10h16V7M4 7l8-4 8 4'],
-            ['View Logs','M6 3h8l4 4v14H6z'],
+            ['Create User','M12 5v14M5 12h14',''],
+            ['Deploy Model','M12 3v12M8 11l4 4 4-4M5 21h14',''],
+            ['Run Backup','M4 7v10h16V7M4 7l8-4 8 4',''],
+            ['View Logs','M6 3h8l4 4v14H6z','/pages/security_log/'],
         ] as $q): ?>
-        <a class="ly-navitem" href="#">
+        <?php if ($q[2] === '') { echo lyra_ui_pending($q[0], $q[1], 'No action wired yet'); continue; } ?>
+        <a class="ly-navitem" href="<?php echo htmlspecialchars($q[2], ENT_QUOTES); ?>">
             <svg class="ly-ico ly-ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="<?php echo $q[1]; ?>"/></svg>
             <?php echo $q[0]; ?>
         </a>
