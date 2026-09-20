@@ -14,7 +14,7 @@
         body::before{content:'';position:fixed;top:-200px;left:30%;width:600px;height:400px;background:radial-gradient(ellipse,rgba(124,58,237,0.08) 0%,transparent 70%);pointer-events:none}
 
         /* NAV */
-        nav{padding:12px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(10,10,15,0.95);backdrop-filter:blur(12px);z-index:100}
+        nav{padding:12px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--nav-bg,rgba(10,10,15,0.95));backdrop-filter:blur(12px);z-index:100}
         .nav-logo{height:26px;width:auto;mix-blend-mode:lighten}
         .nav-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text-muted)}
         .nav-right{display:flex;gap:8px;margin-left:auto;align-items:center}
@@ -84,6 +84,39 @@
         .main-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
         .main-empty{display:flex;align-items:center;justify-content:center;flex:1;color:var(--text-muted);font-size:13px;flex-direction:column;gap:10px}
         .main-empty .ei{font-size:36px}
+        .empty-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text)}
+        .empty-body{font-size:12px;max-width:470px;text-align:center;line-height:1.6;color:var(--text-muted)}
+        .empty-links{font-size:11px}
+        .empty-links a{color:var(--accent-light);text-decoration:none;border-bottom:1px solid var(--accent-line,rgba(124,58,237,.4))}
+
+        /* OPERATIONS STRIP - real state, so the page is useful even with an empty queue */
+        .boot-warn{display:none;padding:9px 18px;font-size:11px;line-height:1.5;color:var(--error);background:var(--error-soft,rgba(239,68,68,.08));border-bottom:1px solid var(--error)}
+        .ops-strip{padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;max-height:44vh;overflow-y:auto}
+        .ops-strip-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+        .ops-strip-title{font-family:'Syne',sans-serif;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text)}
+        .ops-updated{font-size:10px;color:var(--text-muted);margin-left:auto}
+        .ops-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:10px}
+        .ops-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+        .ops-head{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);margin-bottom:8px}
+        .ops-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+        .ops-tile{text-align:center}
+        .ops-val{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:var(--accent-light);line-height:1.15}
+        .ops-tile.ok .ops-val{color:var(--success)}
+        .ops-tile.warn .ops-val{color:var(--warn)}
+        .ops-tile.bad .ops-val{color:var(--error)}
+        .ops-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;margin-top:2px;letter-spacing:.3px}
+        .ops-note{font-size:10px;color:var(--text-muted);margin-top:8px;line-height:1.5}
+        .ops-warnings{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+        .ops-warn{display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.55;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-muted)}
+        .ops-warn.info{border-color:var(--accent-line,rgba(124,58,237,.35))}
+        .ops-warn.warn{border-color:var(--warn)}
+        .ops-warn.bad{border-color:var(--error)}
+        .ops-warn-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-light);margin-top:5px;flex-shrink:0}
+        .ops-warn.warn .ops-warn-dot{background:var(--warn)}
+        .ops-warn.bad .ops-warn-dot{background:var(--error)}
+        .sidebar-alert{margin-top:8px;padding:6px 8px;border-radius:8px;font-size:10px;line-height:1.45;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--text-muted)}
+        .sidebar-alert.warn{border-color:var(--warn);color:var(--warn)}
+        .sidebar-alert.bad{border-color:var(--error);color:var(--error)}
 
         /* TICKET DETAIL */
         .ticket-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
@@ -159,7 +192,7 @@
         .ai-typing-dot{width:6px;height:6px;border-radius:50%;background:#94a3b8;opacity:.45;animation:ai-typing-bounce .9s infinite}
         .ai-typing-dot:nth-child(2){animation-delay:.12s}
         .ai-typing-dot:nth-child(3){animation-delay:.24s}
-        .ai-assist-foot{border-top:1px solid var(--border);padding:10px;display:flex;gap:8px;align-items:flex-end;background:rgba(10,10,15,0.7)}
+        .ai-assist-foot{border-top:1px solid var(--border);padding:10px;display:flex;gap:8px;align-items:flex-end;background:var(--bg)}
         .ai-assist-input{flex:1;min-height:64px;max-height:130px;resize:vertical;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:8px 10px;outline:none}
         .ai-assist-input:focus{border-color:var(--accent)}
         .ai-assist-send{padding:8px 11px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer}
@@ -195,7 +228,7 @@
         .template-test-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
         .template-preview{border:1px solid var(--border);border-radius:12px;background:#08080d;padding:16px;min-height:240px;overflow:auto}
         .template-preview-subject{font-size:11px;color:var(--text-muted);margin-bottom:12px;word-break:break-word}
-        .template-preview-frame{background:#0a0a0f;border:1px solid #1e1e2e;border-radius:14px;padding:18px}
+        .template-preview-frame{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:18px}
         .template-preview-frame h2{font-family:'Syne',sans-serif;color:var(--accent-light);margin:0 0 4px}
         .template-preview-frame h3{margin:0 0 14px;color:var(--text);font-size:16px}
         .template-preview-frame .preview-ref{color:var(--accent-light);font-size:12px;margin-bottom:16px}
@@ -240,7 +273,7 @@
             .nav-right.open{display:flex}
             .nav-right .btn-sm,.nav-right .agent-badge{flex:1 1 calc(50% - 6px);text-align:center;justify-content:center}
 
-            .mobile-pane-toggle{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.95)}
+            .mobile-pane-toggle{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--nav-bg,rgba(10,10,15,0.95))}
             .pane-btn{flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer}
             .pane-btn.active{border-color:var(--accent);color:var(--accent-light);background:rgba(124,58,237,0.1)}
 
@@ -282,6 +315,10 @@
     </div>
 </nav>
 
+<!-- Rendered only if the page's own markup is missing a bound element, so a
+     template regression is loud instead of silently disabling a feature. -->
+<div class="boot-warn" id="bootWarn"></div>
+
 <!-- LOGIN SCREEN -->
 <div id="loginScreen">
     <div class="login-card">
@@ -311,6 +348,7 @@
                 <div class="stat-mini"><div class="val" id="sOnline">—</div><div class="lbl">Online</div></div>
             </div>
             <div id="workflowSummary" style="margin-top:8px;font-size:10px;color:var(--text-muted);line-height:1.5">Loading workflow...</div>
+            <div class="sidebar-alert" id="opsAlert" onclick="setMobilePane('detail')" style="display:none"></div>
         </div>
 
         <div class="sidebar-section">
@@ -357,9 +395,21 @@
 
     <!-- MAIN PANEL -->
     <div class="main-panel" id="mainPanel">
+        <div class="ops-strip" id="opsStrip">
+            <div class="ops-strip-head">
+                <span class="ops-strip-title">Operations</span>
+                <span class="ops-updated" id="opsUpdated">checking…</span>
+            </div>
+            <div class="ops-grid" id="opsGrid"></div>
+            <div class="ops-warnings" id="opsWarnings" style="display:none"></div>
+        </div>
         <div class="main-empty" id="emptyPanel">
             <div class="ei">🎫</div>
-            <p>Select a ticket to view</p>
+            <p class="empty-title">No ticket selected</p>
+            <p class="empty-body" id="emptyHint">Pick a ticket from the queue on the left to read it and reply.
+                If the queue is empty, nothing is waiting on a reply — tickets arrive from the public
+                support form and from in-app chat, and land here the moment they are submitted.</p>
+            <div class="empty-links"><a href="/pages/support/" target="_blank" rel="noopener">Open the public support form ↗</a></div>
         </div>
         <div id="ticketDetail" style="display:none;display:flex;flex-direction:column;flex:1;overflow:hidden"></div>
     </div>
@@ -764,29 +814,74 @@ async function agentLogin() {
 
 document.getElementById('loginPass')?.addEventListener('keydown', e => { if (e.key === 'Enter') agentLogin(); });
 
+// ── BOUND DOM GUARDS ──
+// This page binds well over a hundred element ids by hand, and a single missing
+// one used to abort showDash() partway through: the badge and the Logout button
+// appeared, no data ever loaded, and nothing was reported. That is exactly how
+// this dashboard sat on "Loading..." forever - #myMailBtn was retired along with
+// the mail-admin feature, but the line that revealed it was left behind, so
+// every boot threw "Cannot read properties of null" and stopped there.
+// revealBtn() turns a missing id into a logged no-op; assertBootIds() makes the
+// problem loud at load instead of silent at click.
+function revealBtn(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn('[support_admin] bound element missing, ignoring: #' + id);
+        return null;
+    }
+    el.style.display = 'inline-block';
+    return el;
+}
+
+// Ids the boot path depends on. Every one of these must exist in the markup.
+const SUPPORT_BOOT_IDS = [
+    'loginScreen', 'dashScreen', 'agentBadge', 'logoutBtn', 'userMgrBtn',
+    'agentMgrBtn', 'configBtn', 'queueBtn', 'transcriptsBtn', 'statusBtn',
+    'careersBtn', 'resellerAdminBtn', 'backToChatBtn', 'statsRow',
+    'sOpen', 'sCrit', 'sMine', 'sOnline', 'workflowSummary', 'ticketSummary',
+    'ticketList', 'searchInput', 'emptyPanel', 'ticketDetail',
+    'opsStrip', 'opsGrid', 'opsWarnings', 'opsAlert',
+];
+
+function assertBootIds() {
+    const missing = SUPPORT_BOOT_IDS.filter(id => !document.getElementById(id));
+    if (!missing.length) return true;
+    console.error('[support_admin] boot markup is missing ' + missing.length +
+                  ' expected element(s): ' + missing.map(i => '#' + i).join(', '));
+    const warn = document.getElementById('bootWarn');
+    if (warn) {
+        warn.style.display = 'block';
+        warn.textContent = 'Layout error: ' + missing.length +
+            ' element(s) this page depends on are missing from the markup (' +
+            missing.join(', ') + '). Affected features will not load. ' +
+            'This is a template bug, not a data problem.';
+    }
+    return false;
+}
+
 function showDash() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashScreen').style.display  = 'block';
     document.getElementById('agentBadge').textContent    = agentSession.username + ' · ' + agentSession.role.replace('_',' ');
     document.getElementById('agentBadge').style.display  = 'inline-block';
-    document.getElementById('logoutBtn').style.display   = 'inline-block';
-    document.getElementById('myMailBtn').style.display   = 'inline-block';
+    revealBtn('logoutBtn');
     if (['admin','senior_agent','agent'].includes(agentSession.role)) {
-        document.getElementById('userMgrBtn').style.display   = 'inline-block';
+        revealBtn('userMgrBtn');
     }
     if (['admin','senior_agent'].includes(agentSession.role)) {
-        document.getElementById('agentMgrBtn').style.display  = 'inline-block';
-        document.getElementById('configBtn').style.display    = 'inline-block';
-        document.getElementById('statusBtn').style.display    = 'inline-block';
-        document.getElementById('careersBtn').style.display   = 'inline-block';
+        revealBtn('agentMgrBtn');
+        revealBtn('configBtn');
+        revealBtn('statusBtn');
+        revealBtn('careersBtn');
     }
     if (agentSession.role === 'admin') {
-        document.getElementById('resellerAdminBtn').style.display = 'inline-block';
-        document.getElementById('queueBtn').style.display     = 'inline-block';
-        document.getElementById('backToChatBtn').style.display = 'inline-block';
-        document.getElementById('transcriptsBtn').style.display = 'inline-block';
+        revealBtn('resellerAdminBtn');
+        revealBtn('queueBtn');
+        revealBtn('backToChatBtn');
+        revealBtn('transcriptsBtn');
     }
     setMobilePane(window.innerWidth <= 900 ? 'list' : 'detail');
+    loadOps();
     loadTickets();
     loadStats();
     startHeartbeat();
@@ -932,6 +1027,119 @@ function startTicketLiveLoop() {
 }
 
 // ── STATS ──
+// ── SESSION RESTORE ──
+// The agent session lives in the PHP session, but nothing ever asked the server
+// about it, so every reload dropped a signed-in agent back onto the login form.
+async function restoreAgentSession() {
+    const data = await apiGet('agent_me').catch(() => null);
+    if (data?.success) { agentSession = data; showDash(); return true; }
+    return false;
+}
+
+// ── OPERATIONS STRIP ──
+function opsTile(value, label, tone) {
+    return '<div class="ops-tile' + (tone ? ' ' + tone : '') + '">' +
+        '<div class="ops-val">' + value + '</div>' +
+        '<div class="ops-lbl">' + label + '</div></div>';
+}
+
+function opsAge(iso) {
+    if (!iso) return 'never';
+    const then = new Date(String(iso).replace(' ', 'T')).getTime();
+    if (!then || isNaN(then)) return 'unknown';
+    const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+    if (mins < 1)    return 'just now';
+    if (mins < 60)   return mins + 'm ago';
+    if (mins < 1440) return Math.round(mins / 60) + 'h ago';
+    return Math.round(mins / 1440) + 'd ago';
+}
+
+async function loadOps() {
+    const grid = document.getElementById('opsGrid');
+    if (!grid) return;
+    const data = await apiGet('ops_overview').catch(() => null);
+    if (!data?.success) {
+        grid.innerHTML = '<div class="ops-card"><div class="ops-head">Operations</div>' +
+            '<div class="ops-note">Operational data unavailable' +
+            (data?.error ? ' — ' + escHtml(data.error) : '') + '</div></div>';
+        return;
+    }
+
+    const t    = data.tickets       || {};
+    const n    = data.notifications || {};
+    const i    = data.integrations  || {};
+    const team = data.team          || {};
+
+    const queued = Number(n.pending || 0) + Number(n.processing || 0);
+    const stamp  = document.getElementById('opsUpdated');
+    if (stamp) stamp.textContent = 'checked ' + new Date().toLocaleTimeString();
+
+    grid.innerHTML =
+        '<div class="ops-card">' +
+            '<div class="ops-head">Ticket load</div>' +
+            '<div class="ops-tiles">' +
+                opsTile(Number(t.open_total || 0), 'Open', '') +
+                opsTile(Number(t.critical_open || 0), 'Critical', Number(t.critical_open || 0) > 0 ? 'bad' : 'ok') +
+                opsTile(Number(t.unassigned_open || 0), 'Unassigned', Number(t.unassigned_open || 0) > 0 ? 'warn' : 'ok') +
+                opsTile(Number(t.resolved_24h || 0), 'Resolved 24h', '') +
+            '</div>' +
+            '<div class="ops-note">Oldest open ticket: ' + opsAge(t.oldest_open_at) + '</div>' +
+        '</div>' +
+        '<div class="ops-card">' +
+            '<div class="ops-head">Notification delivery</div>' +
+            '<div class="ops-tiles">' +
+                opsTile(queued, 'Queued', queued > 0 ? 'warn' : 'ok') +
+                opsTile(Number(n.failed_final || 0), 'Failed', Number(n.failed_final || 0) > 0 ? 'bad' : 'ok') +
+                opsTile(Number(n.sent_24h || 0), 'Sent 24h', '') +
+                opsTile(Number(n.sent || 0), 'Sent all time', '') +
+            '</div>' +
+            '<div class="ops-note">Last delivery: ' + opsAge(n.last_sent_at) +
+                (queued > 0 ? ' · oldest waiting ' + opsAge(n.oldest_queued_at) : '') + '</div>' +
+        '</div>' +
+        '<div class="ops-card">' +
+            '<div class="ops-head">Integrations &amp; team</div>' +
+            '<div class="ops-tiles">' +
+                opsTile(i.email_smtp ? '✓' : '✕', 'SMTP', i.email_smtp ? 'ok' : 'bad') +
+                opsTile(i.discord ? '✓' : '✕', 'Discord', i.discord ? 'ok' : 'warn') +
+                opsTile(Number(team.online || 0) + '/' + Number(team.total || 0), 'On duty', Number(team.online || 0) > 0 ? 'ok' : '') +
+                opsTile(Number(n.failed_retryable || 0), 'Retrying', Number(n.failed_retryable || 0) > 0 ? 'warn' : '') +
+            '</div>' +
+            '<div class="ops-note">From ' + escHtml(i.email_from || 'not set') +
+                ' · alerts to ' + escHtml(i.support_email || 'not set') + '</div>' +
+        '</div>';
+
+    const warnings = data.warnings || [];
+    const warnEl = document.getElementById('opsWarnings');
+    if (warnEl) {
+        warnEl.innerHTML = warnings.map(w =>
+            '<div class="ops-warn ' + escHtml(w.level || 'info') + '">' +
+            '<span class="ops-warn-dot"></span>' + escHtml(w.text || '') + '</div>').join('');
+        warnEl.style.display = warnings.length ? 'flex' : 'none';
+    }
+
+    // Repeat the most severe warning in the sidebar, which the mobile list pane
+    // does show. Tapping it switches to the pane holding the full detail.
+    const alertEl = document.getElementById('opsAlert');
+    if (alertEl) {
+        const worst = warnings.find(w => w.level === 'bad') || warnings[0];
+        if (worst) {
+            alertEl.className = 'sidebar-alert ' + (worst.level || 'info');
+            alertEl.textContent = (worst.level === 'bad' ? '⚠ ' : '○ ') + worst.text;
+            alertEl.style.display = 'block';
+        } else {
+            alertEl.style.display = 'none';
+        }
+    }
+
+    // With no tickets at all, say so plainly rather than implying a load failure.
+    const hint = document.getElementById('emptyHint');
+    if (hint) {
+        hint.textContent = Number(t.open_total || 0) > 0
+            ? 'Select a ticket from the queue on the left to read it and reply.'
+            : 'Nothing is waiting for a reply. Tickets appear here as soon as they are submitted through the public support form or in-app chat.';
+    }
+}
+
 async function loadStats() {
     const statsData = await apiGet('agent_stats').catch(() => null);
     if (statsData?.success) {
@@ -1658,10 +1866,19 @@ function populateConfigFields(config) {
     document.getElementById('cfSmtpHost').value = smtp.smtp_host || '';
     document.getElementById('cfSmtpPort').value = smtp.smtp_port || '';
     document.getElementById('cfSmtpUser').value = smtp.smtp_user || '';
-    document.getElementById('cfSmtpPass').value = smtp.smtp_pass || '';
+    // The password is deliberately never returned by the API; blank means
+    // "unchanged", so the box only needs to state whether one is stored.
+    const passEl = document.getElementById('cfSmtpPass');
+    passEl.value = '';
+    passEl.placeholder = smtp.smtp_pass_set ? '•••••••• stored — leave blank to keep' : 'not set';
     document.getElementById('cfSmtpFrom').value = smtp.smtp_from || '';
     document.getElementById('cfSupportEmail').value = smtp.support_email || '';
-    document.getElementById('cfWebhook').value = discord.webhook_url || '';
+    // Same for the webhook: the URL embeds its own token, so only the id is shown.
+    const hookEl = document.getElementById('cfWebhook');
+    hookEl.value = '';
+    hookEl.placeholder = discord.webhook_url_set
+        ? 'webhook ' + (discord.webhook_id || '(id hidden)') + ' stored — leave blank to keep'
+        : 'https://discord.com/api/webhooks/...';
     ['low','medium','high','critical'].forEach(priority => {
         document.getElementById('cf_' + priority + '_id').value = roles[priority]?.role_id || '';
         document.getElementById('cf_' + priority + '_name').value = roles[priority]?.role_name || '';
@@ -2289,7 +2506,10 @@ async function updateApplication(id) {
     else showToast(data.error||'Failed','error');
 }
 
+assertBootIds();
+restoreAgentSession();
 setInterval(loadTickets, 60000);
+setInterval(loadOps, 60000);
 </script>
 </body>
 </html>

@@ -434,17 +434,31 @@ function support_config_payload(mysqli $db): array {
         $stmt->close();
     }
 
+    // Secrets are never returned. This payload used to carry the SMTP password
+    // and the full Discord webhook URL - and a Discord webhook URL contains its
+    // own token, so anyone reading the response (or the DOM, or a screenshot, or
+    // a devtools session) held a credential that can post to the support channel.
+    // The form now receives a "set / not set" flag instead, and saving with the
+    // field left blank keeps whatever is stored.
+    $webhookId = '';
+    if (preg_match('~webhooks/([0-9]+)~', (string)($config['discord_webhook_url'] ?? ''), $m)) {
+        $webhookId = $m[1];
+    }
+
     return [
         'smtp' => [
             'smtp_host' => $config['smtp_host'] ?? '',
             'smtp_port' => $config['smtp_port'] ?? '',
             'smtp_user' => $config['smtp_user'] ?? '',
-            'smtp_pass' => $config['smtp_pass'] ?? '',
+            'smtp_pass' => '',
+            'smtp_pass_set' => ($config['smtp_pass'] ?? '') !== '',
             'smtp_from' => $config['smtp_from'] ?? '',
             'support_email' => $config['support_email'] ?? '',
         ],
         'discord' => [
-            'webhook_url' => $config['discord_webhook_url'] ?? '',
+            'webhook_url' => '',
+            'webhook_url_set' => ($config['discord_webhook_url'] ?? '') !== '',
+            'webhook_id' => $webhookId,
             'roles' => $roles,
         ],
         'email_templates' => support_email_templates_payload($db),
@@ -2431,6 +2445,13 @@ if ($action === 'set_smtp') {
     $stmt = $db->prepare("UPDATE support_config SET `value` = ? WHERE `key` = ?");
     foreach ($fields as $f) {
         $v = trim($_POST[$f] ?? '');
+        // The password is never sent to the browser, so an empty box means
+        // "leave what is stored alone" - not "wipe it". Without this, opening
+        // the config screen and pressing Save would silently disable SMTP and
+        // email would fall back to mail(). Clearing it is an explicit act.
+        if ($f === 'smtp_pass' && $v === '' && empty($_POST['smtp_pass_clear'])) {
+            continue;
+        }
         $stmt->bind_param('ss', $v, $f);
         $stmt->execute();
     }
@@ -2438,6 +2459,194 @@ if ($action === 'set_smtp') {
     echo json_encode(['success' => true]);
     exit;
 }
+
+// ── CURRENT AGENT (used to restore a session after a reload) ──
+if ($action === 'agent_me') {
+    $agent = requireAgent($db);
+    echo json_encode([
+        'success'  => true,
+        'id'       => (int)$agent['id'],
+        'username' => $agent['username'],
+        'role'     => $agent['role'],
+    ]);
+    exit;
+}
+
+function support_human_duration(int $minutes): string {
+    if ($minutes < 60)   { return $minutes . ' min'; }
+    if ($minutes < 1440) { return round($minutes / 60, 1) . ' h'; }
+    return round($minutes / 1440, 1) . ' days';
+}
+
+// ── OPS OVERVIEW ──
+// One read-only call that answers the only question the dashboard really has to
+// answer at a glance: is support working end to end right now? Ticket load,
+// whether notifications are actually being delivered, whether the integrations
+// are configured, and whether anyone is on duty.
+//
+// The warnings are computed here rather than in the browser, so the dashboard
+// can only ever claim something the server can prove from its own tables. The
+// one that matters: if work is queued and the oldest queued item is older than
+// half an hour, the delivery worker is not running - which is a failure that is
+// otherwise completely invisible until a user notices they got no reply.
+if ($action === 'ops_overview') {
+    requireAgent($db);
+
+    $ticketCounts = ['open' => 0, 'in_progress' => 0, 'waiting' => 0, 'resolved' => 0, 'closed' => 0];
+    if ($r = $db->query("SELECT status, COUNT(*) AS n FROM support_tickets GROUP BY status")) {
+        while ($row = $r->fetch_assoc()) {
+            $ticketCounts[(string)($row['status'] ?? '')] = (int)($row['n'] ?? 0);
+        }
+    }
+
+    $unassignedOpen = 0;
+    $criticalOpen   = 0;
+    $resolved24h    = 0;
+    $oldestOpenAt   = null;
+    if ($r = $db->query("SELECT COUNT(*) AS n FROM support_tickets WHERE assigned_to IS NULL AND status NOT IN ('resolved','closed')")) {
+        $unassignedOpen = (int)($r->fetch_assoc()['n'] ?? 0);
+    }
+    if ($r = $db->query("SELECT COUNT(*) AS n FROM support_tickets WHERE COALESCE(agent_priority, user_priority) = 'critical' AND status NOT IN ('resolved','closed')")) {
+        $criticalOpen = (int)($r->fetch_assoc()['n'] ?? 0);
+    }
+    if ($r = $db->query("SELECT COUNT(*) AS n FROM support_tickets WHERE status IN ('resolved','closed') AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")) {
+        $resolved24h = (int)($r->fetch_assoc()['n'] ?? 0);
+    }
+    if ($r = $db->query("SELECT MIN(created_at) AS oldest FROM support_tickets WHERE status NOT IN ('resolved','closed')")) {
+        $oldestOpenAt = $r->fetch_assoc()['oldest'] ?? null;
+    }
+
+    $queueCounts = ['pending' => 0, 'processing' => 0, 'sent' => 0, 'failed' => 0];
+    if ($r = $db->query("SELECT status, COUNT(*) AS n FROM support_notification_queue GROUP BY status")) {
+        while ($row = $r->fetch_assoc()) {
+            $queueCounts[(string)($row['status'] ?? '')] = (int)($row['n'] ?? 0);
+        }
+    }
+    $sent24h = 0;
+    if ($r = $db->query("SELECT COUNT(*) AS n FROM support_notification_queue WHERE status = 'sent' AND processed_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")) {
+        $sent24h = (int)($r->fetch_assoc()['n'] ?? 0);
+    }
+    $lastSentAt = null;
+    if ($r = $db->query("SELECT MAX(processed_at) AS last_sent FROM support_notification_queue WHERE status = 'sent'")) {
+        $lastSentAt = $r->fetch_assoc()['last_sent'] ?? null;
+    }
+    // The worker gives up after 5 attempts, so those rows are terminal and the
+    // rest are still worth retrying. Conflating the two makes the number useless.
+    $failedFinal = 0;
+    $failedRetry = 0;
+    if ($r = $db->query("SELECT SUM(attempts >= 5) AS final_n, SUM(attempts < 5) AS retry_n FROM support_notification_queue WHERE status = 'failed'")) {
+        $row = $r->fetch_assoc();
+        $failedFinal = (int)($row['final_n'] ?? 0);
+        $failedRetry = (int)($row['retry_n'] ?? 0);
+    }
+    $oldestQueuedAt = null;
+    if ($r = $db->query("SELECT MIN(created_at) AS oldest FROM support_notification_queue WHERE status IN ('pending','processing')")) {
+        $oldestQueuedAt = $r->fetch_assoc()['oldest'] ?? null;
+    }
+
+    $smtpHost  = getConfig($db, 'smtp_host');
+    $smtpUser  = getConfig($db, 'smtp_user');
+    $smtpPass  = getConfig($db, 'smtp_pass');
+    $smtpFrom  = getConfig($db, 'smtp_from');
+    $supportTo = getConfig($db, 'support_email');
+    $webhook   = getConfig($db, 'discord_webhook_url');
+    $emailReady = ($smtpHost !== '' && $smtpUser !== '' && $smtpPass !== '');
+
+    $onlineAgents = 0;
+    $totalAgents  = 0;
+    if ($r = $db->query("SELECT SUM(last_seen > DATE_SUB(NOW(), INTERVAL 2 MINUTE)) AS online_n, COUNT(*) AS total_n FROM support_agents WHERE active = 1")) {
+        $row = $r->fetch_assoc();
+        $onlineAgents = (int)($row['online_n'] ?? 0);
+        $totalAgents  = (int)($row['total_n'] ?? 0);
+    }
+
+    $queuedCount  = $queueCounts['pending'] + $queueCounts['processing'];
+    $queuedOldMin = 0;
+    if ($oldestQueuedAt !== null && $queuedCount > 0) {
+        $queuedOldMin = (int)max(0, floor((time() - strtotime((string)$oldestQueuedAt)) / 60));
+    }
+
+    $warnings = [];
+    if ($queuedCount > 0 && $queuedOldMin > 30) {
+        $warnings[] = [
+            'level' => 'bad',
+            'text'  => $queuedCount . ' notification(s) have been waiting ' . support_human_duration($queuedOldMin)
+                     . ' without being delivered. The delivery worker (cron/support_notifications.php) is probably not scheduled or not running.',
+        ];
+    }
+    if (!$emailReady) {
+        $warnings[] = [
+            'level' => 'warn',
+            'text'  => 'SMTP is incomplete, so notifications fall back to PHP mail() - which usually lands in spam or is refused outright.',
+        ];
+    }
+    if ($webhook === '') {
+        $warnings[] = [
+            'level' => 'info',
+            'text'  => 'No Discord webhook is set, so new tickets will not be announced in the support channel.',
+        ];
+    }
+    if ($failedFinal > 0) {
+        $warnings[] = [
+            'level' => 'bad',
+            'text'  => $failedFinal . ' notification(s) failed permanently after 5 attempts and will not be retried.',
+        ];
+    }
+    $openTotal = $ticketCounts['open'] + $ticketCounts['in_progress'] + $ticketCounts['waiting'];
+    if ($openTotal > 0 && $onlineAgents === 0) {
+        $warnings[] = [
+            'level' => 'warn',
+            'text'  => $openTotal . ' ticket(s) are open but no agent has checked in within the last 2 minutes.',
+        ];
+    }
+    if ($unassignedOpen > 0) {
+        $warnings[] = [
+            'level' => 'info',
+            'text'  => $unassignedOpen . ' open ticket(s) are unassigned.',
+        ];
+    }
+
+    echo json_encode([
+        'success' => true,
+        'tickets' => [
+            'open'            => $ticketCounts['open'],
+            'in_progress'     => $ticketCounts['in_progress'],
+            'waiting'         => $ticketCounts['waiting'],
+            'resolved'        => $ticketCounts['resolved'],
+            'closed'          => $ticketCounts['closed'],
+            'open_total'      => $openTotal,
+            'critical_open'   => $criticalOpen,
+            'unassigned_open' => $unassignedOpen,
+            'resolved_24h'    => $resolved24h,
+            'oldest_open_at'  => $oldestOpenAt,
+        ],
+        'notifications' => [
+            'pending'              => $queueCounts['pending'],
+            'processing'           => $queueCounts['processing'],
+            'sent'                 => $queueCounts['sent'],
+            'failed'               => $queueCounts['failed'],
+            'failed_final'         => $failedFinal,
+            'failed_retryable'     => $failedRetry,
+            'sent_24h'             => $sent24h,
+            'last_sent_at'         => $lastSentAt,
+            'oldest_queued_at'     => $oldestQueuedAt,
+            'oldest_queued_minutes'=> $queuedOldMin,
+        ],
+        'integrations' => [
+            'email_smtp'    => $emailReady,
+            'email_host'    => $smtpHost,
+            'email_from'    => $smtpFrom,
+            'support_email' => $supportTo,
+            'discord'       => $webhook !== '',
+        ],
+        'team'   => ['online' => $onlineAgents, 'total' => $totalAgents],
+        'warnings'    => $warnings,
+        'server_time' => date('Y-m-d H:i:s'),
+    ]);
+    exit;
+}
+
+// ── ADMIN CONFIG ──
 
 if ($action === 'get_admin_config') {
     $agent = requireAgent($db);
