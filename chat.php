@@ -13,12 +13,13 @@ $impersonation = $_SESSION['admin_impersonation'] ?? null;
 $isImpersonating = is_array($impersonation) && !empty($impersonation['username']);
 $impersonatedAdmin = $isImpersonating ? (string)($impersonation['username'] ?? 'admin') : '';
 $chatCssPath = __DIR__ . '/assets/css/chat/app.css';
-$chatJsPath = __DIR__ . '/assets/js/chat/app.js';
 $chatCssVersion = file_exists($chatCssPath) ? (string)filemtime($chatCssPath) : '1';
+/* The cache key is derived only from the scripts this page actually loads (the
+ * 0*.js modules, globbed below). assets/js/chat/app.js used to contribute its
+ * mtime here even though no page ever loaded it, so editing a dead file changed
+ * the cache key of the live ones - and a newer dead file could mask an edit to a
+ * live module. app.js has been removed; this no longer references it. */
 $chatJsVersionCandidates = [];
-if (file_exists($chatJsPath)) {
-    $chatJsVersionCandidates[] = (int)filemtime($chatJsPath);
-}
 $chatJsModuleFiles = glob(__DIR__ . '/assets/js/chat/0*.js') ?: [];
 if ($chatJsModuleFiles) {
     $chatJsVersionCandidates = array_merge(
