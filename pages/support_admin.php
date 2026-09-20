@@ -1,4 +1,25 @@
-<?php require_once __DIR__ . '/../api/session_boot.php'; lyra_session_boot(); ?>
+<?php
+require_once __DIR__ . '/../api/session_boot.php';
+lyra_session_boot();
+
+/* LYRA_ASSET_VERSIONS - same convention as chat.php, and for the same reason.
+ * The stylesheets below are served with cache-control: public, max-age=2592000
+ * (30 days) and were linked with no query string, so the URL never changed when
+ * the file did and a returning browser kept rendering the old CSS for a month,
+ * however many times the file was redeployed. Versioning each URL from its own
+ * mtime makes a redeploy actually reach the client.
+ *
+ * Resolved from the webroot because this file lives in /pages/. */
+$lyraWebroot = dirname(__DIR__);
+$assetVersionOf = static function (string $relPath) use ($lyraWebroot): string {
+    $full = $lyraWebroot . $relPath;
+    return file_exists($full) ? (string)filemtime($full) : '1';
+};
+$vMobileCss  = $assetVersionOf('/assets/css/mobile.css');
+$vUiCss      = $assetVersionOf('/assets/css/lyra-ui.css');
+$vThemeCss   = $assetVersionOf('/assets/css/lyra-theme.css');
+$vSupportCss = $assetVersionOf('/assets/css/lyra-support.css');
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -287,10 +308,10 @@
             .tool-chip{flex:1 1 calc(50% - 6px);text-align:center}
         }
     </style>
-    <link rel="stylesheet" href="/assets/css/mobile.css">
-    <link rel="stylesheet" href="/assets/css/lyra-ui.css">
-<link rel="stylesheet" href="/assets/css/lyra-theme.css">
-<link rel="stylesheet" href="/assets/css/lyra-support.css">
+    <link rel="stylesheet" href="/assets/css/mobile.css?v=<?php echo htmlspecialchars($vMobileCss, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="/assets/css/lyra-ui.css?v=<?php echo htmlspecialchars($vUiCss, ENT_QUOTES, 'UTF-8'); ?>">
+<link rel="stylesheet" href="/assets/css/lyra-theme.css?v=<?php echo htmlspecialchars($vThemeCss, ENT_QUOTES, 'UTF-8'); ?>">
+<link rel="stylesheet" href="/assets/css/lyra-support.css?v=<?php echo htmlspecialchars($vSupportCss, ENT_QUOTES, 'UTF-8'); ?>">
     <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
