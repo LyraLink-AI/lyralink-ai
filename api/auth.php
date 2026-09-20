@@ -987,7 +987,32 @@ api_enforce_post_and_origin_for_actions([
     'save_msg',
     'delete_conv',
     'rename_conv',
+    // Writes UPDATE users SET password. Missing from this list, so it was the
+    // one password-changing path with no method or origin check.
+    'change_temp_password',
 ]);
+
+/* Second layer, applied only to the actions that change credentials or account
+ * security. Narrow on purpose: these are the actions where a successful forgery
+ * is not recoverable by the user noticing something odd, whereas a forged
+ * "rename conversation" is. `lyra_csrf_require()` returns immediately when the
+ * request carries an explicit credential (Bearer / mobile token / API key),
+ * because such a request cannot be forged by a third-party site and demanding a
+ * token there would only lock out the native clients. */
+if (in_array($action, [
+    'create_api_key',
+    'revoke_api_key',
+    'change_temp_password',
+    'setup_2fa_totp',
+    'enable_2fa_totp',
+    'register_2fa_yubikey',
+    'regenerate_recovery_codes',
+    'disable_2fa',
+    'request_data_deletion',
+    'delete_saved_chat_data',
+], true)) {
+    lyra_csrf_require();
+}
 
 if (!function_exists('auth_parse_model_list')) {
     function auth_parse_model_list(string $raw, array $fallback): array {

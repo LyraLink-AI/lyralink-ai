@@ -154,6 +154,8 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Before the inline script below: it calls /api/auth.php with fetch(). -->
+<script src="/assets/js/lyra-csrf.js"></script>
 <script>
 const rateLimits = { free: 100, basic: 500, pro: 2000, enterprise: 10000 };
 

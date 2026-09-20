@@ -141,6 +141,10 @@ api_enforce_post_and_origin_for_actions([
     'set_operator_integrations',
     'set_operator_goals',
     'send_operator_test_alert',
+    // Both write: regenerate_invite rotates the invite token, link_invite_client
+    // links an account to a reseller. Neither was in this list.
+    'regenerate_invite',
+    'link_invite_client',
 ]);
 
 // ── helpers ──────────────────────────────────────────

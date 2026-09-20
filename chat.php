@@ -490,6 +490,9 @@ if ($isMaintenance && !$isDevCookie) {
 window.LYRALINK_WIDGET_MODE = <?php echo $isWidgetEmbed ? 'true' : 'false'; ?>;
 window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;
 </script>
+<!-- Loaded before the chat modules so the fetch/XHR patch is in place before
+     anything calls the API. Carries no authority of its own; see the file. -->
+<script src="/assets/js/lyra-csrf.js"></script>
 <script src="/assets/js/chat/01_core_runtime.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/02_conversations.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/03_agent_assist.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>

@@ -103,6 +103,77 @@ if (!function_exists('lyra_session_boot')) {
         ]);
 
         session_start();
+
+        /* LYRA_CSRF_HARDENING -- idempotency marker; introduced only by this
+         * block, never present in the text it replaced.
+         *
+         * Publish the CSRF token in a readable cookie so client-side code can
+         * attach it to its own requests (double-submit). This is NOT a second
+         * secret: the session copy remains authoritative and the two must agree
+         * or the cookie is carrying a value the server never issued. HttpOnly is
+         * deliberately off - the whole point is for script to read it - and the
+         * cookie carries no authority on its own, because a request that
+         * presents it must also present the session that matches it. */
+        if (empty($_SESSION['_csrf'])) {
+            $_SESSION['_csrf'] = bin2hex(random_bytes(32));
+        }
+        if (!headers_sent()) {
+            setcookie('LYRA_CSRF', (string) $_SESSION['_csrf'], [
+                'expires'  => 0,
+                'path'     => '/',
+                'domain'   => '',
+                'secure'   => $secure,
+                'httponly' => false,
+                'samesite' => $sameSite,
+            ]);
+        }
+    }
+}
+
+if (!function_exists('lyra_csrf_has_explicit_credential')) {
+    /**
+     * True when the request proves identity with a credential a third-party site
+     * could not read or attach: a Bearer / mobile token, or an API key.
+     *
+     * Such a request is not CSRF-vulnerable - forging it requires possessing the
+     * token - so the token check is skipped for it. Without this exemption,
+     * enabling enforcement would lock out the native clients.
+     *
+     * Read directly rather than through security.php: this file is loaded by
+     * every entrypoint and must not depend on a caller having loaded a helper
+     * library first, which is the failure mode that has bitten this codebase
+     * before.
+     */
+    function lyra_csrf_has_explicit_credential(): bool
+    {
+        $headers = [];
+        if (function_exists('getallheaders')) {
+            foreach ((array) getallheaders() as $k => $v) {
+                $headers[strtolower((string) $k)] = (string) $v;
+            }
+        }
+        foreach ($_SERVER as $k => $v) {
+            if (is_string($k) && str_starts_with($k, 'HTTP_')) {
+                $name = strtolower(str_replace('_', '-', substr($k, 5)));
+                if (is_string($v) && !isset($headers[$name])) {
+                    $headers[$name] = $v;
+                }
+            }
+        }
+
+        foreach (['authorization', 'x-auth-token', 'x-mobile-token', 'x-api-key'] as $h) {
+            if (!empty($headers[$h])) {
+                return true;
+            }
+        }
+
+        foreach (['mobile_token', 'api_key'] as $field) {
+            if (!empty($_POST[$field]) || !empty($_GET[$field])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -170,11 +241,23 @@ if (!function_exists('lyra_csrf_verify')) {
         if ($expected === '') {
             return false;
         }
+
         $given = (string) ($_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
-        if ($given === '') {
-            return false;
+        if ($given !== '' && hash_equals($expected, $given)) {
+            return true;
         }
-        return hash_equals($expected, $given);
+
+        /* Double-submit: client sends the value in the header and the browser
+         * automatically sends the matching cookie. The header is the part an
+         * attacker's page cannot set, and it must equal BOTH the cookie and the
+         * session value, so a cookie planted by a third party fails. */
+        $cookie = (string) ($_COOKIE['LYRA_CSRF'] ?? '');
+        $header = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        if ($cookie !== '' && $header !== '') {
+            return hash_equals($expected, $cookie) && hash_equals($expected, $header);
+        }
+
+        return false;
     }
 }
 
@@ -190,6 +273,11 @@ if (!function_exists('lyra_csrf_require')) {
      */
     function lyra_csrf_require(): void
     {
+        // A request carrying an explicit credential cannot be forged by a
+        // third-party site, so there is nothing for this check to add.
+        if (lyra_csrf_has_explicit_credential()) {
+            return;
+        }
         if (lyra_csrf_verify()) {
             return;
         }
