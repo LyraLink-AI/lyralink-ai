@@ -3,7 +3,7 @@ require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
 require_once __DIR__ . '/../api/lyra_art.php';
 
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 
@@ -202,7 +202,6 @@ if (!empty($_SESSION['user_id'])) {
     <!-- ══ RIGHT: auth ══ -->
     <section class="lg-right">
         <div class="lg-toplink">
-            <a href="/pages/landing.php" style="margin-right:14px">&larr; New UI home</a>
             Don&rsquo;t have an account?
             <a href="#" id="toRegister">Sign Up
                 <svg class="ly-ico ly-ico-sm" style="vertical-align:-3px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>

@@ -62,7 +62,6 @@ if (!lyra_admin_ok()) {
         <a href="/pages/admin.php" class="nav-link">Admin</a>
         <a href="/" class="nav-link">Home</a>
     </div>
-    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 <div class="page">
     <div class="hero">

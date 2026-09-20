@@ -1,5 +1,11 @@
 <?php
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+require_once __DIR__ . '/../api/session_boot.php';
+/* No session is created for an anonymous visitor; an existing
+ * one is continued so a signed-in developer is recognised. */
+if (isset($_COOKIE['LYRASESS']) || isset($_COOKIE[session_name()])) {
+    lyra_session_boot();
+}
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php');
     exit;
 }
@@ -208,7 +214,6 @@ $extensionId = $publisher . '.' . $name;
         <a href="/pages/api_docs.php" class="nav-link">API Docs</a>
         <a href="/" class="nav-link">Home</a>
     </div>
-    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 
 <div class="page">

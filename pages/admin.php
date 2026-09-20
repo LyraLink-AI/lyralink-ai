@@ -197,7 +197,6 @@ if (!lyra_admin_gate_ok()) {
     <div class="nav-links">
         <a href="/pages/reseller_admin.php" class="nav-link">🏢 Operators</a>
         <a href="/chat" class="nav-link">← Chat</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

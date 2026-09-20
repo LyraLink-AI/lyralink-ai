@@ -92,7 +92,6 @@ if (!lyra_admin_gate_ok()) {
     <span style="color:var(--border)">/</span>
     <span style="font-size:12px;color:var(--muted)">Security Log</span>
     <a href="/pages/admin.php" class="nav-link">← Admin</a>
-    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 
 <div class="page">

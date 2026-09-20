@@ -1,5 +1,11 @@
 <?php
-if (file_exists(__DIR__ . '/maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+require_once __DIR__ . '/../api/session_boot.php';
+/* No session is created for an anonymous visitor; an existing
+ * one is continued so a signed-in developer is recognised. */
+if (isset($_COOKIE['LYRASESS']) || isset($_COOKIE[session_name()])) {
+    lyra_session_boot();
+}
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
 	header('Location: /pages/maintenance.php');
 	exit;
 }
@@ -759,8 +765,7 @@ if (file_exists(__DIR__ . '/maintenance.flag') && !isset($_COOKIE['lyralink_dev'
 				<a class="nav-link" href="#tour">Tour</a>
 				<a class="nav-link" href="#embed">Embed</a>
 				<a class="nav-link nav-main" href="/chat">Open Chat</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
-			</div>
+    			</div>
 		</nav>
 
 		<main class="container">

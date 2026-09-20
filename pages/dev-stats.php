@@ -6,7 +6,7 @@ require_once __DIR__ . '/../api/lyra_ui_nav.php';
 require_once __DIR__ . '/../api/lyra_chat_data.php';
 require_once __DIR__ . '/../api/lyra_admin_data.php';
 
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 

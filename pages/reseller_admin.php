@@ -163,7 +163,6 @@ if (!lyra_admin_gate_ok()) {
     <div class="nav-links">
         <a href="/pages/admin.php" class="nav-link">← Admin</a>
         <a href="/" class="nav-link">Home</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

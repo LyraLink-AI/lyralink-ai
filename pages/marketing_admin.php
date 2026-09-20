@@ -3,7 +3,7 @@ require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
 
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 if (empty($_SESSION['user_id'])) {
@@ -58,8 +58,7 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
     <a class="nav-link" href="/automation">Automations</a>
     <a class="nav-link" href="/pages/admin.php">Admin</a>
     <a class="nav-link" href="/chat">Chat</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
-  </div>
+      </div>
 </nav>
 <div class="wrap">
   <h1 class="h1">Marketing Intelligence Control</h1>

@@ -4,7 +4,7 @@ lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
 require_once __DIR__ . '/../api/lyra_ui_nav.php';
 require_once __DIR__ . '/../api/lyra_teams_chrome.php';
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 /* Collaboration workspace. Implements the approved Teams-style design.

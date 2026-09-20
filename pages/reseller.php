@@ -853,7 +853,6 @@ if (empty($_SESSION['user_id'])) { header('Location: /?login=1&redirect=' . urle
         <a href="/chat.php" class="nav-link">Chat</a>
         <a href="/pages/pricing.php" class="nav-link">Pricing</a>
         <a href="/" class="nav-link">Home</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
     </div>
 </nav>
 

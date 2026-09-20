@@ -83,7 +83,6 @@ $username = htmlspecialchars((string)($_SESSION['username'] ?? ''), ENT_QUOTES, 
     <div class="nav-right">
         <a href="/" class="nav-link">Home</a>
     </div>
-    <a href="/pages/landing/" class="nav-link">New UI</a>
 </nav>
 <div class="page">
     <div class="hero">

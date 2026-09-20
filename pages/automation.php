@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
-if (file_exists(__DIR__ . '/../maintenance.flag') && !isset($_COOKIE['lyralink_dev'])) {
+if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
 if (empty($_SESSION['user_id'])) {
@@ -159,8 +159,7 @@ select option{background:var(--surface)}
   <div class="nav-links">
     <a href="/chat" class="nav-link">Chat</a>
     <a href="/pages/pricing" class="nav-link">Upgrade</a>
-        <a href="/pages/landing/" class="nav-link">New UI</a>
-  </div>
+      </div>
 </nav>
 
 <div class="page">

@@ -132,7 +132,6 @@ if ($isMaintenance && !$isDevCookie) {
             <a href="/pages/status" class="footer-link">Status</a>
             <a href="/pages/careers" class="footer-link">Careers</a>
             <a href="/pages/vscode_extension/" class="footer-link">Code Extension</a>
-            <a href="/pages/landing/" class="footer-link">✦ New UI</a>
             <a href="/chat" class="footer-link">✦ New Chat</a>
             <a href="/pages/teams/" class="footer-link">✦ New Teams</a>
         </div>
