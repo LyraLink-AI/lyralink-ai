@@ -269,6 +269,49 @@ body::after {
    user, so the disabled affordance is explicit here too. */
 .lyra-navitem.is-pending { opacity: .45; cursor: not-allowed; }
 
+/* ── Workspace panels: Projects and Files ─────────────────────────────────── */
+.ws-toolbar { display: flex; gap: var(--ly-s2); align-items: center; margin-bottom: var(--ly-s4); flex-wrap: wrap; }
+.ws-toolbar .ly-btn { flex: 0 0 auto; }
+.ws-form {
+    display: flex; flex-direction: column; gap: var(--ly-s2);
+    padding: var(--ly-s4); margin-bottom: var(--ly-s4);
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+}
+.ws-input {
+    width: 100%; min-width: 0;
+    padding: 8px 11px;
+    border: 1px solid var(--ly-border-2);
+    border-radius: var(--ly-r-sm);
+    background: var(--ly-surface);
+    color: var(--ly-text);
+    font-family: inherit; font-size: 12.5px;
+}
+.ws-input:focus { outline: none; border-color: var(--ly-primary); }
+.ws-select { width: auto; flex: 0 1 auto; max-width: 200px; }
+.ws-note { min-height: 16px; margin-bottom: var(--ly-s2); font-size: 11.5px; color: var(--ly-text-3); }
+.ws-note.is-error { color: var(--ly-danger); }
+.ws-list { display: flex; flex-direction: column; gap: var(--ly-s2); }
+.ws-item {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ly-s3);
+    padding: 11px 12px;
+    border: 1px solid var(--ly-border);
+    border-radius: var(--ly-r-md);
+    background: var(--ly-glass);
+}
+.ws-item-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.ws-item-title { font-size: 13px; font-weight: 600; color: var(--ly-text); word-break: break-word; }
+.ws-item-sub { font-size: 11.5px; color: var(--ly-text-3); line-height: 1.5; }
+.ws-item-meta { font-size: 11px; color: var(--ly-text-4); }
+.ws-item-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; align-items: stretch; }
+.ws-item-actions .ly-btn { white-space: nowrap; text-decoration: none; text-align: center; }
+.ws-danger { color: var(--ly-danger); }
+@media (max-width: 520px) {
+    .ws-item { flex-direction: column; }
+    .ws-item-actions { flex-direction: row; flex-wrap: wrap; }
+}
+
 /* ── Rail rows that act on the page rather than navigating ─────────────────
    Rendered as <button>, so they need the anchor's look reset explicitly. */
 .lyra-navitem-btn {

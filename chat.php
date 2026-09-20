@@ -206,20 +206,34 @@ if ($isMaintenance && !$isDevCookie) {
 
             <div class="lyra-panelview" id="lyraPanelProjects" data-panel="projects" hidden>
                 <h2 class="lyra-paneltitle">Projects</h2>
-                <p class="lyra-panelnote">A project will group conversations, files and goals behind one objective, so the assistant keeps the right context without being told each time.</p>
-                <div class="lyra-panelempty">
-                    <b>No projects yet.</b>
-                    <span>There is no projects store in this database, so nothing can be listed here yet. This screen is the designed placeholder until one exists.</span>
+                <p class="lyra-panelnote">Group conversations and files behind one objective, so the assistant keeps the right context without being told each time.</p>
+
+                <div class="ws-toolbar">
+                    <button type="button" class="ly-btn ly-btn-primary ly-btn-sm" id="wsNewProject">+ New project</button>
                 </div>
+
+                <div class="ws-form" id="wsProjectForm" hidden>
+                    <input type="text" id="wsProjectName" class="ws-input" maxlength="120" placeholder="Project name">
+                    <textarea id="wsProjectDesc" class="ws-input" rows="2" maxlength="2000" placeholder="What is this project for? (optional)"></textarea>
+                    <button type="button" class="ly-btn ly-btn-primary ly-btn-sm" id="wsCreateProject">Create project</button>
+                </div>
+
+                <div class="ws-note" id="wsProjectNote"></div>
+                <div class="ws-list" id="wsProjectList"></div>
             </div>
 
             <div class="lyra-panelview" id="lyraPanelFiles" data-panel="files" hidden>
                 <h2 class="lyra-paneltitle">Files</h2>
-                <p class="lyra-panelnote">A shared file library for everything you attach in a conversation.</p>
-                <div class="lyra-panelempty">
-                    <b>No files yet.</b>
-                    <span>Files you attach in a chat are sent with that message. There is no files table to list a library from, so this screen is the designed placeholder until one exists.</span>
+                <p class="lyra-panelnote">Your file library. Uploads are private to your account; 25MB per file.</p>
+
+                <div class="ws-toolbar">
+                    <select id="wsFileProject" class="ws-input ws-select" aria-label="Attach to project"></select>
+                    <button type="button" class="ly-btn ly-btn-primary ly-btn-sm" id="wsUploadBtn">Upload file</button>
+                    <input type="file" id="wsFileInput" hidden>
                 </div>
+
+                <div class="ws-note" id="wsFileNote"></div>
+                <div class="ws-list" id="wsFileList"></div>
             </div>
 
             <div class="lyra-panelview" id="lyraPanelSettings" data-panel="settings" hidden>
@@ -623,6 +637,10 @@ window.LYRALINK_IS_ADMIN = <?php
 <script src="/assets/js/chat/05_auth_session_molt.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/06_dev_markdown.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script src="/assets/js/chat/07_voice_and_boot.js?v=<?php echo htmlspecialchars($chatJsVersion, ENT_QUOTES, 'UTF-8'); ?>"></script>
+<!-- Workspace panels. Loaded after the chat modules so the active conversation
+     id is available for "link this chat", and after lyra-csrf.js in <head> so
+     state-changing calls carry the token. -->
+<script src="/assets/js/chat/workspace-panels.js?v=2"></script>
 
 <!-- ══ RIGHT RAIL: context & execution ══ -->
 <aside class="lyra-chatrail" id="lyraChatRail">
