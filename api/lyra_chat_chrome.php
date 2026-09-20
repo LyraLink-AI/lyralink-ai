@@ -157,7 +157,13 @@ if (!function_exists('lyra_chat_rail_chrome')) {
              . '</div>'
              . '<div class="lyra-railhead">Quick access</div>'
              . '<div class="lyra-quick">'
-             . lyra_chat_navitem('deploy', 'Deploy Application', null, '/automation')
+             /* This slot used to hold a second link to /automation - the same
+              * destination as the Main-nav Automations entry, under a label that
+              * described something else entirely. Removed rather than relabelled,
+              * because relabelling would still leave two links to one place.
+              * (The old label is deliberately not quoted: the assertion below
+              * greps for it, and a comment that quotes the string being searched
+              * for has broken this project's own checks seven times now.) */
              . lyra_chat_navitem('code', 'Code Assistant', null, '/pages/vscode_extension/')
              . lyra_chat_navitem('mon', 'System Monitor', null, '/pages/status')
              . lyra_chat_navitem('res', 'Research &amp; Analyze', null, null, false,
@@ -181,12 +187,10 @@ if (!function_exists('lyra_chat_promo')) {
 
         $uptimeText = $up === null ? 'Uptime: not reported' : 'Uptime: ' . number_format($up, 2) . '%';
 
-        return '<div class="lyra-promo">'
-             . '<b>Automate Your Workflow</b>'
-             . '<p>Create custom automations, schedule tasks, and let Lyralink handle the rest.</p>'
-             . '<a href="/automation">View Automations &rarr;</a>'
-             . '</div>'
-             . '<div class="lyra-sysstatus">'
+        /* The promo card was a fourth link to /automation inside the product,
+          * advertising a feature that already has a Main-nav entry. Only the
+          * System Status panel below it carries information, so that stays. */
+        return '<div class="lyra-sysstatus">'
              . '<div class="lyra-railhead">System Status</div>'
              . '<div class="lyra-sysrow' . ($allOk ? '' : ' is-warn') . '">'
              . '<span class="lyra-sysdot"></span>' . htmlspecialchars($statusText) . '</div>'

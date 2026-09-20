@@ -123,7 +123,6 @@ if ($isMaintenance && !$isDevCookie) {
         </div>
         <div class="conv-footer-links">
             <a href="/pages/pricing" class="footer-link">⚡ Plans</a>
-            <a href="/automation" class="footer-link">🔁 Automations</a>
             <a href="/download" class="footer-link">⬇ Desktop App</a>
             <a href="https://discord.gg/JhyPNs5Khn" target="_blank" class="footer-link">Discord</a>
             <a href="/pages/tos" class="footer-link">ToS</a>

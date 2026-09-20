@@ -7,6 +7,40 @@ require_once __DIR__ . '/../api/lyra_teams_chrome.php';
 if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     header('Location: /pages/maintenance.php'); exit;
 }
+
+/* SUPPORT ONLY. This page previously had no access check of any kind, so anyone
+ * - including a signed-out visitor - could read it. It is the internal
+ * collaboration surface, so the gate is: an administrator, or an active support
+ * agent. `support_agents` already expresses both of those things, so nothing new
+ * is being invented to decide it. */
+$lyTeamsViewer = (string) ($_SESSION['username'] ?? '');
+$lyTeamsAllowed = false;
+if ($lyTeamsViewer !== '') {
+    if (lyra_admin_ok()) {
+        $lyTeamsAllowed = true;
+    } else {
+        try {
+            $lyTcfg = api_db_config(['host' => 'localhost', 'user' => 'app_user', 'pass' => '', 'name' => 'aicloud']);
+            $lyTdb = new mysqli($lyTcfg['host'], $lyTcfg['user'], $lyTcfg['pass'], $lyTcfg['name']);
+            if (!$lyTdb->connect_error) {
+                $lyTst = $lyTdb->prepare('SELECT 1 FROM support_agents WHERE username = ? AND active = 1 LIMIT 1');
+                if ($lyTst) {
+                    $lyTst->bind_param('s', $lyTeamsViewer);
+                    $lyTst->execute();
+                    $lyTeamsAllowed = $lyTst->get_result()->fetch_row() !== null;
+                    $lyTst->close();
+                }
+                $lyTdb->close();
+            }
+        } catch (\Throwable $e) {
+            // A failed lookup must not grant access.
+            $lyTeamsAllowed = false;
+        }
+    }
+}
+if (!$lyTeamsAllowed) {
+    header('Location: /'); exit;
+}
 /* Collaboration workspace. Implements the approved Teams-style design.
  * Reads real rows from the existing social_* tables. Uses SELECT * and defensive
  * key access so a schema change degrades to an empty state, not a fatal error.
@@ -268,13 +302,20 @@ $greetingWord = $hourAtRender < 12
    Scoped to min-width:821px so it cannot fight the small-screen rules above,
    which own the side padding at those widths. */
 @media (max-height:860px) and (min-width:821px){
-  .tw-pad{padding-top:10px}
-  .tw-hero{padding:13px 18px;margin-bottom:10px}
-  .tw-hero-h1{font-size:19px;margin-bottom:3px}
-  .tw-hero-p{font-size:12.5px}
-  .tw-tiles{gap:10px;margin-bottom:10px}
-  .tw-tile{padding:10px}
-  .tw-tile b{font-size:17px}
+  /* The channel is the point of this page, so on a short viewport the fixed
+     chrome gives way to it. Measured before this change: the hero was ~180px of
+     a ~600px viewport and the tiles another ~70px, leaving the message list
+     under a third of the column. */
+  .tw-pad{padding-top:8px}
+  .tw-hero{padding:10px 16px;margin-bottom:8px}
+  .tw-hero-h1{font-size:18px;margin-bottom:0}
+  /* The greeting is the information; the sentence under it is decoration, and
+     on a short screen it costs ~20px the messages need more. */
+  .tw-hero-p{display:none}
+  .tw-tiles{gap:8px;margin-bottom:8px}
+  .tw-tile{padding:8px 10px}
+  .tw-tile b{font-size:16px;line-height:1.1}
+  .tw-tile span{font-size:10px}
   .tw-chanhead{padding-top:9px;padding-bottom:9px}
   .lyra-tw-tab{padding-top:9px;padding-bottom:9px}
   .lyra-tw-chips{margin-bottom:4px}

@@ -269,6 +269,34 @@ body::after {
    user, so the disabled affordance is explicit here too. */
 .lyra-navitem.is-pending { opacity: .45; cursor: not-allowed; }
 
+/* ── Tools panel: a box above the composer ─────────────────────────────────
+   The toggle lives at the top of the chat column, so the panel used to open
+   there and push the message list down - nowhere near the composer the user is
+   actually looking at. It is anchored above the composer instead.
+
+   The row's ancestors (.chat-top-tools, .ai-tools-wrap) are static, so this
+   resolves against .chat-panel without any markup change. `bottom` clears the
+   composer. That height was measured at 134px on the live page after an
+   initial 104px guess overlapped it. */
+.chat-panel { position: relative; }
+.chat-top-tools { position: static; }
+.ai-tools-wrap { position: static; }
+.ai-tools-wrap.open .ai-tools-row,
+.minimal-chat-shell .ai-tools-wrap.open .ai-tools-row {
+    position: absolute;
+    left: var(--ly-s4);
+    right: auto;
+    /* Measured, not guessed: the composer occupies the bottom 134px of the
+       panel (chips row + input + padding), so 104px overlapped it by 30px. */
+    bottom: 142px;
+    z-index: 45;
+    width: auto;
+    max-width: min(560px, calc(100% - var(--ly-s8)));
+    max-height: 45vh;
+    overflow-y: auto;
+    box-shadow: var(--ly-shadow-lg);
+}
+
 /* ── Tools strip ──────────────────────────────────────────────────────────
    Both states are declared here on purpose. app.css sets
    `.ai-tools-wrap.open .ai-tools-row{display:flex}` at specificity (0,3,0),
