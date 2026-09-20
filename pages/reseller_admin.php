@@ -161,7 +161,7 @@ if (!lyra_admin_gate_ok()) {
     <img src="/images/lyralinkai.ico" class="nav-logo" alt="Lyralink Infrastructure">
     <div class="nav-title">Lyra<span>link</span> Operator Admin</div>
     <div class="nav-links">
-        <a href="/pages/admin.php" class="nav-link">← Admin</a>
+        <a href="/pages/admin-dashboard/" class="nav-link">← Admin</a>
         <a href="/" class="nav-link">Home</a>
     </div>
 </nav>

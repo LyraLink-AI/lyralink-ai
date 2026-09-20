@@ -94,6 +94,28 @@ if (!function_exists('lyra_chat_login_url')) {
     }
 }
 
+if (!function_exists('lyra_chat_panelitem')) {
+    /**
+     * A rail row that opens an in-page panel rather than navigating.
+     *
+     * Deliberately a real <button> with an aria-controls relationship, not an
+     * anchor with href="#": the row acts on the page, so it should be exposed to
+     * assistive technology as a control, and href="#" is the pattern this
+     * codebase spent effort removing.
+     */
+    function lyra_chat_panelitem(string $icon, string $label, string $panel, bool $active = false): string
+    {
+        $ic = lyra_chat_icons()[$icon] ?? '';
+        $cls = 'lyra-navitem lyra-navitem-btn' . ($active ? ' is-active' : '');
+        return '<button type="button" class="' . $cls . '"'
+             . ' data-lyra-panel="' . htmlspecialchars($panel, ENT_QUOTES) . '"'
+             . ' aria-controls="lyraPanel' . htmlspecialchars(ucfirst($panel), ENT_QUOTES) . '"'
+             . ' aria-expanded="false">'
+             . '<span class="lyra-navicon">' . lyra_chat_icon($ic) . '</span>'
+             . '<span>' . $label . '</span></button>';
+    }
+}
+
 if (!function_exists('lyra_chat_navitem')) {
     /**
      * $href null  -> inert row (designed, not built) with an explanatory title
@@ -144,16 +166,13 @@ if (!function_exists('lyra_chat_rail_chrome')) {
              . '<span class="lyra-navicon">' . lyra_chat_icon(lyra_chat_icons()['conv']) . '</span>'
              . '<span>Conversations</span><span class="lyra-count" id="lyraCountConv"></span></a>'
              . $convListHtml
-             . lyra_chat_navitem('proj', 'Projects', null, null, false,
-                   'There is no projects store in this database yet, so there is nothing to list')
+             . lyra_chat_panelitem('proj', 'Projects', 'projects')
              . lyra_chat_navitem('auto', 'Automations', null, '/pages/automation/')
-             . lyra_chat_navitem('files', 'Files', null, null, false,
-                   'There is no files table in this database yet, so there is nothing to list')
+             . lyra_chat_panelitem('files', 'Files', 'files')
              . lyra_chat_navitem('know', 'Knowledge', null,
                    $knowHref, false,
                    $knowHref === null ? 'The knowledge base is administrator-only' : null)
-             . lyra_chat_navitem('set', 'Settings', null, null, false,
-                   'Chat settings are not built yet; account settings are under your avatar')
+             . lyra_chat_panelitem('set', 'Settings', 'settings')
              . '</div>'
              . '<div class="lyra-railhead">Quick access</div>'
              . '<div class="lyra-quick">'
@@ -401,7 +420,6 @@ if (!function_exists('lyra_chat_admin_menu')) {
             ['/pages/admin-dashboard/', 'Admin Dashboard', 'Traffic, tasks, resources'],
             ['/pages/dev-stats/',       'Developer Stats', 'Audit log and runtime'],
             ['/pages/support_admin.php','Support Dashboard', 'Tickets and agents'],
-            ['/pages/admin.php',        'Legacy Console',    'Original admin page'],
         ];
         $links = '';
         foreach ($items as $it) {

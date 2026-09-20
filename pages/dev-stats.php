@@ -214,6 +214,20 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
         }
     </style>
     <script src="/assets/js/lyra-theme.js"></script>
+    <style>
+        /* Marketing report panel in dev-stats. Uses the design tokens so it
+           follows the theme like every other panel on the page. */
+        .ly-mkt-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ly-s3); margin-bottom: var(--ly-s4); }
+        .ly-mkt-kpi { border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); padding: var(--ly-s3); background: var(--ly-glass); }
+        .ly-mkt-kpi .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ly-text-4); }
+        .ly-mkt-kpi .v { font-size: var(--ly-fs-lg); font-weight: 700; color: var(--ly-text); margin-top: 4px; }
+        .ly-mkt-meta { font-size: 11.5px; color: var(--ly-text-4); margin-bottom: 10px; font-family: var(--ly-mono); }
+        .ly-mkt-list { margin: 0; padding-left: 18px; }
+        .ly-mkt-list li { font-size: 12.5px; color: var(--ly-text-2); line-height: 1.65; margin-bottom: 5px; }
+        .ly-mkt-list b { color: var(--ly-text); }
+        .ly-mkt-list em { font-style: normal; color: var(--ly-text-4); }
+        @media (max-width: 1100px) { .ly-mkt-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    </style>
 </head>
 <body class="ly">
 <div class="ly-shell ly-shell-has-rail">
@@ -572,6 +586,82 @@ function nf_safe($n): string { return $n === null ? '—' : number_format($n); }
                 <div class="lyra-svcrow2"><span>Uptime</span><em><?php echo lyra_ad_fmt_uptime($lyraMachine['uptime']); ?></em></div>
             </div>
         </div>
+
+        <?php /* The marketing department report lives here and only here. It
+                 reads the same admin-gated endpoint the marketing page used. */ ?>
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head">
+                <h2 class="ly-panel-title">Marketing Report</h2>
+                <span class="ly-badge">latest run</span>
+            </div>
+            <div class="ly-panel-body">
+                <div class="ly-mkt-kpis" id="lyMktKpis"></div>
+                <div id="lyMktSummary">
+                    <div class="lyra-nosource">Loading the latest growth report&hellip;</div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function () {
+            'use strict';
+            function esc(v) {
+                return String(v == null ? '' : v).replace(/[&<>"']/g, function (s) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s];
+                });
+            }
+            fetch('/api/marketing.php?action=admin_growth_snapshot', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    var kpis = document.getElementById('lyMktKpis');
+                    var box = document.getElementById('lyMktSummary');
+                    if (!d || d.success !== true) {
+                        box.innerHTML = '<div class="lyra-nosource">No marketing report is available yet.</div>';
+                        return;
+                    }
+                    var report = d.latest_report || {};
+                    var growth = report.growth_report || {};
+                    var recs = Array.isArray(growth.recommendations) ? growth.recommendations : [];
+                    var opps = Array.isArray(d.opportunities) ? d.opportunities : [];
+                    var exps = Array.isArray(d.experiments) ? d.experiments : [];
+                    var dur = d.latest_run && d.latest_run.duration_seconds
+                        ? Math.round(Number(d.latest_run.duration_seconds)) + 's' : 'n/a';
+
+                    kpis.innerHTML = [
+                        ['Recommendations', recs.length],
+                        ['Opportunities', opps.length],
+                        ['Experiments', exps.length],
+                        ['Run duration', dur]
+                    ].map(function (k) {
+                        return '<div class="ly-mkt-kpi"><div class="k">' + esc(k[0])
+                             + '</div><div class="v">' + esc(k[1]) + '</div></div>';
+                    }).join('');
+
+                    var run = d.latest_run || {};
+                    var head = '<div class="ly-mkt-meta">Run '
+                        + (run.started_at ? esc(String(run.started_at).slice(0, 19)) + 'Z' : 'not recorded')
+                        + (run.finished_at ? ' &middot; finished ' + esc(String(run.finished_at).slice(0, 19)) : '')
+                        + '</div>';
+
+                    if (!recs.length) {
+                        box.innerHTML = head
+                            + '<div class="lyra-nosource">The last run produced no recommendations.</div>';
+                        return;
+                    }
+                    box.innerHTML = head + '<ul class="ly-mkt-list">'
+                        + recs.slice(0, 8).map(function (r) {
+                            return '<li><b>' + esc(r.priority || 'P3') + '</b> '
+                                 + '<em>' + esc(r.audience || 'general') + '</em> '
+                                 + esc(r.recommendation || '') + '</li>';
+                        }).join('')
+                        + '</ul>';
+                })
+                .catch(function () {
+                    document.getElementById('lyMktSummary').innerHTML =
+                        '<div class="lyra-nosource">Could not load the marketing report.</div>';
+                });
+        })();
+        </script>
 
         <div class="ly-panel ly-mb-6">
             <div class="ly-panel-head"><h2 class="ly-panel-title">Recent Deployments</h2></div>

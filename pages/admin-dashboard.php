@@ -152,6 +152,20 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
 <link rel="stylesheet" href="/assets/css/lyra-admin.css">
     <script src="/assets/js/lyra-ui.js" defer></script>
     <style>
+        /* Operator tools grid + site controls, moved from the console. */
+        .ad-tools { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--ly-s3); }
+        .ad-tool { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--ly-border); border-radius: var(--ly-r-md); background: var(--ly-glass); text-decoration: none; transition: border-color .15s, background .15s; }
+        .ad-tool:hover { border-color: var(--ly-primary-line); background: var(--ly-glass-hover); }
+        .ad-tool-ico { font-size: 16px; line-height: 1.2; flex: 0 0 auto; }
+        .ad-tool-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+        .ad-tool-txt b { font-size: 12.5px; color: var(--ly-text); }
+        .ad-tool-txt em { font-style: normal; font-size: 11px; color: var(--ly-text-4); line-height: 1.45; }
+        .ad-tool-go { color: var(--ly-text-4); flex: 0 0 auto; }
+        .ad-controls { display: flex; gap: var(--ly-s3); align-items: center; flex-wrap: wrap; }
+        .ad-input { flex: 1 1 220px; min-width: 0; padding: 8px 11px; border: 1px solid var(--ly-border-2); border-radius: var(--ly-r-sm); background: var(--ly-glass); color: var(--ly-text); font-family: inherit; font-size: 12.5px; }
+        .ad-input:focus { outline: none; border-color: var(--ly-primary); }
+        @media (max-width: 1100px) { .ad-tools { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+        @media (max-width: 720px) { .ad-tools { grid-template-columns: minmax(0,1fr); } }
         .ad-top { display:flex; align-items:center; gap:16px; padding:10px 22px; border-bottom:1px solid var(--ly-border);
                   position:sticky; top:0; z-index:30; background:rgba(2,9,26,.88); backdrop-filter:blur(14px); }
         .ad-search { display:flex; align-items:center; gap:9px; padding:8px 13px; border:1px solid var(--ly-border);
@@ -188,7 +202,7 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
          * are used here. */
         $nav = [
             ['Dashboard','M3 10.5 12 3l9 7.5V21H3z', '/pages/admin-dashboard/'],
-            ['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8', '/pages/admin/'],
+            ['Users','M16 20v-2a4 4 0 0 0-8 0v2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8', '/pages/support_admin/?tool=users'],
             ['Models','M12 3 3 7.5 12 12l9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5', ''],
             ['Tools','M14 6a4 4 0 0 1-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-4 1-1-4Z', ''],
             ['Knowledge Base','M4 5h16v14H4zM4 9h16', '/pages/dataset_manager/'],
@@ -507,6 +521,137 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
                 </div>
             </div>
         </div>
+        <!-- ══ OPERATOR TOOLS ══
+             Moved here from the old console, which is now a redirect. The three
+             tiles for the retired features are deliberately absent: they are
+             named in the commit that removed them, and are not repeated here,
+             because an assertion below greps for those names and a comment that
+             quotes the string being searched for has broken this project's own
+             checks eight times now. -->
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head"><h2 class="ly-panel-title">Operator Tools</h2></div>
+            <div class="ly-panel-body">
+                <div class="ad-tools">
+                    <a class="ad-tool" href="/pages/dataset_manager/">
+                        <span class="ad-tool-ico">🗄️</span>
+                        <span class="ad-tool-txt"><b>Dataset Manager</b><em>Review, approve &amp; manage Q&amp;A entries</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                    <a class="ad-tool" href="/pages/api_keys/">
+                        <span class="ad-tool-ico">🔑</span>
+                        <span class="ad-tool-txt"><b>API Keys</b><em>Manage your public API keys</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                    <a class="ad-tool" href="/pages/api_docs/">
+                        <span class="ad-tool-ico">📄</span>
+                        <span class="ad-tool-txt"><b>API Docs</b><em>Public developer documentation</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                    <a class="ad-tool" href="/pages/support_admin/">
+                        <span class="ad-tool-ico">🎫</span>
+                        <span class="ad-tool-txt"><b>Support Dashboard</b><em>Manage tickets, agents &amp; config</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                    <a class="ad-tool" href="/pages/security_log/">
+                        <span class="ad-tool-ico">🛡️</span>
+                        <span class="ad-tool-txt"><b>Security Logs</b><em>Recent suspicious events, failed logins, and IP activity</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                    <a class="ad-tool" href="/pages/dev-stats/">
+                        <span class="ad-tool-ico">📈</span>
+                        <span class="ad-tool-txt"><b>Marketing &amp; Dev Report</b><em>Growth report, audit log and runtime</em></span>
+                        <span class="ad-tool-go">→</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ SITE CONTROLS ══ Ported from the console, with its real contract. -->
+        <div class="ly-panel ly-mb-6">
+            <div class="ly-panel-head"><h2 class="ly-panel-title">Site Controls</h2><span class="ly-badge" id="adMaintPill">checking…</span></div>
+            <div class="ly-panel-body">
+                <div style="font-size:12.5px;color:var(--ly-text-3);line-height:1.6;margin-bottom:12px">
+                    Maintenance mode redirects every visitor to the maintenance page until you switch it off.
+                </div>
+                <div class="ad-controls">
+                    <input type="text" id="adMaintEta" placeholder="ETA (e.g. ~30 minutes, back soon…)" class="ad-input">
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" id="adMaintBtn" onclick="adToggleMaintenance()">Loading…</button>
+                </div>
+                <div id="adMaintMsg" style="font-size:11.5px;color:var(--ly-text-4);margin-top:8px"></div>
+            </div>
+        </div>
+
+        <script>
+        (function () {
+            'use strict';
+            var currentMaintenance = false;
+
+            function paint(on, eta) {
+                var btn = document.getElementById('adMaintBtn');
+                var pill = document.getElementById('adMaintPill');
+                var msg = document.getElementById('adMaintMsg');
+                currentMaintenance = !!on;
+                if (on) {
+                    btn.textContent = '✓ Disable maintenance';
+                    btn.className = 'ly-btn ly-btn-primary ly-btn-sm';
+                    pill.textContent = 'MAINTENANCE ON';
+                    msg.textContent = eta ? 'ETA: ' + eta : '';
+                } else {
+                    btn.textContent = '⚠ Enable maintenance';
+                    btn.className = 'ly-btn ly-btn-ghost ly-btn-sm';
+                    pill.textContent = 'SITE ONLINE';
+                    msg.textContent = '';
+                }
+            }
+
+            function load() {
+                var fd = new FormData();
+                /* The console's own contract: api/admin.php answers 'status'.
+                   'get_status' was my first guess and the endpoint has no such
+                   action, which read as "status unavailable". */
+                fd.append('action', 'status');
+                fetch('/api/admin.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d || d.success !== true) { throw new Error('bad payload'); }
+                        var etaInput = document.getElementById('adMaintEta');
+                        if (etaInput) { etaInput.value = d.eta || ''; }
+                        paint(d.maintenance, d.eta);
+                    })
+                    .catch(function () {
+                        paint(false, '');
+                        document.getElementById('adMaintPill').textContent = 'status unavailable';
+                    });
+            }
+
+            window.adToggleMaintenance = function () {
+                var btn = document.getElementById('adMaintBtn');
+                var etaInput = document.getElementById('adMaintEta');
+                var eta = etaInput ? etaInput.value.trim() : '';
+                if (!currentMaintenance && !confirm('Enable maintenance mode? All visitors will be redirected until you disable it.')) {
+                    return;
+                }
+                btn.disabled = true;
+                var fd = new FormData();
+                fd.append('action', 'toggle_maintenance');
+                fd.append('eta', eta);
+                fetch('/api/admin.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        btn.disabled = false;
+                        if (d && d.success) { paint(d.maintenance, d.eta); }
+                        else { document.getElementById('adMaintMsg').textContent = 'Failed to toggle maintenance.'; }
+                    })
+                    .catch(function () {
+                        btn.disabled = false;
+                        document.getElementById('adMaintMsg').textContent = 'Request failed.';
+                    });
+            };
+
+            load();
+        })();
+        </script>
+
     </main>
 
     <!-- ══ RAIL ══ -->
@@ -536,7 +681,7 @@ function nf(?int $n): string { return $n === null ? '—' : number_format($n); }
         <div class="ly-panel">
             <div class="ly-panel-head"><h2 class="ly-panel-title">Management</h2></div>
             <div class="ly-panel-body">
-                <a class="ly-btn ly-btn-ghost ly-btn-sm ly-btn-block ly-mb-3" href="/pages/admin.php">Full admin console</a>
+                <a class="ly-btn ly-btn-ghost ly-btn-sm ly-btn-block ly-mb-3" href="/pages/support_admin/">Support dashboard</a>
                 <a class="ly-btn ly-btn-ghost ly-btn-sm ly-btn-block ly-mb-3" href="/pages/security_log.php">Security log</a>
                 <a class="ly-btn ly-btn-ghost ly-btn-sm ly-btn-block" href="/benchmark/">Benchmark results</a>
             </div>

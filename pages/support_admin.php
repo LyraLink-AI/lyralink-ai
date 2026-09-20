@@ -278,7 +278,6 @@
         <button class="btn-sm" id="careersBtn" style="display:none" onclick="showCareers()">💼 Careers</button>
         <button class="btn-sm" id="resellerAdminBtn" style="display:none" onclick="window.location.href='/pages/reseller_admin.php'">🏢 Reseller Admin</button>
         <button class="btn-sm" id="backToChatBtn" style="display:none" onclick="window.location.href='/chat'">← Back to Chat</button>
-        <button class="btn-sm" id="myMailBtn" style="display:none" onclick="window.location.href='/pages/my_mail.php'">✉ My Email</button>
         <button class="btn-sm" id="logoutBtn" style="display:none" onclick="agentLogout()">Logout</button>
     </div>
 </nav>

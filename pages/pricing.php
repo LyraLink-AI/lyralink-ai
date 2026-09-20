@@ -2,6 +2,13 @@
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
+/* The two admin-only cards further down are rendered only for an administrator.
+ * Previously they were always rendered and hidden by a client-side is_admin
+ * check, so the markup shipped to every visitor. The API behind them was never
+ * exposed - api/billing.php returns "Forbidden" for both admin_gift_credits and
+ * admin_gift_analytics - but hidden markup invites a later change that unhides
+ * it by accident, so the server decides instead. */
+$lyIsAdmin = lyra_admin_ok();
 $paypalClientId = htmlspecialchars(api_get_secret('PAYPAL_CLIENT_ID', ''), ENT_QUOTES, 'UTF-8');
 $usageTokensPerBlock = max(1, (int)api_get_secret('CHAT_USAGE_INPUT_TOKENS_PER_BLOCK', '100000'));
 $usageUnitsPerBlock = max(1, (int)api_get_secret('CHAT_USAGE_UNITS_PER_BLOCK', '10'));
@@ -448,6 +455,7 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
         </div>
     </div>
 
+    <?php if ($lyIsAdmin): ?>
     <div class="gift-card" id="adminGiftCard" style="margin-top:16px;display:none">
         <h4>Admin Credit Grant</h4>
         <p>Administrative grant path. This does not deduct from your own balance.</p>
@@ -484,6 +492,7 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
         <p style="margin:12px 0 6px">Recent High-Value Transfers (1000+)</p>
         <div class="analytics-list" id="adminHighValueTransfers"></div>
     </div>
+    <?php endif; ?>
 </div>
 
 <!-- PAYPAL MODAL (credits) -->
@@ -552,8 +561,12 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
 
                 updatePlanButtons(planCode);
                 document.getElementById('giftSection').style.display = 'block';
-                document.getElementById('adminGiftCard').style.display = currentIsAdmin ? 'block' : 'none';
-                document.getElementById('adminAnalyticsCard').style.display = currentIsAdmin ? 'block' : 'none';
+                /* Absent for a non-admin, because the server no longer renders
+                   them, so both lookups are guarded rather than assumed. */
+                var lyGiftCard = document.getElementById('adminGiftCard');
+                if (lyGiftCard) { lyGiftCard.style.display = currentIsAdmin ? 'block' : 'none'; }
+                var lyAnalyticsCard = document.getElementById('adminAnalyticsCard');
+                if (lyAnalyticsCard) { lyAnalyticsCard.style.display = currentIsAdmin ? 'block' : 'none'; }
                 loadGiftHistory();
                 if (currentIsAdmin) {
                     loadAdminGiftAnalytics();

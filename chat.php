@@ -200,6 +200,54 @@ if ($isMaintenance && !$isDevCookie) {
         </div>
     </div>
 
+    <div class="lyra-panelhost" id="lyraPanelHost" hidden>
+        <div class="lyra-panelbox" role="dialog" aria-modal="false" aria-label="Workspace panel">
+            <button type="button" class="lyra-panelclose" id="lyraPanelClose" aria-label="Close panel">&times;</button>
+
+            <div class="lyra-panelview" id="lyraPanelProjects" data-panel="projects" hidden>
+                <h2 class="lyra-paneltitle">Projects</h2>
+                <p class="lyra-panelnote">A project will group conversations, files and goals behind one objective, so the assistant keeps the right context without being told each time.</p>
+                <div class="lyra-panelempty">
+                    <b>No projects yet.</b>
+                    <span>There is no projects store in this database, so nothing can be listed here yet. This screen is the designed placeholder until one exists.</span>
+                </div>
+            </div>
+
+            <div class="lyra-panelview" id="lyraPanelFiles" data-panel="files" hidden>
+                <h2 class="lyra-paneltitle">Files</h2>
+                <p class="lyra-panelnote">A shared file library for everything you attach in a conversation.</p>
+                <div class="lyra-panelempty">
+                    <b>No files yet.</b>
+                    <span>Files you attach in a chat are sent with that message. There is no files table to list a library from, so this screen is the designed placeholder until one exists.</span>
+                </div>
+            </div>
+
+            <div class="lyra-panelview" id="lyraPanelSettings" data-panel="settings" hidden>
+                <h2 class="lyra-paneltitle">Settings</h2>
+
+                <div class="lyra-settingrow">
+                    <div class="lyra-settingtext"><b>Appearance</b><em>Switch between dark and light.</em></div>
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" onclick="if(window.LyraTheme){LyraTheme.toggle();}">Toggle theme</button>
+                </div>
+
+                <div class="lyra-settingrow">
+                    <div class="lyra-settingtext"><b>Notifications</b><em>Service incidents and account alerts.</em></div>
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" onclick="if(window.LyraNotify){LyraNotify.toggle();}">Open notifications</button>
+                </div>
+
+                <div class="lyra-settingrow">
+                    <div class="lyra-settingtext"><b>Account</b><em>Profile, plan and API keys.</em></div>
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" onclick="openAccountModal()">Open account</button>
+                </div>
+
+                <div class="lyra-settingrow">
+                    <div class="lyra-settingtext"><b>Current theme</b><em id="lyraSettingTheme">—</em></div>
+                    <button type="button" class="ly-btn ly-btn-ghost ly-btn-sm" onclick="if(window.LyraTheme){LyraTheme.clear();}">Reset to system</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="chatbox">
         <?php echo lyra_chat_welcome(); ?>
     </div>
@@ -495,6 +543,66 @@ if ($isMaintenance && !$isDevCookie) {
     </div>
 </div>
 
+<script>
+/* ══ WORKSPACE PANELS ══════════════════════════════════════════════════════
+   One host element, three contents, opened from the rail. Kept here rather than
+   in a chat module because it touches no application state - it only shows and
+   hides markup, and reads the theme name from the one place that owns it. */
+(function () {
+    'use strict';
+    var host = document.getElementById('lyraPanelHost');
+    var closeBtn = document.getElementById('lyraPanelClose');
+    var triggers = document.querySelectorAll('[data-lyra-panel]');
+    if (!host || !triggers.length) { return; }
+
+    var openName = null;
+
+    function views() { return host.querySelectorAll('.lyra-panelview'); }
+
+    function paint() {
+        Array.prototype.forEach.call(triggers, function (t) {
+            var on = t.getAttribute('data-lyra-panel') === openName;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-expanded', on ? 'true' : 'false');
+        });
+        Array.prototype.forEach.call(views(), function (v) {
+            v.hidden = (v.getAttribute('data-panel') !== openName);
+        });
+        if (openName === 'settings') {
+            var out = document.getElementById('lyraSettingTheme');
+            if (out) {
+                out.textContent = window.LyraTheme
+                    ? (LyraTheme.current() === 'light' ? 'Light' : 'Dark')
+                    : 'Theme system not loaded';
+            }
+        }
+    }
+
+    function open(name) { openName = name; host.hidden = false; paint(); }
+    function close() { openName = null; host.hidden = true; paint(); }
+    function toggle(name) { (openName === name) ? close() : open(name); }
+
+    Array.prototype.forEach.call(triggers, function (t) {
+        t.addEventListener('click', function (e) {
+            e.preventDefault();
+            toggle(t.getAttribute('data-lyra-panel'));
+        });
+    });
+    if (closeBtn) { closeBtn.addEventListener('click', close); }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+    /* Clicking the chat area behind the panel dismisses it, but a click inside
+       the panel must not. */
+    document.addEventListener('click', function (e) {
+        if (!openName) { return; }
+        if (host.contains(e.target)) { return; }
+        if (e.target.closest && e.target.closest('[data-lyra-panel]')) { return; }
+        close();
+    });
+    /* The theme can change from the top bar while this panel is open. */
+    document.addEventListener('lyralink:theme', paint);
+    window.LyraPanels = { open: open, close: close, toggle: toggle };
+})();
+</script>
 <script>
 window.LYRALINK_WIDGET_MODE = <?php echo $isWidgetEmbed ? 'true' : 'false'; ?>;
 window.LYRALINK_DEV_USER = <?php echo $isDevUser ? 'true' : 'false'; ?>;

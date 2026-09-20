@@ -91,7 +91,7 @@ if (!lyra_admin_gate_ok()) {
     <span class="nav-logo">⚡ Lyralink</span>
     <span style="color:var(--border)">/</span>
     <span style="font-size:12px;color:var(--muted)">Security Log</span>
-    <a href="/pages/admin.php" class="nav-link">← Admin</a>
+    <a href="/pages/admin-dashboard/" class="nav-link">← Admin</a>
 </nav>
 
 <div class="page">

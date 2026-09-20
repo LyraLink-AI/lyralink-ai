@@ -56,7 +56,7 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
   <span class="nav-title">/ Marketing Admin</span>
   <div class="nav-links">
     <a class="nav-link" href="/automation">Automations</a>
-    <a class="nav-link" href="/pages/admin.php">Admin</a>
+    <a class="nav-link" href="/pages/admin-dashboard/">Admin</a>
     <a class="nav-link" href="/chat">Chat</a>
       </div>
 </nav>
@@ -106,7 +106,9 @@ input,select,textarea{width:100%;background:#0d0d14;border:1px solid var(--borde
   </div>
 
   <div class="card">
-    <h3>Latest Report Summary</h3>
+    <?php /* The report itself now lives in /pages/dev-stats/, so there is one
+             place to read it. Kept as a pointer rather than a second copy. */ ?>
+    <h3>Report Moved</h3>
     <pre id="summaryBox">Loading...</pre>
   </div>
 </div>
