@@ -107,7 +107,12 @@ if ($maintenanceTask !== []) {
 function maintenance_log(string $message): void {
     $line = '[' . gmdate('Y-m-d H:i:s') . '] ' . $message . "\n";
     @file_put_contents(MAINTENANCE_RUN_LOG, $line, FILE_APPEND);
-    echo $line;
+    // Cron redirects stdout into MAINTENANCE_RUN_LOG as well, and this function
+    // already writes that file, so echoing unconditionally duplicated every
+    // line. Echo only when a human is watching a terminal.
+    if (function_exists('stream_isatty') && @stream_isatty(STDOUT)) {
+        echo $line;
+    }
 }
 
 function maintenance_bytes_human(?int $bytes): string {
@@ -125,7 +130,7 @@ function maintenance_bytes_human(?int $bytes): string {
 }
 
 function maintenance_exec(string $cmd, int $timeoutSec = 60): array {
-    $wrapped = 'timeout ' . max(1, $timeoutSec) . 's bash -lc ' . escapeshellarg($cmd) . ' 2>&1';
+    $wrapped = 'timeout ' . max(1, $timeoutSec) . 's bash --noprofile --norc -lc ' . escapeshellarg($cmd) . ' 2>&1';
     $output = [];
     $code = 0;
     @exec($wrapped, $output, $code);
@@ -716,8 +721,8 @@ function maintenance_ai_plan(array $report): array {
         'restart_local_llm_service',
         'guard_local_llm_latency',
         'run_intrusion_monitor',
-        'run_dataset_auto_learn',
-        'run_continuous_model_learning',
+        // 'run_dataset_auto_learn',        // disabled 2026-09-22: auto learning off
+        // 'run_continuous_model_learning', // disabled 2026-09-22: auto learning off
         'composer_dump_autoload',
         'php_lint_target',
         'apply_text_patch',
@@ -828,6 +833,10 @@ function maintenance_execute_ai_action(array $step, string $root): array {
     }
 
     if ($action === 'run_dataset_auto_learn') {
+        // Automated learning disabled 2026-09-22 - see MAINTENANCE_* gates.
+        if (api_get_secret('MAINTENANCE_AUTO_LEARNING_ENABLED', '0') !== '1') {
+            return ['ok' => true, 'detail' => 'Dataset auto-learn disabled.', 'extra' => ['skipped' => true]];
+        }
         $script = $root . '/cron/dataset_auto_learn.php';
         $res = maintenance_exec('php ' . escapeshellarg($script), 70);
         return ['ok' => ($res['exit_code'] ?? 1) === 0, 'detail' => 'Ran dataset auto-learn job.', 'extra' => $res];
@@ -840,6 +849,10 @@ function maintenance_execute_ai_action(array $step, string $root): array {
     }
 
     if ($action === 'run_continuous_model_learning') {
+        // Automated learning disabled 2026-09-22 - see MAINTENANCE_* gates.
+        if (api_get_secret('MAINTENANCE_AUTO_LEARNING_ENABLED', '0') !== '1') {
+            return ['ok' => true, 'detail' => 'Continuous model learning disabled.', 'extra' => ['skipped' => true]];
+        }
         $script = $root . '/cron/continuous_model_learning.php';
         $res = maintenance_exec('php ' . escapeshellarg($script), 600);
         return ['ok' => ($res['exit_code'] ?? 1) === 0, 'detail' => 'Ran continuous model learning job.', 'extra' => $res];
@@ -871,7 +884,7 @@ function maintenance_execute_ai_action(array $step, string $root): array {
     }
 
     if ($action === 'apply_text_patch') {
-        $allowPatch = api_get_secret('MAINTENANCE_ALLOW_AI_PATCH', '1') === '1';
+        $allowPatch = api_get_secret('MAINTENANCE_ALLOW_AI_PATCH', '0') === '1';
         if (!$allowPatch) {
             return ['ok' => false, 'detail' => 'AI patch action disabled by MAINTENANCE_ALLOW_AI_PATCH.', 'extra' => []];
         }
@@ -1304,11 +1317,37 @@ if ($slowCount > 0) {
 $intrusionRun = maintenance_execute_ai_action(['action' => 'run_intrusion_monitor', 'args' => []], $workspaceRoot);
 maintenance_add_action($report, 'Run intrusion monitor maintenance', (bool)$intrusionRun['ok'], (string)$intrusionRun['detail'], $intrusionRun['extra'] ?? []);
 
-$datasetRun = maintenance_execute_ai_action(['action' => 'run_dataset_auto_learn', 'args' => []], $workspaceRoot);
-maintenance_add_action($report, 'Run dataset auto-learn maintenance', (bool)$datasetRun['ok'], (string)$datasetRun['detail'], $datasetRun['extra'] ?? []);
+// -- Automated learning: DISABLED 2026-09-22 (owner decision) --------------
+// Dataset promotion and continuous model learning no longer run unattended.
+// continuous_model_learning rebuilds the lyralink-* models, which drops the
+// resident copy and forces a cold load on the next chat request. Both are
+// treated as 'the system teaching itself' and stay off until re-enabled.
+//
+// Re-enable in .env:
+//   MAINTENANCE_AUTO_LEARNING_ENABLED=1         (master switch)
+//   MAINTENANCE_DATASET_AUTO_LEARN_ENABLED=1    (dataset promotion only)
+//   MAINTENANCE_CONTINUOUS_LEARNING_ENABLED=1   (model learning only)
+//
+// Health checks, local-LLM warmup and service auto-restart are NOT gated.
+$autoLearningEnabled = api_get_secret('MAINTENANCE_AUTO_LEARNING_ENABLED', '0') === '1';
+$datasetLearnEnabled = $autoLearningEnabled
+    && api_get_secret('MAINTENANCE_DATASET_AUTO_LEARN_ENABLED', '0') === '1';
+$modelLearnEnabled = $autoLearningEnabled
+    && api_get_secret('MAINTENANCE_CONTINUOUS_LEARNING_ENABLED', '0') === '1';
 
-$learningRun = maintenance_execute_ai_action(['action' => 'run_continuous_model_learning', 'args' => []], $workspaceRoot);
-maintenance_add_action($report, 'Run continuous model learning maintenance', (bool)$learningRun['ok'], (string)$learningRun['detail'], $learningRun['extra'] ?? []);
+if ($datasetLearnEnabled) {
+    $datasetRun = maintenance_execute_ai_action(['action' => 'run_dataset_auto_learn', 'args' => []], $workspaceRoot);
+    maintenance_add_action($report, 'Run dataset auto-learn maintenance', (bool)$datasetRun['ok'], (string)$datasetRun['detail'], $datasetRun['extra'] ?? []);
+} else {
+    maintenance_add_action($report, 'Run dataset auto-learn maintenance', true, 'skipped: automated learning disabled', ['skipped' => true]);
+}
+
+if ($modelLearnEnabled) {
+    $learningRun = maintenance_execute_ai_action(['action' => 'run_continuous_model_learning', 'args' => []], $workspaceRoot);
+    maintenance_add_action($report, 'Run continuous model learning maintenance', (bool)$learningRun['ok'], (string)$learningRun['detail'], $learningRun['extra'] ?? []);
+} else {
+    maintenance_add_action($report, 'Run continuous model learning maintenance', true, 'skipped: automated learning disabled', ['skipped' => true]);
+}
 
 $latencyGuardRun = maintenance_execute_ai_action(['action' => 'guard_local_llm_latency', 'args' => []], $workspaceRoot);
 maintenance_add_action($report, 'Run local LLM latency rollback guard', (bool)$latencyGuardRun['ok'], (string)$latencyGuardRun['detail'], $latencyGuardRun['extra'] ?? []);

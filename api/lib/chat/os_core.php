@@ -1,4 +1,8 @@
 <?php
+// LYRA_EVENT_BUS_WIRED
+// Architecture section 33: task.created / task.started / task.completed /
+// task.failed are emitted from chat_os_persist_task_record() below.
+require_once __DIR__ . '/event_bus.php';
 
 if (!function_exists('chat_os_now_iso')) {
     function chat_os_now_iso(): string {
@@ -134,7 +138,7 @@ if (!function_exists('chat_os_capability_registry')) {
                 'input_schema' => ['query' => 'string'],
                 'output_schema' => ['rows' => 'array'],
                 'requires_confirmation' => true,
-                'execution_method' => 'runtime_connection_required',
+                'execution_method' => 'lyra_db_query_execute',
                 'verification_method' => 'query_result_artifact',
                 'timeout_sec' => 15,
                 'retry_policy' => ['max_attempts' => 0, 'fallback' => 'none'],
@@ -145,16 +149,16 @@ if (!function_exists('chat_os_capability_registry')) {
                 'name' => 'Shell Execute',
                 'description' => 'Execute shell commands on a provisioned host.',
                 'version' => '1.0',
-                'provider' => 'not_available_in_chat_api',
-                'availability' => 'disabled',
+                'provider' => 'sandbox_container',
+                'availability' => 'conditional',
                 'required_resources' => ['server_shell'],
                 'required_permissions' => ['shell.execute'],
-                'enabled' => false,
+                'enabled' => true,
                 'risk_level' => 'CRITICAL',
                 'input_schema' => ['command' => 'string'],
                 'output_schema' => ['stdout' => 'string', 'stderr' => 'string'],
                 'requires_confirmation' => true,
-                'execution_method' => 'unavailable',
+                'execution_method' => 'chat_capability_dispatch',
                 'verification_method' => 'execution_artifact_required',
                 'timeout_sec' => 30,
                 'retry_policy' => ['max_attempts' => 0, 'fallback' => 'none'],
@@ -184,16 +188,16 @@ if (!function_exists('chat_os_capability_registry')) {
                 'name' => 'Filesystem Write',
                 'description' => 'Write approved files through controlled edit paths.',
                 'version' => '1.0',
-                'provider' => 'workspace_writer',
-                'availability' => 'conditional',
+                'provider' => 'capability_dispatcher',
+                'availability' => 'runtime',
                 'required_resources' => ['workspace_filesystem'],
                 'required_permissions' => ['filesystem.write'],
-                'enabled' => false,
+                'enabled' => true,
                 'risk_level' => 'HIGH',
                 'input_schema' => ['path' => 'string', 'content' => 'string'],
                 'output_schema' => ['diff' => 'string'],
                 'requires_confirmation' => true,
-                'execution_method' => 'not_enabled_in_chat_runtime',
+                'execution_method' => 'chat_capability_dispatch',
                 'verification_method' => 'file_diff+syntax',
                 'timeout_sec' => 20,
                 'retry_policy' => ['max_attempts' => 0, 'fallback' => 'none'],
@@ -201,18 +205,18 @@ if (!function_exists('chat_os_capability_registry')) {
             'server.inspect' => [
                 'capability_id' => 'server.inspect',
                 'name' => 'Server Inspect',
-                'description' => 'Inspect deployment or runtime server state.',
+                'description' => 'Inspect the local host runtime state: load average, uptime, memory, disk, PHP runtime, listening TCP ports and key service processes. Local host only - it cannot inspect a remote deployment.',
                 'version' => '1.0',
-                'provider' => 'not_available_in_chat_api',
-                'availability' => 'disabled',
+                'provider' => 'chat_api_local_host',
+                'availability' => 'local_only',
                 'required_resources' => ['deployment_control_plane'],
                 'required_permissions' => ['server.inspect'],
-                'enabled' => false,
+                'enabled' => true,
                 'risk_level' => 'HIGH',
                 'input_schema' => ['target' => 'string'],
                 'output_schema' => ['status' => 'string'],
                 'requires_confirmation' => true,
-                'execution_method' => 'unavailable',
+                'execution_method' => 'lyra_server_inspect',
                 'verification_method' => 'deployment_artifact',
                 'timeout_sec' => 20,
                 'retry_policy' => ['max_attempts' => 0, 'fallback' => 'none'],
@@ -1059,6 +1063,46 @@ if (!function_exists('chat_os_persist_execution_records_db')) {
 
 if (!function_exists('chat_os_persist_task_record')) {
     function chat_os_persist_task_record(array $task, array $decision = [], ?mysqli $db = null): bool {
+        // Audit: task lifecycle. Deduplicated on (task_id, status) because this is
+        // an upsert that fires repeatedly for the same task as it progresses, and
+        // one durable task must not produce a stream of duplicate events.
+        static $__lyraTaskEventSeen = [];
+        if (function_exists('chat_os_event_emit')) {
+            $__lyraTaskId = (string)($task['task_id'] ?? '');
+            $__lyraTaskStatus = strtoupper((string)($task['status'] ?? ''));
+            if ($__lyraTaskId !== '' && $__lyraTaskStatus !== '') {
+                $__lyraTaskKey = $__lyraTaskId . '|' . $__lyraTaskStatus;
+                if (!isset($__lyraTaskEventSeen[$__lyraTaskKey])) {
+                    $__lyraTaskEventSeen[$__lyraTaskKey] = true;
+                    if (in_array($__lyraTaskStatus, ['COMPLETED', 'VERIFIED', 'SUCCEEDED'], true)) {
+                        $__lyraTaskType = 'task.completed';
+                    } elseif (in_array($__lyraTaskStatus, ['FAILED', 'BLOCKED'], true)) {
+                        $__lyraTaskType = 'task.failed';
+                    } elseif ($__lyraTaskStatus === 'CANCELLED') {
+                        $__lyraTaskType = 'task.failed';
+                    } elseif ($__lyraTaskStatus === 'RUNNING') {
+                        $__lyraTaskType = 'task.started';
+                    } else {
+                        $__lyraTaskType = 'task.created';
+                    }
+                    chat_os_event_emit($__lyraTaskType, [
+                        'status' => $__lyraTaskStatus,
+                        'objective' => mb_substr((string)($task['objective'] ?? ''), 0, 300),
+                        'failure_type' => (string)($task['failure_type'] ?? ''),
+                        'verification_status' => (string)($task['verification_status'] ?? ''),
+                    ], [
+                        'component' => 'os_core',
+                        'severity' => $__lyraTaskStatus === 'CANCELLED' ? 'warning' : '',
+                        'task_id' => $__lyraTaskId,
+                        'parent_task_id' => (string)($task['parent_task_id'] ?? ''),
+                        'request_id' => (string)($task['request_id'] ?? ''),
+                        'user_id' => (string)($task['user_id'] ?? ''),
+                        'db' => $db,
+                    ]);
+                }
+            }
+        }
+
         if ($db instanceof mysqli && !$db->connect_error && chat_os_persist_task_record_db($db, $task, $decision)) {
             return true;
         }

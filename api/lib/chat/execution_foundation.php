@@ -36,41 +36,92 @@ function chat_make_trace_id(): string {
 }
 
 function chat_model_capability_registry(): array {
+    // Values below are MEASURED on this host (2026-09-22), not marketing. The previous
+    // table advertised lyralink-auto-canary / -reasoning / -code as
+    // 'reasoning' => 'strong' and 'coding' => 'strong'. All five lyralink aliases are
+    // the SAME hermes3:3b weights, and measurement contradicts the claim: 1/4 on
+    // reasoning, 1/14 on functional code checks, 2/4 on creative constraints, and on a
+    // false-premise question it ACCEPTED the premise and invented a "nuclear thermal
+    // generator (NTG)" for Apollo 11. Since chat_select_capability_model() scores
+    // candidates before the intent map is consulted, those inflated values were what
+    // kept every intent on auto-canary. Correcting them is what makes routing real.
     return [
         'lyralink-fast:latest' => [
             'tier' => 'fast',
             'reasoning' => 'basic',
             'coding' => 'basic',
+            'creative' => 'basic',
+            'writing' => 'basic',
             'context_window' => 4096,
             'ideal_for' => ['quick chat', 'simple Q&A', 'status checks'],
         ],
         'lyralink-auto-canary:latest' => [
-            'tier' => 'balanced',
-            'reasoning' => 'strong',
-            'coding' => 'strong',
+            'tier' => 'fast',
+            'reasoning' => 'basic',   // was 'strong' - measured 1/4
+            'coding' => 'basic',      // was 'strong' - measured 1/14
+            'creative' => 'basic',
+            'writing' => 'basic',
             'context_window' => 8192,
-            'ideal_for' => ['coding', 'planning', 'analysis'],
+            'ideal_for' => ['legacy alias'],
         ],
         'lyralink-code:latest' => [
-            'tier' => 'balanced',
-            'reasoning' => 'strong',
-            'coding' => 'strong',
+            'tier' => 'fast',
+            'reasoning' => 'basic',
+            'coding' => 'basic',      // was 'strong' - same weights as the rest
+            'creative' => 'basic',
+            'writing' => 'basic',
             'context_window' => 8192,
-            'ideal_for' => ['coding', 'debugging', 'implementation'],
+            'ideal_for' => ['legacy alias'],
         ],
         'lyralink-reasoning:latest' => [
-            'tier' => 'balanced',
-            'reasoning' => 'strong',
-            'coding' => 'good',
+            'tier' => 'fast',
+            'reasoning' => 'basic',   // was 'strong' - same weights as the rest
+            'coding' => 'basic',
+            'creative' => 'basic',
+            'writing' => 'basic',
             'context_window' => 8192,
-            'ideal_for' => ['analysis', 'planning', 'deep reasoning'],
+            'ideal_for' => ['legacy alias'],
         ],
         'lyralink-creative:latest' => [
-            'tier' => 'balanced',
-            'reasoning' => 'good',
+            'tier' => 'fast',
+            'reasoning' => 'basic',
             'coding' => 'basic',
+            'creative' => 'basic',    // was 'good' - measured 2/4
+            'writing' => 'basic',
             'context_window' => 8192,
-            'ideal_for' => ['creative writing', 'brainstorming', 'drafting'],
+            'ideal_for' => ['legacy alias'],
+        ],
+        // ---- distinct weight sets, measured 2026-09-22 ----
+        'qwen2.5:7b' => [
+            'tier' => 'balanced',
+            'reasoning' => 'strong',  // 4/4 on reasoning tasks
+            'evidence' => 'strong',   // only model that rejected the false premise
+                                      // AND did not degenerate
+            'coding' => 'good',       // not measured on code; the coder 3B is the specialist
+            'creative' => 'good',     // 3/4 constraint adherence
+            'writing' => 'good',
+            'context_window' => 8192,
+            'ideal_for' => ['reasoning', 'research', 'analysis', 'evidence handling'],
+        ],
+        'qwen2.5:3b' => [
+            'tier' => 'fast',
+            'reasoning' => 'good',    // 3/4, but degenerated once into digit repetition,
+                                      // so not 'strong'
+            'evidence' => 'good',     // rejected the premise, then named an RTG
+            'coding' => 'basic',
+            'creative' => 'good',     // 3/4 constraint adherence
+            'writing' => 'good',
+            'context_window' => 8192,
+            'ideal_for' => ['general chat', 'creative writing', 'fast responses'],
+        ],
+        'qwen2.5-coder:3b' => [
+            'tier' => 'fast',
+            'reasoning' => 'basic',
+            'coding' => 'strong',     // 8/14 functional checks vs 1/14 for the general 3B
+            'creative' => 'basic',
+            'writing' => 'basic',
+            'context_window' => 8192,
+            'ideal_for' => ['code', 'debugging', 'implementation'],
         ],
     ];
 }
@@ -1013,10 +1064,64 @@ function chat_validate_tool_claims_against_state(string $reply, array $toolState
     $checks = [];
     $lower = strtolower($reply);
 
-    $claimsExecution = preg_match('/\b(i\s+(ran|executed|scanned|queried|checked|inspected|searched|verified|tested|accessed)|we\s+(ran|executed|scanned|queried|checked)|scan\s+result\s+shows|the\s+(logs?|api|server)\s+(show|returned|reports?)|i\s+searched\s+the\s+web|i\s+verified\s+the\s+source)\b/i', $reply) === 1;
-    $claimsDbAccess = preg_match('/\b(i\s+(checked|queried|inspected)\s+(the\s+)?(database|db|table|schema))\b/i', $reply) === 1;
-    $claimsShellAccess = preg_match('/\b(i\s+(ran|executed)\s+(a\s+)?(scan|scanner|command|shell\s+command))\b/i', $reply) === 1;
-    $claimsWebSearch = preg_match('/\b(i\s+searched\s+the\s+web|i\s+looked\s+up|i\s+fetched\s+from)\b/i', $reply) === 1;
+    // Claim shapes that assert the assistant performed observation or retrieval.
+    //
+    // The literal verb list previously here missed the shapes that actually
+    // occur. Confirmed against real output (2026-09-20), all three of these
+    // claimed retrieval that never happened and none of them was flagged:
+    //   "I did search for benchmarks ..."      -> do-support ("i did search")
+    //   "the current data I found"             -> "found" was absent
+    //   "I could find specific page numbers"   -> modal + "find"
+    //
+    // The honest counterparts ("I did not search", "I could not find", "I am
+    // unable to search") do not match: the patterns require the verb adjacent to
+    // the auxiliary, and a negated form has "not" in between. So a repaired
+    // answer passes on its own merits rather than by suppressing the check,
+    // which is what matters - a disclosure must not cover a claim elsewhere.
+    // Retrieval targets: the artefacts and systems whose observation would be a
+    // factual claim. Deliberately excludes abstract nouns such as "tradeoffs",
+    // "options", "plan", "hypothesis", "calculation", "cause" and "numbers",
+    // which are objects of reasoning rather than of observation.
+    $claimTarget =
+        '(?:databases?|db|tables?|schema|log(?:s|file|files)?|metrics?|dashboards?|servers?|apis?|'
+        . 'endpoints?|queues?|brokers?|clusters?|pods?|containers?|nodes?|hosts?|services?|repo|'
+        . 'repository|code|files?|config|configuration|documents?|docs|reports?|spreadsheets?|pdf|'
+        . 'attachments?|pages?|sources?|citations?|references?|urls?|links?|websites?|site|web|'
+        . 'internet|whitepapers?|papers?|records?|tickets?|pull\s+requests?|commits?|quer(?:y|ies)|'
+        . 'migrations?|backups?|dumps?|snapshots?|results?)';
+
+    $claimVerb =
+        '(?:ran|run|executed|execute|scanned|scan|queried|query|checked|check|inspected|inspect|'
+        . 'searched|search|verified|verify|tested|test|accessed|access|retrieved|retrieve|'
+        . 'reviewed|review|fetched|fetch|examined|examine|read|opened|open)';
+
+    $claimArticle = '(?:the\s+|your\s+|our\s+|a\s+|an\s+|some\s+|these\s+|those\s+|that\s+|this\s+)*';
+
+    // An observation verb counts only when it names a target in the same clause.
+    // The negative forms ("I did not search", "I could not find", "I am unable to
+    // search") do not match, because "not"/"unable" stand between the auxiliary
+    // and the verb. A repaired answer therefore passes on its own merits rather
+    // than by suppressing the check - a disclosure must never cover a claim.
+    $claimsExecution = preg_match(
+        '/\b(?:i|we)\s+(?:(?:have|has|had|did|do|already|also|just|recently|then)\s+){0,3}'
+        . $claimVerb . '\s+' . $claimArticle . $claimTarget . '\b'
+        . '|\b(?:i|we)\s+(?:(?:have|has|had|did|do|already|also|just|recently)\s+){0,3}'
+        . '(?:search(?:ed)?|looked)\s+(?:for|up)\s+\w'
+        . '|\b(?:i|we)\s+(?:could|can|was\s+able\s+to|were\s+able\s+to|managed\s+to)\s+'
+        . '(?:find|locate|retrieve|search|look\s+up|access|pull\s+up)\b'
+        . '|\b(?:i|we)\s+found\s+' . $claimArticle . $claimTarget . '\b'
+        . '|\b(?:the|this|that|what)\s+(?:\w+\s+){0,3}'
+        . '(?:data|information|results?|details?|numbers?|figures?|pages?|citations?|sources?|records?)'
+        . '\s+(?:that\s+)?(?:i|we)\s+(?:found|located|retrieved|gathered|collected)\b'
+        . '|\b(?:scan|search|query)\s+results?\s+show'
+        . '|\bthe\s+(?:logs?|api|server|database|db|table|dashboard)\s+'
+        . '(?:show|shows|returned|returns|reports?|indicates?|confirms?)\b'
+        . '/i',
+        $reply
+    ) === 1;
+    $claimsDbAccess = preg_match('/\b(?:i|we)\s+(?:(?:have|has|had|did|do|already|just)\s+){0,2}(?:checked|check|queried|query|inspected|inspect|examined|examine)\s+(?:the\s+)?(?:database|db|table|schema)\b/i', $reply) === 1;
+    $claimsShellAccess = preg_match('/\b(?:i|we)\s+(?:(?:have|has|had|did|do|already|just)\s+){0,2}(?:ran|run|executed|execute)\s+(?:a\s+)?(?:scan|scanner|command|shell\s+command)\b/i', $reply) === 1;
+    $claimsWebSearch = preg_match('/\b(?:i|we)\s+(?:(?:have|has|had|did|do|already|just)\s+){0,2}(?:searched\s+the\s+web|looked\s+up|fetched\s+from|searched\s+for|did\s+(?:a\s+)?(?:web\s+)?search)\b/i', $reply) === 1;
 
     $records = chat_execution_records_from_legacy($toolState, (string)($toolState['request_id'] ?? ''));
     $execAllowed = false;
@@ -1088,6 +1193,14 @@ function chat_claim_provenance_summary(string $reply, array $context = []): arra
          * an unverified claim from an ordinary response sentence.
          */
         continue;
+    }
+
+    // Content-level re-check. Sentence classification above only notices that a
+    // sentence MENTIONS a source; the annotation pass verifies that the sentence's
+    // specifics are actually present in the evidence gathered this turn, and
+    // withdraws the verified flag when they are absent or contradicted.
+    if (function_exists('chat_claim_provenance_annotate')) {
+        $claims = chat_claim_provenance_annotate($claims, $context);
     }
 
     return $claims;
@@ -2345,7 +2458,7 @@ function chat_deterministic_response(string $message, array $requestProfile = []
     return null;
 }
 
-function chat_runtime_quality_repair(string $latestUserMsg, string $reply, array $requestTrustProfile = [], array $osRuntimeDecision = [], bool $evidenceRetrieved = false): string {
+function chat_runtime_quality_repair(string $latestUserMsg, string $reply, array $requestTrustProfile = [], array $osRuntimeDecision = [], bool $evidenceRetrieved = false, bool $executed = false): string {
     $out = trim($reply);
     if ($out === '') {
         return $out;
@@ -2497,6 +2610,18 @@ function chat_runtime_quality_repair(string $latestUserMsg, string $reply, array
         }
     }
 
+    // Execution boundary. A directive to *act* is not a request for advice, so
+    // when this turn holds no execution evidence the reply must say plainly
+    // that nothing ran. Applied last so it sees the final text, and after the
+    // incident guardrails so those cannot reintroduce an implicit success.
+    if (function_exists('chat_repair_execution_boundary')) {
+        $boundedOut = chat_repair_execution_boundary($latestUserMsg, $out, $executed);
+        if ($boundedOut !== $out) {
+            $out = $boundedOut;
+            $lowerReply = strtolower($out);
+        }
+    }
+
     return trim($out);
 }
 
@@ -2597,6 +2722,17 @@ function chat_verification_failure_class(string $latestUserMsg, string $reply, a
     $class = strtoupper(trim((string)($requestProfile['request_class'] ?? 'GENERAL_INFORMATION')));
     $replyLower = strtolower(trim($reply));
 
+    // Checked FIRST, ahead of every class-based branch. Measured: T001 (request
+    // class SECURITY) was classified SECURITY_FACT_ERROR even though
+    // fabricated_specifics had FAILED, because the SECURITY branch sits above where
+    // this check used to live. The wrong instruction was used and the invented
+    // content survived. A fabricated specific is a truthfulness failure, so it must
+    // outrank request-class routing. Matching on these two exact strings keeps it
+    // from capturing anything else.
+    if (preg_match('/never supplied|enumerated specifics for a source explicitly stated to be absent/', $issueBlob) === 1) {
+        return 'FABRICATED_SPECIFIC_DETAIL';
+    }
+
     if (preg_match('/evidence-refusal language|i can\'t verify an exact conclusion/', $issueBlob) === 1 || preg_match('/^\s*i\s+can(?:not|\'t)\s+verify\b/', $replyLower) === 1) {
         return 'UNNECESSARY_EVIDENCE_REFUSAL';
     }
@@ -2623,6 +2759,20 @@ function chat_verification_failure_class(string $latestUserMsg, string $reply, a
     }
     if (preg_match('/casual|social|awkward/', $issueBlob) === 1 || in_array($class, ['CASUAL_CONVERSATION', 'SOCIAL_CONVERSATION'], true)) {
         return 'CASUAL_TONE_FAILURE';
+    }
+    // Fabricated retrieval or observation is its own failure class, so it gets
+    // the tool-honesty regeneration instruction instead of the generic default.
+    //
+    // No branch previously matched these issue strings, so they fell through to
+    // the request-class default below and were classified
+    // ANSWER_ALLOWED_BUT_WRONG - which is deliberately outside the
+    // regeneration allow-list. The fabricated claim therefore survived with no
+    // repair attempt, even though the detection had fired.
+    // A fabricated specific detail is its own class so it gets the fabrication
+    // instruction rather than the generic fall-through, which is deliberately
+    // outside the regeneration allow-list.
+    if (preg_match('/tool execution is claimed|without verified provenance|observed or source-derived claim|incorrectly framed as a privacy refusal/', $issueBlob) === 1) {
+        return 'TOOL_UNAVAILABLE';
     }
     if (in_array($class, ['TOOL_REQUIRED', 'TOOL_UNAVAILABLE', 'SYSTEM_ADMINISTRATION'], true)) {
         return 'TOOL_UNAVAILABLE';
@@ -2654,6 +2804,7 @@ function chat_failure_regeneration_mode(string $failureClass): string {
         'MISSING_EXTERNAL_EVIDENCE' => 'EVIDENCE_REQUIRED',
         'PRODUCTION_SAFETY_FAILURE' => 'PRODUCTION_SAFETY',
         'SECURITY_FACT_ERROR' => 'SECURITY',
+        'FABRICATED_SPECIFIC_DETAIL' => 'FABRICATION_GUARD',
         default => 'GENERAL',
     };
 }
@@ -2670,11 +2821,105 @@ function chat_failure_regeneration_instruction(string $failureClass): string {
         'TOOL_UNAVAILABLE' => 'Regenerate with tool honesty: state lack of access plainly and provide the safest next steps without pretending execution.',
         'EVIDENCE_REQUIRED' => 'Regenerate with source honesty and evidence bounds. Use sections: Known, Unknown, Next checks (at least 2 concrete checks). Do not fabricate details.',
         'PRODUCTION_SAFETY' => 'Regenerate with strict incident priority order: stabilize first, preserve evidence, assess blast radius, establish current state, choose reversible mitigation, recover, validate, then root cause. Avoid broad dependency upgrades or blind rollback.',
+        'FABRICATION_GUARD' => 'Regenerate without inventing any specific value. The requested data was NOT provided to you. Do not state an IP address, hostname, email, ID, number, quotation or clause as fact, and do not claim you retrieved, inspected or searched for anything. Do not answer with a bare one-line refusal either. Instead: (1) say plainly that the specific requested data was not supplied, (2) give genuinely useful general guidance that does not depend on it, such as what such a document or system normally covers and how to obtain or confirm the detail, and (3) state exactly what the user should provide for a precise answer. Be concrete and reasonably thorough, but assert no specifics you were not given.',
         'SECURITY' => 'Regenerate with strict security precision: avoid incorrect security terminology and keep claims technically accurate.',
         default => 'Regenerate with concise, complete, and accurate response aligned to user instructions.'
     };
 }
 
+/**
+ * Deterministically strip an invented specific detail from a reply.
+ *
+ * No model call: the failing pattern is mechanical. A sentence that asserts an
+ * identifier the user never gave is removed rather than rewritten, because any
+ * rewrite risks inventing a different value, and the whole point is to stop
+ * stating unverified specifics as fact.
+ *
+ * A disclosure is always prepended, so the reply explains itself instead of
+ * silently dropping content. If nothing survives, the disclosure stands alone.
+ */
+function chat_repair_fabricated_specifics(string $latestUserMsg, string $reply): string {
+    $reply = (string)$reply;
+    if (trim($reply) === '') {
+        return $reply;
+    }
+    if (chat_reply_states_non_disclosure($reply)) {
+        return $reply; // already honest
+    }
+
+    // Gate the repair on the detector. Without this the non-identifier branch
+    // prepended a disclosure even when nothing was fabricated - measured by
+    // repairing "Paris is the capital of France." and getting the disclosure back.
+    // A repair that fires where detection did not is a false positive by another
+    // name, so the detector has the final say.
+    if (function_exists('chat_validate_fabricated_specifics')
+        && (chat_validate_fabricated_specifics($latestUserMsg, $reply, [])['pass'] ?? true)) {
+        return $reply;
+    }
+
+    $msgLower = strtolower(trim($latestUserMsg));
+
+    $unsupported = [];
+    foreach (chat_fabricated_identifiers($reply) as $f) {
+        $value = strtolower($f['value']);
+        if ($value !== '' && !str_contains($msgLower, $value)) {
+            $unsupported[] = $f['value'];
+        }
+    }
+
+    // Wording chosen by measurement. The previous text ("...available from a
+    // verified source...") failed two validators on its own:
+    //   response_contract - flat refusal language for a direct-answer request
+    //   claim_provenance  - the word "source" reads as an observed/source-derived claim
+    // Both made chat.php reject the repair (issues went 1 -> 2), so the invented
+    // value survived. This wording scores ZERO issues for database-IP, hostname and
+    // email requests, so the repair is adopted, and it still trips
+    // chat_reply_states_non_disclosure() via "were not provided in this conversation".
+    $disclosure = 'Those details were not provided in this conversation, so I have nothing I can confirm for them. '
+        . 'Share the relevant configuration or environment details and I will confirm the exact values. '
+        . 'You can also read them directly: check the configuration or settings that record them, '
+        . 'or the connection details the application uses.';
+
+    if ($unsupported === []) {
+        // Enumerated specifics with no identifier are NOT repaired deterministically.
+        //
+        // Measured against the three validators that govern an evidence-required
+        // request: a short refusal fails response_length_appropriate, refusal wording
+        // fails response_contract, and naming the document ('report', 'findings')
+        // fails claim_provenance. No crafted template passes all three, so a
+        // deterministic rewrite here is rejected and only wastes the attempt.
+        //
+        // Returning the reply unchanged lets the pipeline reach regeneration with the
+        // FABRICATION_GUARD instruction, which the model can satisfy with a longer,
+        // genuinely useful, non-inventing answer. Identifier assertions (an invented
+        // IP, hostname or email) are still handled deterministically below, where
+        // removal is mechanical and verified to clear validation.
+        return $reply;
+    }
+
+    // Sentence-level removal of anything asserting the unsupported value.
+    $sentences = preg_split('/(?<=[.!?])\s+/', $reply) ?: [$reply];
+    $kept = [];
+    foreach ($sentences as $sentence) {
+        $drop = false;
+        foreach ($unsupported as $value) {
+            if (str_contains($sentence, $value)) {
+                $drop = true;
+                break;
+            }
+        }
+        if (!$drop) {
+            $kept[] = $sentence;
+        }
+    }
+
+    $remainder = trim(implode(' ', $kept));
+    if ($remainder === '') {
+        return $disclosure;
+    }
+
+    return $disclosure . "\n\n" . $remainder;
+}
 function chat_self_verify_summary(string $latestUserMsg, string $reply, bool $taskMode, string $taskFocus, array $context = []): array {
     $checks = [];
     $issues = [];
@@ -2803,6 +3048,23 @@ function chat_self_verify_summary(string $latestUserMsg, string $reply, bool $ta
         $issues[] = 'Reply asserts source-level evidence without a verification qualifier.';
     } else {
         $checks[] = ['name' => 'source_discipline', 'pass' => true];
+    }
+    // Fabricated specific detail: a reply asserting a value (an IP, hostname,
+    // email, or enumerated specifics for an absent source) that nothing supplied.
+    // Measured failure: "the exact IP address and hostname of our primary database
+    // server" was answered with an invented hostname and 203.0.113.10 (IANA's
+    // TEST-NET-3 documentation range). All five pre-existing validators passed that
+    // reply because it makes no claim of retrieval - it just states a value.
+    if (function_exists('chat_validate_fabricated_specifics')) {
+        $fabrication = chat_validate_fabricated_specifics($latestUserMsg, $reply, $context);
+        if (($fabrication['checked'] ?? false) && !($fabrication['pass'] ?? true)) {
+            $checks[] = ['name' => 'fabricated_specifics', 'pass' => false];
+            foreach ((array)($fabrication['issues'] ?? []) as $fabIssue) {
+                $issues[] = (string)$fabIssue;
+            }
+        } else {
+            $checks[] = ['name' => 'fabricated_specifics', 'pass' => true];
+        }
     }
 
     $askedForSteps = preg_match('/\b(plan|steps?|checklist|roadmap|how\s+to|what\s+next)\b/i', $latestUserMsg) === 1;
@@ -3186,8 +3448,14 @@ function chat_self_verify_summary(string $latestUserMsg, string $reply, bool $ta
         'attachmentMeta' => $context['attachmentMeta'] ?? null,
         'execution_records' => $toolState['execution_records'] ?? [],
     ]);
+    // UNKNOWN is included deliberately: it is assigned only when a sentence
+    // attributes a claim to a source ("according to ...", "citation:") while no
+    // verified web result exists. That is precisely an unsupported source
+    // attribution, and it previously passed unchecked because only TOOL_OBSERVED
+    // and WEB_SOURCE were tested here. ("According to the current data I found"
+    // was classified UNKNOWN and therefore not flagged.)
     $unverifiedOperationalClaims = array_values(array_filter($claimProvenance, static function (array $claim): bool {
-        return in_array($claim['provenance'] ?? '', ['TOOL_OBSERVED', 'WEB_SOURCE'], true)
+        return in_array($claim['provenance'] ?? '', ['TOOL_OBSERVED', 'WEB_SOURCE', 'UNKNOWN'], true)
             && empty($claim['verified']);
     }));
     $checks[] = ['name' => 'claim_provenance', 'pass' => $unverifiedOperationalClaims === [], 'claims' => $claimProvenance];

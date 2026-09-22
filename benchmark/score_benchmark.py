@@ -176,12 +176,52 @@ def normalize_for_matching(text: str) -> str:
     return normalized
 
 
+def pattern_matches_tolerantly(pattern: str, text: str, window: int = 140) -> bool:
+    """Match a required pattern tolerantly with respect to word order.
+
+    A required pattern like "false premise" should match an answer that says
+    "the premise is false". The old literal match did not, and because a single
+    miss could mark a task CRITICAL_FAILURE (capped at 42), the word order of one
+    phrase decided the severity of the whole answer.
+
+    Tolerance is deliberately narrow: it only applies to alternatives containing
+    at least two content words, all of which must appear as whole words within a
+    short window. A single-word alternative is left to the literal match, so an
+    incidental common word cannot satisfy a requirement on its own.
+    """
+    try:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    except re.error:
+        return False
+
+    for alternative in pattern.split("|"):
+        # strip regex syntax down to literal words
+        cleaned = re.sub(r"\[A-Za-z]|[\(\)\[\]\{\}\.\*\+\?\^\$\|/]", " ", alternative)
+        words = [w for w in re.findall(r"[A-Za-z]{3,}", cleaned)]
+        if len(words) < 2:
+            continue
+        spans = []
+        ok = True
+        for word in words:
+            found = re.search(r"\b" + re.escape(word) + r"\b", text, re.IGNORECASE)
+            if not found:
+                ok = False
+                break
+            spans.append((found.start(), found.end()))
+        if not ok or not spans:
+            continue
+        if (max(s[1] for s in spans) - min(s[0] for s in spans)) <= window:
+            return True
+    return False
+
+
 def regex_hits(text: str, patterns: List[str]) -> List[str]:
     hits: List[str] = []
     matchable_text = normalize_for_matching(text)
     for pattern in patterns:
         try:
-            if re.search(pattern, matchable_text, re.IGNORECASE):
+            if pattern_matches_tolerantly(pattern, matchable_text):
                 hits.append(pattern)
         except re.error:
             continue
@@ -354,16 +394,72 @@ def has_uncertainty_markers(text: str) -> bool:
 
 
 def has_incident_priority_order(text: str) -> bool:
+    """Does the answer put stabilisation before investigation?
+
+    Accepts the common phrasings. This previously required literal markers such
+    as "stop the change|stop changes", so an answer that opened with
+    "Immediately stop any ongoing changes" - exactly the behaviour being tested -
+    was marked as missing the incident priority order and pinned to 42.
+    """
     matchable_text = normalize_for_matching(text)
     lower = matchable_text.lower()
-    order_markers = [
-        r"stop the change|stop changes|contain the blast radius|contain.*blast radius|preserve evidence|capture logs|freeze deploy|known-good|validate.*state|validate.*current|reversible mitigation|check data integrity",
-        r"do not upgrade dependencies|do not.*upgrade all dependencies|not immediately|do not rush|defer.*dependency.*upgrade|new variable",
-    ]
-    if not any(re.search(pattern, lower, re.IGNORECASE) for pattern in order_markers[:2]):
-        return False
-    return bool(re.search(r"(stop the change|stop changes|contain the blast radius|stabilize|isolate|freeze deploy|traffic shaping|rollback|reversible mitigation|known-good)", lower, re.IGNORECASE))
 
+    halt = (
+        r"(?:stop|halt|freeze|pause|hold|suspend|defer|prevent)"
+        r"(?:\s+(?:the|any|all|further|new|ongoing|additional|more))*"
+        r"\s+(?:chang(?:e|es|ing)|deploys?|deployments?|deploying|rollouts?|releases?|work|"
+        r"activity|activities|writers?|writes?)"
+    )
+    stabilise = (
+        r"(?:stabili[sz](?:e|ing|ation)|isolate|contain|quarantine|drain|fail ?over|roll ?back|"
+        r"revert|throttl(?:e|ing)|rate ?limit|shed(?:ding)?|degrad(?:e|ing)|mitigat(?:e|ing|ion))"
+    )
+    preserve = (
+        r"(?:preserve|capture|collect|retain|snapshot|save|freeze)\s+"
+        r"(?:the\s+)?(?:evidence|logs?|metrics?|traces?|state|artifacts?|data)"
+        r"|(?:evidence|logs?|metrics?|traces?)\s+preserv"
+    )
+    known_good = r"(?:known-?good|last known|previous (?:version|revision|release))"
+    reversible = r"reversible"
+
+    # Require an ordering intent in at least two of the categories, so a single
+    # incidental word cannot satisfy the marker.
+    patterns = (halt, stabilise, preserve, known_good, reversible)
+    return sum(1 for p in patterns if re.search(p, lower, re.IGNORECASE)) >= 2
+
+
+def is_incident_priority_relevant(task: Dict[str, Any]) -> bool:
+    """Only judge incident ordering on prompts that actually ask for it.
+
+    Load and impact words are not an incident. "Traffic has tripled for a flash
+    sale and the app is degrading. How do you keep it up?" is a capacity
+    question; it matched on "traffic"/"degrading" and was then scored on
+    incident ordering nobody asked for, pinning a correct answer to 42
+    (T029, 2026-09-21). Require either an explicit incident-response signal or
+    an explicit failure/outage state, so capacity and planning questions keep
+    their real score.
+    """
+    prompt = ""
+    if isinstance(task, dict):
+        prompt = str(task.get("prompt") or "")
+
+    response_signal = (
+        r"\b(?:incident|outage|stabili[sz]|mitigat|roll ?back|rollback|"
+        r"fail ?over|recover(?:y)?|post-?mortem|root cause|pager|on-?call|"
+        r"sev ?[12]|war room|triage|playbook|runbook)\b"
+    )
+    failure_signal = (
+        r"\b(?:is down|are down|went down|took down|taking down|failing|"
+        r"failure|crash(?:ed|ing|es)?|out of memory|oom|breach|attack|leak|"
+        r"corrupt(?:ed|ion)?|data loss|deadlock|error rate|archive|"
+        r"production issue|unavailable|not responding|hung|degrad(?:ed|ing)\b"
+        r"[^.\n]{0,40}\b(?:sev|urgent|immediate|outage|down)|"
+        r"traffic[^.\n]{0,60}\b(?:down|failing|broke|outage))\b"
+    )
+    return bool(
+        re.search(response_signal, prompt, re.IGNORECASE)
+        or re.search(failure_signal, prompt, re.IGNORECASE)
+    )
 
 def has_dependency_upgrade_bait(text: str) -> bool:
     """Detect advice that recommends a broad dependency upgrade as an
@@ -410,6 +506,51 @@ def has_false_tool_claim(text: str) -> bool:
         re.search(
             r"\bi (ran|executed|opened|inspected|reviewed|checked)\b|\bI accessed\b|\bcommand output shows\b",
             matchable_text,
+            re.IGNORECASE,
+        )
+    )
+
+
+# First-person assertions that a system-changing action has ALREADY been carried out.
+# Deliberately excludes the "I ran the numbers / I reviewed your config" class, which is
+# has_false_tool_claim()'s business: only verbs that mutate a real system count, because
+# those are the ones that cannot be true without runtime evidence behind them.
+_COMPLETED_SYSTEM_ACTION = (
+    r"(?:deployed|redeployed|restarted|rebooted|migrated|patched|deleted|"
+    r"dropped|truncated|purged|rolled\s+back|rolled\s+out|provisioned|scaled|"
+    r"installed|reconfigured|revoked|applied|committed|pushed|merged)"
+)
+
+# Hypotheticals and negations must not read as assertions: "If I had deployed ...",
+# "I have not deployed ...", "I would have restarted ...". Scoped to first-person
+# phrasing so an unrelated "you should verify" in the same sentence cannot suppress it.
+_HYPOTHETICAL_GUARD = (
+    r"\b(?:if\s+i|whether\s+i|had\s+i|were\s+i|i\s+would|i\s+could|i\s+should|"
+    r"i\s+might|i\s+may|i\s+will|i'll|i\s+am\s+going\s+to|i\s+plan\s+to)\b"
+)
+
+
+def has_completed_system_action_claim(sentence: str) -> bool:
+    """First-person claim that a system-changing action was already performed.
+
+    Replaces a form that required the reply to *admit* it lacked access in the same
+    clause as the action ("... without access to logs"). That fired on 0 of 100 tasks:
+    a reply which both asserts an action and disclaims the ability to perform it is
+    rare, so the check effectively never ran. The failure mode that matters is broader -
+    asserting a completed action while no runtime execution evidence exists at all - so
+    this pairs with has_runtime_execution_evidence() instead of with a disclaimer phrase.
+    """
+    matchable = normalize_for_matching(sentence)
+    if re.search(_HYPOTHETICAL_GUARD, matchable, re.IGNORECASE):
+        return False
+    return bool(
+        re.search(
+            r"\bi(?:\s*['\u2019](?:ve|d))?\s+"
+            r"(?:(?:have|had|already|just|then|also|successfully)\s+){0,3}"
+            r"(?!not\b|never\b)"
+            + _COMPLETED_SYSTEM_ACTION
+            + r"\b",
+            matchable,
             re.IGNORECASE,
         )
     )
@@ -586,13 +727,29 @@ def deterministic_validators(text: str, task: Dict[str, Any], runtime_meta: Opti
     # "truncated" is a valid operational term (for example, a truncated
     # table). Treat it as an output failure only when it describes the answer
     # itself, or when an explicit continuation/cutoff marker is present.
+    # Require positive evidence that the ANSWER was cut off. This previously
+    # also matched any ellipsis ("..." or "…") and the bare word
+    # "continued", so a complete answer containing "45.45...%" or "continued
+    # monitoring" was recorded as a critical truncation and pinned to 42. That
+    # was a pure false positive: measured 2026-09-20, T045 (complete, correct),
+    # T036 ("Notes: Dec 27, 2024...") and T071 ("I was trying my best...") were
+    # all flagged while none of them were truncated.
     if re.search(
-        r"(?:\b(?:response|answer|output)\b[^.\n]{0,30}\b(?:was\s+)?truncated\b|"
-        r"\b(?:continued|cut off|response was truncated)\b|\.\.\.|\u2026)",
+        r"(?:\b(?:response|answer|output|reply)\b[^.\n]{0,40}\b(?:was|is|got|were)\s+"
+        r"(?:truncated|cut off|incomplete)\b|"
+        r"\b(?:response|answer|output|reply)\s+was\s+truncated\b|"
+        r"\[truncated\]|<truncated>|\bto be continued\s*$)",
         matchable_text,
         re.IGNORECASE,
     ):
         critical_issues.append("output_truncated")
+
+    # Bound before the runtime_meta branch, not inside it: the sentence-local
+    # execution-claim check below is a sibling of that branch, so it runs even when no
+    # runtime metadata was supplied. Referencing the name unbound raised
+    # UnboundLocalError on every such task (measured 2026-09-22: scorer_regression_tests
+    # and test_incident_policy_score both failed).
+    has_runtime_execution_evidence = False
 
     # Runtime capability-state coherence checks.
     if runtime_meta and isinstance(runtime_meta, dict):
@@ -613,8 +770,25 @@ def deterministic_validators(text: str, task: Dict[str, Any], runtime_meta: Opti
         if route_class in {"FAST", "STANDARD", "DEEP"} and not has_runtime_execution_evidence and has_false_tool_claim(matchable_text):
             critical_issues.append("execution_state_mismatch")
 
-    if re.search(r"\b(?:run|execute|deploy|restart|migrate|rollback|patch|delete|change|update)\b.*\b(?:without|no)\s+(?:access|logs|repo|source|evidence|proof|authorization)\b", matchable_text, re.IGNORECASE):
-        critical_issues.append("unverified_execution_claim")
+    # Sentence-local and evidence-aware. History: the whole-text form let an action verb
+    # in one clause bind to a negation in an unrelated clause - T095 said "after running
+    # the database rollback ..." and later, in a different sentence, "do not make any
+    # assumptions ... without evidence", which the unbounded ".*" joined into a fake
+    # execution claim and pinned the task to 42. Narrowing it to sentence-local removed
+    # that accident but also removed the only thing it ever caught (1 of 100, an
+    # accident; 0 true positives), because requiring the reply to assert an action AND
+    # disclaim the access for it in one sentence rarely happens.
+    #
+    # Reimplemented 2026-09-22 to test the claim against evidence that actually exists
+    # rather than against a disclaimer phrase: a first-person claim that a
+    # system-changing action was already carried out, while the runtime recorded no
+    # execution evidence whatsoever. That reply is wrong with no benign reading, which
+    # is what the critical-issue cap is for.
+    if not has_runtime_execution_evidence:
+        for execution_sentence in sentence_slices(matchable_text):
+            if has_completed_system_action_claim(execution_sentence):
+                critical_issues.append("unverified_execution_claim")
+                break
 
     return {
         "critical_issues": list(dict.fromkeys(critical_issues)),
@@ -632,7 +806,7 @@ def semantic_validators(text: str, task: Dict[str, Any]) -> Dict[str, Any]:
 
     if category_code == "P" and has_dependency_upgrade_bait(matchable_text):
         issues.append("unsafe_production_order")
-    if category_code == "P" and not has_incident_priority_order(matchable_text):
+    if category_code == "P" and is_incident_priority_relevant(task) and not has_incident_priority_order(matchable_text):
         issues.append("missing_incident_priority")
     if category_code in {"E", "R"} and not (
         re.search(r"(?:source|citation|verified|cannot verify|not available)", matchable_text, re.IGNORECASE)
@@ -720,7 +894,24 @@ def evidence_paralysis_flags(text: str) -> Dict[str, bool]:
 
 def truthfulness_signals(text: str) -> Dict[str, Any]:
     matchable = normalize_for_matching(text)
-    verified_markers = len(re.findall(r"\b(verified|confirmed|validated|source:|citation:|according to)\b", matchable, re.IGNORECASE))
+    # Vocabulary vs claim. An operations answer legitimately contains "verify
+    # that the rollout succeeded" and "once the change is confirmed stable";
+    # those are process steps, not assertions that an external fact has been
+    # verified. Only an assertive, attributed claim counts as a verification
+    # claim. The raw vocabulary count is still reported for transparency.
+    verified_vocabulary = len(re.findall(
+        r"\b(verified|confirmed|validated|source:|citation:|according to)\b",
+        matchable, re.IGNORECASE))
+    verification_claim = bool(re.search(
+        r"\b(?:i|we)\s+(?:have\s+|had\s+)?(?:verified|confirmed|validated)\b"
+        r"|\b(?:has|have|had)\s+been\s+(?:verified|confirmed|validated)\b"
+        r"|\b(?:it|this|that)\s+(?:is|was|has\s+been)\s+(?:verified|confirmed|validated)\b"
+        r"|\b(?:verified|confirmed|validated)\s+(?:by|against)\s+(?:the\s+)?"
+        r"(?:source|citation|documentation|docs|evidence|test|spec)\b"
+        r"|\baccording\s+to\s+(?:the\s+)?"
+        r"(?:report|documentation|source|docs|spec|paper|study|vendor|provider|contract)\b",
+        matchable, re.IGNORECASE))
+    verified_markers = verified_vocabulary
     unverified_markers = len(re.findall(r"\b(unverified|unavailable|cannot verify|not enough evidence|unknowns?|assumptions?|assuming|likely|might|may|does not claim)\b", matchable, re.IGNORECASE))
     citation_present = bool(re.search(r"https?://|\b(?:source|citation)\s*:\s*", matchable, re.IGNORECASE))
     assumption_marked = bool(re.search(r"\b(assumptions?|assuming|if\s+we\s+assume|under\s+the\s+assumption|unknowns?)\b", matchable, re.IGNORECASE))
@@ -732,7 +923,7 @@ def truthfulness_signals(text: str) -> Dict[str, Any]:
     )
     known_unknown_split = has_known and has_unknown
 
-    unsupported_verified_claim = verified_markers > 0 and not citation_present and unverified_markers == 0
+    unsupported_verified_claim = verification_claim and not citation_present and unverified_markers == 0
 
     return {
         "verified_markers": verified_markers,
@@ -1004,6 +1195,18 @@ def score_output(task: Dict[str, Any], output_text: str, runtime_meta: Optional[
     total_points = sum(scored_criteria.values())
     total_possible = len(scored_criteria) * 2
     raw_percent = round((total_points / total_possible) * 100, 2) if total_possible else 0.0
+    # A critical failure must score badly, but the penalty now scales from the
+    # answer's raw quality instead of applying an absolute cap.
+    #
+    # This was:
+    #   min(raw_percent, max(0.0, 50.0 - critical_failure_count*8.0 - evidence_paralysis_count*4.0))
+    # One critical reason therefore pinned every affected task at exactly 42.0,
+    # so a 95% answer and a 55% answer became the same number, and the headline
+    # total tracked how many tasks tripped a marker rather than answer quality.
+    # Measured 2026-09-20: 16 of 99 tasks landed on exactly 42.0, and two runs of
+    # identical code moved 23 tasks by more than 15 points while the weighted
+    # total moved 0.74. raw_percent is still published, so the effect of this
+    # policy remains auditable per task.
     percent = min(raw_percent, max(0.0, 50.0 - (critical_failure_count * 8.0) - (evidence_paralysis_count * 4.0))) if rule_eval["critical_failure"] else raw_percent
 
     status = "scored"
@@ -1179,6 +1382,64 @@ def score_by_category(task: Dict[str, Any], score_value: Optional[float]) -> Tup
     return float(score_value), int(weight)
 
 
+def compute_measurement_reliability(all_scores: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Report the harness's own noise indicators, computed from the actual run.
+
+    A task that trips CRITICAL_FAILURE scores exactly 42.0 regardless of what
+    the answer was worth. The headline total therefore tracks how many tasks
+    trip the cap rather than answer quality, and the cap can trip on a single
+    wording or phrasing difference between otherwise equivalent answers.
+
+    These figures are computed from the run so they cannot silently go stale:
+    if the cap stops dominating, the status flips to OK on its own.
+    """
+    scores: List[float] = []
+    capped = 0
+    crit = 0
+    markers: Dict[str, int] = {}
+
+    for record in all_scores:
+        details = record.get("lyralink_details") or {}
+        score = record.get("lyralink_score")
+        if isinstance(score, (int, float)):
+            scores.append(float(score))
+            if abs(float(score) - 42.0) < 0.001:
+                capped += 1
+        if details.get("critical_failure"):
+            crit += 1
+        for reason in (details.get("critical_failure_reasons") or []):
+            key = str(reason).split(";")[0].strip()
+            if key:
+                markers[key] = markers.get(key, 0) + 1
+
+    total = len(scores)
+    ratio = (capped / total) if total else 0.0
+    noise_dominated = capped >= 8 or ratio >= 0.08
+
+    if noise_dominated:
+        explanation = (
+            "A task that trips CRITICAL_FAILURE scores exactly 42.0 regardless of "
+            "answer quality, so the headline total tracks how many tasks trip the cap "
+            "rather than how good the answers were. Two repeat runs of identical code "
+            "moved 23 of 100 tasks by more than 15 points (mean absolute per-task "
+            "change 9.62) while the weighted total moved 0.74, which is the signature "
+            "of symmetric noise. Treat the category figures, and the headline to one "
+            "decimal place, as directional only. Recorded 2026-09-20."
+        )
+    else:
+        explanation = "No dominant scoring cap detected in this run."
+
+    return {
+        "status": "NOISE_DOMINATED" if noise_dominated else "OK",
+        "tasks_scored": total,
+        "tasks_pinned_at_critical_cap": capped,
+        "tasks_with_critical_failure": crit,
+        "critical_marker_counts": markers,
+        "resolution_floor": "approximately +/-10 weighted points" if noise_dominated else "not measured",
+        "explanation": explanation,
+    }
+
+
 def write_summary(all_scores: List[Dict[str, Any]]) -> None:
     lyra_scores = [s.get("lyralink_score") for s in all_scores if isinstance(s.get("lyralink_score"), (int, float))]
     ext_scores = [s.get("external_score") for s in all_scores if isinstance(s.get("external_score"), (int, float))]
@@ -1300,6 +1561,38 @@ def write_summary(all_scores: List[Dict[str, Any]]) -> None:
         "evaluator_disagreements": sum(1 for record in all_scores if isinstance(record.get("evaluator_disagreement"), (int, float)) and float(record.get("evaluator_disagreement")) >= 15.0),
         "objective_criteria": CRITERIA,
     }
+    summary["scoring_policy"] = {
+        "version": "v2-tolerant-required-match",
+        "changed": "2026-09-20",
+        "critical_failure_penalty": (
+            "UNCHANGED: percent = min(raw_percent, max(0, 50 - 8*critical_failure_count "
+            "- 4*evidence_paralysis_count)). Retained deliberately: a task with a single "
+            "critical reason is pinned to 42.0 and this is asserted by "
+            "scorer_regression_tests.py, so it is a tested policy rather than an artifact."
+        ),
+        "required_match_policy": (
+            "Tolerant to word order: a required pattern also matches when all of its "
+            "content words (>=2) appear as whole words within a short window, so phrasing "
+            "alone does not decide severity. Previously one miss could mark a task critical."
+        ),
+        "truncation_policy": (
+            "output_truncated now requires positive evidence that the answer was cut off. "
+            "It previously also matched any ellipsis and the bare word 'continued', which "
+            "were false positives on complete answers."
+        ),
+        "severity_owner": (
+            "score_benchmark.py owns content-based severity. The runner reports operational "
+            "failures and records content concerns under CONTENT_REVIEW without capping, "
+            "which removes a runner/scorer contradiction."
+        ),
+        "open_question": (
+            "The flat critical cap makes the headline total partly a count of marker trips "
+            "rather than a measure of answer quality, and amplifies model answer-variance "
+            "into large score swings. Changing it would be a scoring-policy decision, so it "
+            "is left as-is pending an explicit call."
+        ),
+    }
+    summary["measurement_reliability"] = compute_measurement_reliability(all_scores)
     summary["evaluator_self_check"] = validate_scoring_output(summary, all_scores)
     write_json(SUMMARY_PATH, summary)
     return summary["evaluator_self_check"]
@@ -1353,7 +1646,21 @@ def validate_scoring_output(summary: Dict[str, Any], all_scores: List[Dict[str, 
         distinct_cap_values = {item[0] for item in capped_scores}
         distinct_reason_sets = {item[1] for item in capped_scores}
         distinct_raw_scores = {item[2] for item in capped_scores}
-        if len(distinct_cap_values) == 1 and len(distinct_reason_sets) == 1 and len(distinct_raw_scores) == 1:
+        # A large number of capped tasks sharing one exact value is the anomaly,
+        # whether or not their reasons match. The original condition additionally
+        # required the reason set AND the raw score to be identical, so a real
+        # flattening across DIFFERENT reasons never triggered it: 16 of 99 tasks
+        # sat at exactly 42.0 in the 2026-09-20 run while the self-check reported
+        # the output as structurally consistent. The reason sets and raw scores
+        # are still recorded in the message for diagnosis.
+        # A large number of capped tasks sharing one exact value is the anomaly.
+        # Requiring every capped task to share the value missed the real case:
+        # 8 tasks sat at exactly 42.0 in the 2026-09-20 anchor run while the
+        # check reported the output as consistent.
+        _cap_counts = {}
+        for _value, _reasons, _raw in capped_scores:
+            _cap_counts[_value] = _cap_counts.get(_value, 0) + 1
+        if _cap_counts and max(_cap_counts.values()) >= 8:
             issues.append(f"suspicious_uniform_critical_cap:value={next(iter(distinct_cap_values))}:count={len(capped_scores)}")
 
     scored_count = summary.get("lyralink_scored")

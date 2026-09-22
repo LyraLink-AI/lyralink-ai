@@ -27,6 +27,23 @@ LORA_GRAD_ACCUM="${CONTINUOUS_FINETUNE_LORA_GRAD_ACCUM:-8}"
 LORA_MAX_LENGTH="${CONTINUOUS_FINETUNE_LORA_MAX_LENGTH:-256}"
 LORA_TIMEOUT="${CONTINUOUS_FINETUNE_LORA_TIMEOUT:-3600}"
 LORA_ONLY="${CONTINUOUS_FINETUNE_LORA_ONLY:-0}"
+
+# ---------------------------------------------------------------------------
+# Guard library and backend selection.
+# ---------------------------------------------------------------------------
+if [[ -f "${ROOT_DIR}/scripts/lib/train_guard.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${ROOT_DIR}/scripts/lib/train_guard.sh"
+fi
+
+# "kaggle" delegates the entire training stage to a free GPU host. This box has
+# no GPU and cannot fit a 3B LoRA into its available RAM alongside Ollama.
+TRAIN_BACKEND="${CONTINUOUS_FINETUNE_TRAIN_BACKEND:-local}"
+if [[ "${TRAIN_BACKEND}" == "kaggle" ]]; then
+  log "step=backend status=kaggle script=auto_finetune_train_remote.sh"
+  exec bash "${ROOT_DIR}/scripts/auto_finetune_train_remote.sh"
+fi
+
 LORA_SCRIPT="${ROOT_DIR}/scripts/train_lora_adapter.py"
 LORA_PYTHON_BIN="${CONTINUOUS_FINETUNE_PYTHON_BIN:-}"
 LORA_AUTO_BACKOFF="${CONTINUOUS_FINETUNE_LORA_AUTO_BACKOFF:-1}"
@@ -112,6 +129,16 @@ fi
 
 lora_attempted=0
 lora_ok=0
+# Refuse a local run this host cannot complete. A refused run is a skip, not a
+# failure: the pipeline should stop cleanly rather than start doomed work.
+if [[ -n "${HF_BASE_MODEL}" ]] && ! lyra_cpu_train_guard "${HF_BASE_MODEL}"; then
+  log "step=lora_train status=skipped reason=cpu_guard_refused base_model=${HF_BASE_MODEL}"
+  if [[ "${TRAIN_MODE}" == "lora" ]]; then
+    exit 0
+  fi
+  HF_BASE_MODEL=""
+fi
+
 if [[ "${TRAIN_MODE}" == "lora" || "${TRAIN_MODE}" == "auto" ]]; then
   if [[ -n "${HF_BASE_MODEL}" ]] && command -v "${LORA_PYTHON_BIN}" >/dev/null 2>&1 && [[ -f "${LORA_SCRIPT}" ]]; then
     lora_attempted=1

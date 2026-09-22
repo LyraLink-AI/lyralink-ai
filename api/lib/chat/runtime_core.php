@@ -204,6 +204,51 @@ function chat_local_runtime_probe_ms(string $localRootUrl, int $timeoutSeconds =
     return $requestMs;
 }
 
+/**
+ * Load a local model into memory before the runtime is measured.
+ *
+ * The hourly continuous-learning rebuild replaces the model files, which drops
+ * the resident copy, so the next request pays a full cold load. A cold load
+ * also makes /api/tags slow, so the routing probe read it as "this box is
+ * busy" and sent short requests to the PAID remote provider. That is backwards:
+ * a cold model cost money to avoid. Loading first means the probe measures
+ * steady state instead of a load in progress.
+ *
+ * Mirrors the /api/chat shape used for real inference so the runtime treats it
+ * as an ordinary load request. Returns true only when the runtime answered.
+ */
+function chat_local_model_warmup(string $localRootUrl, string $model, int $timeoutSeconds = 20): bool {
+    $model = trim($model);
+    if ($model === "") {
+        return false;
+    }
+
+    $ch = curl_init(rtrim($localRootUrl, "/") . "/api/chat");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => max(1, $timeoutSeconds),
+        CURLOPT_CONNECTTIMEOUT => max(1, min(5, $timeoutSeconds)),
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ["Content-Type: application/json"],
+        CURLOPT_POSTFIELDS => json_encode([
+            "model" => $model,
+            "messages" => [["role" => "user", "content" => "hi"]],
+            "stream" => false,
+            "keep_alive" => trim((string)api_get_secret("LOCAL_LLM_KEEP_ALIVE", "2h")) ?: "2h",
+            "options" => ["num_predict" => 1, "temperature" => 0],
+        ]),
+    ]);
+    $body = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false || $httpCode < 200 || $httpCode >= 300) {
+        return false;
+    }
+    $decoded = json_decode((string)$body, true);
+    return is_array($decoded) && !isset($decoded["error"]);
+}
+
 function chat_runtime_is_benchmark_mode(): bool {
     return !empty($GLOBALS['chat_benchmark_mode']);
 }
@@ -217,6 +262,55 @@ function chat_runtime_timeout_override_seconds(): ?int {
         return null;
     }
     return max(12, min(240, $value));
+}
+
+if (!function_exists('chat_estimate_prompt_tokens')) {
+    /**
+     * Conservative (over-estimating) token count for a message array, so a
+     * size-driven timeout errs toward waiting rather than aborting.
+     */
+    function chat_estimate_prompt_tokens(array $messages): int {
+        $chars = 0;
+        foreach ($messages as $m) {
+            if (!is_array($m)) {
+                continue;
+            }
+            $content = $m['content'] ?? '';
+            if (is_array($content)) {
+                $content = json_encode($content, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+            $chars += strlen((string)$content);
+        }
+        return max(1, (int)ceil($chars / 4));
+    }
+}
+
+if (!function_exists('chat_adaptive_local_timeout')) {
+    /**
+     * Size a local inference timeout to the prompt instead of a fixed floor.
+     *
+     * A large prompt must finish prefill before the first token is emitted. If
+     * the timeout is below that prefill time the request is guaranteed to
+     * abort, and the caller then retries with conversation history stripped.
+     *
+     * Returns null when disabled or misconfigured, so the caller keeps the
+     * historical fixed behaviour exactly.
+     */
+    function chat_adaptive_local_timeout(array $messages, int $maxTokens, int $currentTimeout): ?int {
+        if ((string)api_get_secret('LLM_ADAPTIVE_TIMEOUT', '0') !== '1') {
+            return null;
+        }
+        $prefillTokS = (float)api_get_secret('LLM_PREFILL_TOK_S', '75');
+        $genTokS     = (float)api_get_secret('LLM_GEN_TOK_S', '29');
+        $overhead    = (float)api_get_secret('LLM_ADAPTIVE_OVERHEAD_SECONDS', '6');
+        $cap         = (int)api_get_secret('LLM_ADAPTIVE_MAX_SECONDS', '120');
+        if ($prefillTokS <= 0.0 || $genTokS <= 0.0 || $cap < 10) {
+            return null;
+        }
+        $promptTokens = chat_estimate_prompt_tokens($messages);
+        $needed = (int)ceil(($promptTokens / $prefillTokS) + ($maxTokens / $genTokS) + $overhead);
+        return max(1, min($cap, max($currentTimeout, $needed)));
+    }
 }
 
 function chat_local_stream_request(array $messages, int $maxTokens, float $temperature, string $model = 'lyralink-auto-canary:latest', ?array &$meta = null, ?float $deadlineTs = null, ?callable $onDelta = null): string|false {
@@ -274,7 +368,8 @@ function chat_local_stream_request(array $messages, int $maxTokens, float $tempe
             $localTimeout = min($localTimeout, $budgetTimeout);
             $localFallbackTimeout = min($localFallbackTimeout, max($minimumStreamTimeout, $budgetTimeout - 1));
         } else {
-            $localTimeout = max($localTimeout, min($budgetTimeout, max(18, (int)floor($localTimeout * 0.8))));
+            $sizeFloor = chat_adaptive_local_timeout($ollamaMessages, $maxTokens, $localTimeout) ?? 18;
+            $localTimeout = max($localTimeout, min($budgetTimeout, max($sizeFloor, (int)floor($localTimeout * 0.8))));
             $localFallbackTimeout = max($minimumStreamTimeout, min($localFallbackTimeout, max($minimumStreamTimeout, (int)floor($localTimeout * 0.7))));
         }
     }
@@ -454,7 +549,16 @@ function chat_local_stream_request(array $messages, int $maxTokens, float $tempe
     if (!$hasContent && $meta !== null) {
         $meta['empty_output'] = true;
         $meta['failure_status'] = 'EMPTY_OUTPUT';
-        $meta['error'] = 'Provider returned an empty response';
+        // Never replace a specific upstream cause with the generic sentence.
+        // An HTTP 200 carrying an error body (model not loaded, out of
+        // memory, generation aborted) is an upstream fault, not the model
+        // electing to return nothing, and it must stay legible in telemetry.
+        $specificUpstreamError = trim((string)($meta['error'] ?? ''));
+        if ($specificUpstreamError !== '') {
+            $meta['failure_status'] = 'UPSTREAM_ERROR';
+        } else {
+            $meta['error'] = 'Provider returned an empty response';
+        }
     }
 
     return $hasContent ? $reply : false;
@@ -693,7 +797,16 @@ function chat_provider_stream_request(array $messages, int $maxTokens, float $te
     if (!$hasContent && $meta !== null) {
         $meta['empty_output'] = true;
         $meta['failure_status'] = 'EMPTY_OUTPUT';
-        $meta['error'] = 'Provider returned an empty response';
+        // Never replace a specific upstream cause with the generic sentence.
+        // An HTTP 200 carrying an error body (model not loaded, out of
+        // memory, generation aborted) is an upstream fault, not the model
+        // electing to return nothing, and it must stay legible in telemetry.
+        $specificUpstreamError = trim((string)($meta['error'] ?? ''));
+        if ($specificUpstreamError !== '') {
+            $meta['failure_status'] = 'UPSTREAM_ERROR';
+        } else {
+            $meta['error'] = 'Provider returned an empty response';
+        }
     }
 
     return $hasContent ? $reply : false;
@@ -945,7 +1058,16 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         if (!$hasContent && $meta !== null) {
             $meta['empty_output'] = true;
             $meta['failure_status'] = 'EMPTY_OUTPUT';
-            $meta['error'] = 'Provider returned an empty response';
+            // Never replace a specific upstream cause with the generic sentence.
+            // An HTTP 200 carrying an error body (model not loaded, out of
+            // memory, generation aborted) is an upstream fault, not the model
+            // electing to return nothing, and it must stay legible in telemetry.
+            $specificUpstreamError = trim((string)($meta['error'] ?? ''));
+            if ($specificUpstreamError !== '') {
+                $meta['failure_status'] = 'UPSTREAM_ERROR';
+            } else {
+                $meta['error'] = 'Provider returned an empty response';
+            }
         }
         return $hasContent ? $content : false;
     };
@@ -1128,6 +1250,20 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
     $routeShortByLoad = false;
     if ($shortRequestEligible && $routeOnLocalSlow) {
         $localProbeMs = chat_local_runtime_probe_ms($localRootUrl, $localProbeTimeout);
+        if ($localProbeMs === null && api_get_secret("LOCAL_LLM_WARMUP_ON_PROBE_FAIL", "1") === "1") {
+            /* A failed probe is ambiguous: the runtime is either down or
+             * mid-load, and mid-load is the common case right after the
+             * hourly model rebuild. Reading it as "local is slow" sent
+             * short requests to the paid remote provider on every cold
+             * start. Load the model and measure again; if it was only
+             * cold, the re-probe is fast and the request stays local. */
+            chat_local_model_warmup(
+                $localRootUrl,
+                $resolvedModel,
+                max(1, (int)api_get_secret("LOCAL_LLM_WARMUP_TIMEOUT", "20"))
+            );
+            $localProbeMs = chat_local_runtime_probe_ms($localRootUrl, $localProbeTimeout);
+        }
         $routeShortByLoad = ($localProbeMs === null || $localProbeMs >= $localSlowThresholdMs);
     }
     $useRemoteForShort = $routeShortRequestsToRemote || $routeShortByLoad;
@@ -1194,7 +1330,8 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
             $localTimeout = min($localTimeout, $budgetTimeout);
             $localFallbackTimeout = min($localFallbackTimeout, max(12, $budgetTimeout - 1));
         } else {
-            $localTimeout = max($localTimeout, min($budgetTimeout, max(18, (int)floor($localTimeout * 0.8))));
+            $sizeFloor = chat_adaptive_local_timeout($ollamaMessages, $maxTokens, $localTimeout) ?? 18;
+            $localTimeout = max($localTimeout, min($budgetTimeout, max($sizeFloor, (int)floor($localTimeout * 0.8))));
             $localFallbackTimeout = max(12, min($localFallbackTimeout, max(12, (int)floor($localTimeout * 0.7))));
         }
     }

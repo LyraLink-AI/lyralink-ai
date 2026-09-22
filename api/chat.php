@@ -240,11 +240,22 @@ $llmModelEnv    = trim((string)api_get_secret('LOCAL_LLM_MODEL', api_get_secret(
 
 require_once __DIR__ . '/lib/chat/conversation_intelligence.php';
 require_once __DIR__ . '/lib/chat/attachments.php';
+require_once __DIR__ . '/lib/chat/approvals.php';
+require_once __DIR__ . '/lib/chat/capability_executor.php';
+require_once __DIR__ . '/lib/chat/tool_protocol.php';
+require_once __DIR__ . '/lib/chat/sandbox_executor.php';
+require_once __DIR__ . '/lib/chat/data_plane.php';
+require_once __DIR__ . '/lib/chat/serp_quality.php';
+require_once __DIR__ . '/lib/chat/claim_verification.php';
+require_once __DIR__ . '/lib/chat/claim_verification_apply.php';
+require_once __DIR__ . '/lib/chat/tenancy.php';
 require_once __DIR__ . '/lib/chat/code_validation.php';
 require_once __DIR__ . '/lib/chat/intelligence_layer.php';
 require_once __DIR__ . '/lib/chat/molt_context.php';
 require_once __DIR__ . '/lib/chat/response_helpers.php';
 require_once __DIR__ . '/lib/chat/self_training.php';
+require_once __DIR__ . '/lib/chat/self_facts.php';
+require_once __DIR__ . '/lib/chat/capability_facts.php';
 $requestContentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
 $isMultipartRequest = str_contains($requestContentType, 'multipart/form-data');
 $input = $isMultipartRequest ? $_POST : json_decode(file_get_contents('php://input'), true);
@@ -265,7 +276,25 @@ if (isset($input['persistent_goals']) && is_string($input['persistent_goals'])) 
 
 $messages      = is_array($input['messages'] ?? null) ? $input['messages'] : [];
 $requestedReplyMaxTokens = max(0, (int)($input['max_tokens'] ?? 0));
-$userId        = $input['user_id']    ?? session_id();
+/*
+ * Caller identity.
+ *
+ * This used to be $input['user_id'] ?? session_id(), so a logged-in caller could
+ * send any user_id at all and have it honoured: conversations and security_log
+ * rows were written under another account's id, the agent state key and the
+ * response-cache scope were keyed on it, pending approvals could be aimed at
+ * another user, and any tenancy control keyed on this value would have enforced
+ * nothing. When a session exists the session identity wins and the body value is
+ * ignored; the attempted substitution is recorded instead of silently accepted.
+ */
+$verifiedSessionUserId = (string)($_SESSION['user_id'] ?? '');
+$userIdBodyValue       = isset($input['user_id']) ? trim((string)$input['user_id']) : '';
+$userIdIdentitySubstituted = ($verifiedSessionUserId !== ''
+    && $userIdBodyValue !== ''
+    && $userIdBodyValue !== $verifiedSessionUserId);
+$userId = $verifiedSessionUserId !== ''
+    ? $verifiedSessionUserId
+    : ($userIdBodyValue !== '' ? $userIdBodyValue : session_id());
 $username      = $input['username']   ?? null;
 $devUsername   = 'developer';
 $sessionUsername = (string)($_SESSION['username'] ?? '');
@@ -302,8 +331,16 @@ $webhookEventsInput = is_array($input['webhook_events'] ?? null) ? $input['webho
 $canaryRequested = chat_parse_bool($input['canary'] ?? null, false);
 $taskMode = chat_parse_bool($input['task_mode'] ?? null, !empty($persistentGoals));
 $taskModeExplicitInput = array_key_exists('task_mode', $input);
-$streamResponseRequested = chat_parse_bool($input['stream'] ?? null, false)
-    || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'text/event-stream');
+/* An explicit stream choice in the body wins. This used to be an OR
+ * against the Accept header, so a client that asked for stream=0 was put
+ * on the streaming path anyway whenever its Accept header advertised
+ * text/event-stream — which also switched on ultra-fast transport and
+ * strict-no-fallback. The header is now only consulted when the body did
+ * not say. Mirrors the task_mode handling just below. */
+$streamExplicitlyRequested = array_key_exists('stream', $input);
+$streamResponseRequested = $streamExplicitlyRequested
+    ? chat_parse_bool($input['stream'], false)
+    : str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'text/event-stream');
 $streamUltraFastMode = $streamResponseRequested
     && api_get_secret('CHAT_STREAM_ULTRA_FAST', '1') === '1';
 $streamStrictNoFallback = $streamResponseRequested
@@ -357,7 +394,55 @@ $degradedMode = $degradedModeAuto;
 $attachmentRoute = null;
 $attachmentVisionOverride = false;
 $financePayload = null;
-$benchmarkMode = chat_parse_bool($input['benchmark_mode'] ?? null, false);
+/* ── Benchmark mode is a privileged capability, granted server-side ──────
+ * It disables the guest rate limit, disables the response cache (so every call
+ * is a fresh paid inference), raises the runtime timeout from a caller-supplied
+ * value, and removes the request deadline entirely. It used to be read straight
+ * from the request body. A request may ASK for it; only this host may GRANT it.
+ */
+if (!function_exists('chat_benchmark_authorized')) {
+    function chat_benchmark_authorized(?string $presentedKey = null): bool {
+        // 1. The local CLI harness. benchmark/chat_request_cli.php is a trusted
+        //    process on this host; the web SAPI can never be 'cli'.
+        if (PHP_SAPI === 'cli') {
+            return true;
+        }
+        // 2. Loopback, for the harness HTTP transport (127.0.0.1:8085).
+        $remoteIp = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($remoteIp === '127.0.0.1' || $remoteIp === '::1') {
+            return true;
+        }
+        // 3. A shared secret, for a harness running off-box.
+        $expectedKey = (string)(function_exists('api_get_secret')
+            ? (api_get_secret('BENCHMARK_SECRET', '') ?? '')
+            : '');
+        if ($expectedKey !== '') {
+            $given = (string)($presentedKey
+                ?? $_SERVER['HTTP_X_LYRALINK_BENCHMARK_KEY']
+                ?? '');
+            if ($given !== '' && hash_equals($expectedKey, $given)) {
+                return true;
+            }
+        }
+        // 4. A developer session.
+        if ((string)($_SESSION['username'] ?? '') === 'developer') {
+            return true;
+        }
+        return false;
+    }
+}
+
+$benchmarkRequested = chat_parse_bool($input['benchmark_mode'] ?? null, false);
+$benchmarkAuthorized = chat_benchmark_authorized(
+    isset($input['benchmark_key']) ? (string)$input['benchmark_key'] : null
+);
+if ($benchmarkRequested && !$benchmarkAuthorized) {
+    trace_add($trace, $liveTrace, 'safety', 'benchmark_mode refused: caller not authorised', [
+        'user_agent' => substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 60),
+        'remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+    ]);
+}
+$benchmarkMode = $benchmarkRequested && $benchmarkAuthorized;
 $benchmarkTimeoutSeconds = max(20, min(240, (int)($input['benchmark_timeout_seconds'] ?? 0)));
 $runtimeTimeoutOverride = $benchmarkMode
     ? max(30, ($benchmarkTimeoutSeconds > 0 ? $benchmarkTimeoutSeconds : 75))
@@ -423,7 +508,42 @@ $agentPermissions = chat_parse_agent_permissions($input['agent_permissions'] ?? 
 $agentBudgetTokens = max(0, (int)($input['agent_budget_tokens'] ?? 0));
 $agentBudgetSeconds = max(10, min(900, (int)($input['agent_budget_seconds'] ?? 180)));
 $approvalRequired = chat_parse_bool($input['approval_required'] ?? null, false);
-$approvalGranted = $isDevUser ? true : chat_parse_bool($input['approval_granted'] ?? null, false);
+/* The approval gate exists so consequential actions do not run without a human
+ * decision. Reading approval_granted from the request body let any anonymous
+ * caller approve on its own behalf - the benchmark harness does exactly that.
+ * Approval is now honoured only for an authenticated session, an authorised
+ * benchmark run, or the developer account.
+ * NOTE: the client boolean is no longer sufficient by itself. It is honoured only
+ * when a server-side pending action exists for this session, which the resolver then
+ * atomically claims (id + session + user + status=pending + unexpired) and executes.
+ * An assertion with nothing parked is ignored, so this gate fails closed. Set
+ * LYRALINK_APPROVAL_REQUIRE_PENDING=0 to restore the previous behaviour.
+ */
+$approvalGranted = false;
+$approvalPendingActionId = '';
+if ($isDevUser) {
+    $approvalGranted = true;
+} elseif (($isLoggedIn || $benchmarkAuthorized)
+    && chat_parse_bool($input['approval_granted'] ?? null, false)) {
+    // The assertion must correspond to something actually parked. chat.php used to
+    // read this boolean straight from the request body, so any authenticated caller
+    // could set it and skip the human-approval gate entirely without a pending
+    // action ever existing. The server-side claim downstream is what authorises
+    // execution; this check stops the assertion from opening the gate on its own.
+    $requirePendingAction = getenv('LYRALINK_APPROVAL_REQUIRE_PENDING') !== '0';
+    if (!$requirePendingAction) {
+        $approvalGranted = true;
+    } elseif ($db instanceof mysqli && function_exists('chat_pending_actions_list')) {
+        $approvalPendingRows = chat_pending_actions_list($db, (string)session_id(), (string)$userId);
+        if ($approvalPendingRows === []) {
+            $approvalPendingRows = chat_pending_actions_list($db, (string)session_id(), '');
+        }
+        if ($approvalPendingRows !== []) {
+            $approvalGranted = true;
+            $approvalPendingActionId = (string)($approvalPendingRows[0]['id'] ?? '');
+        }
+    }
+}
 $checkpointIdInput = trim((string)($input['agent_checkpoint_id'] ?? ''));
 $checkpointNoteInput = trim((string)($input['agent_checkpoint_note'] ?? ''));
 $rollbackCheckpointId = trim((string)($input['rollback_to_checkpoint'] ?? ''));
@@ -514,7 +634,24 @@ $hardBudgetSeconds = $benchmarkMode
     : max(6, (int)api_get_secret('CHAT_HARD_BUDGET_SECONDS', '12'));
 $hardBudgetMaxTokens = max(80, (int)api_get_secret('CHAT_HARD_BUDGET_MAX_TOKENS', '320'));
 if ($benchmarkMode) {
-    $hardBudgetMaxTokens = min($hardBudgetMaxTokens, 160);
+    /* Honour the harness's per-attempt budget instead of clamping it.
+     *
+     * This used to force the budget down to 160 tokens while the harness asked
+     * for 320-420, so the benchmark measured a crippled variant of the product:
+     * long-form answers were cut off mid-sentence at roughly 700-950 characters,
+     * then failed the harness's required-content checks and were recorded as
+     * critical failures. A benchmark that caps the replies it asked for cannot
+     * measure reply quality; 12 of 99 outputs in the 2026-09-20 run ended
+     * mid-sentence because of this.
+     *
+     * The harness supplies its own per-attempt max_tokens and its own deadline,
+     * so the requested budget is honoured. A hard ceiling still applies so a
+     * caller cannot request unbounded generation.
+     */
+    $benchmarkRequestedTokens = (int)($input['max_tokens'] ?? 0);
+    if ($benchmarkRequestedTokens > 0) {
+        $hardBudgetMaxTokens = max($hardBudgetMaxTokens, min($benchmarkRequestedTokens, 2048));
+    }
 }
 $hardBudgetMaxChars = max(180, (int)api_get_secret('CHAT_HARD_BUDGET_MAX_CHARS', '900'));
 $hardBudgetSkipDataset = api_get_secret('CHAT_HARD_BUDGET_SKIP_DATASET', '1') === '1';
@@ -554,7 +691,8 @@ if ($streamUltraFastMode) {
     $hardBudgetEnabled = true;
     $hardBudgetMaxTokens = min($hardBudgetMaxTokens, max(96, (int)api_get_secret('CHAT_STREAM_FAST_MAX_TOKENS', '220')));
     $hardBudgetMaxChars = min($hardBudgetMaxChars, max(240, (int)api_get_secret('CHAT_STREAM_FAST_MAX_CHARS', '1200')));
-    $effectiveDeadlineTs = microtime(true) + max(8, min(25, (int)api_get_secret('CHAT_STREAM_FAST_DEADLINE_SECONDS', '14')));
+    $fastDeadlineCeiling = max(25, (int)api_get_secret('CHAT_STREAM_FAST_DEADLINE_MAX', '25'));
+    $effectiveDeadlineTs = microtime(true) + max(8, min($fastDeadlineCeiling, (int)api_get_secret('CHAT_STREAM_FAST_DEADLINE_SECONDS', '14')));
 }
 
 if ($publicSafetyEnabled) {
@@ -708,6 +846,112 @@ if ($fullSystemScanRequested) {
     exit;
 }
 
+// Deterministic self-configuration answers. Questions about our own model/version are
+// answered from configuration here and never sent to a model, because a question about a
+// specific identifier the model cannot know gets answered with an invented one.
+$selfFactsPayload = chat_self_facts_answer((string)$latestUserMsg);
+if (is_array($selfFactsPayload) && !empty($selfFactsPayload['matched'])) {
+    $reply = (string)($selfFactsPayload['reply'] ?? '');
+    trace_add($trace, $liveTrace, 'self_facts', 'Self-configuration answered from runtime configuration', [
+        'status' => $selfFactsPayload['status'] ?? null,
+        'source_keys' => $selfFactsPayload['source_keys'] ?? [],
+    ]);
+    echo json_encode(array_filter([
+        'trace_id' => $traceId,
+        'reply' => $reply,
+        'self_facts' => $selfFactsPayload,
+        'artifact_state' => $artifactState,
+        'routing' => [
+            'task_domain' => $taskControl['task_domain'] ?? ($taskControl['domain'] ?? 'general'),
+            'requested_operation' => $taskControl['requested_operation'] ?? 'analysis',
+            'objective' => $taskControl['objective'] ?? '',
+            'constraints' => $taskControl['constraints'] ?? [],
+            'risk_level' => $taskControl['risk_level'] ?? 'low',
+            'required_tools' => $taskControl['required_tools'] ?? [],
+            'confidence' => $taskControl['confidence'] ?? 'low',
+            'routing_evidence' => $taskControl['routing_evidence'] ?? [],
+        ],
+        'confidence' => [
+            'label' => 'high',
+            'reason' => 'Read directly from runtime configuration; no model generation involved.',
+        ],
+        'verification' => [
+            'passed' => ($selfFactsPayload['status'] ?? '') === 'ok',
+            'issues' => ($selfFactsPayload['status'] ?? '') === 'ok'
+                ? []
+                : ['Runtime configuration did not expose a model identifier.'],
+            'checks' => [[
+                'name' => 'self_fact_from_config',
+                'pass' => ($selfFactsPayload['status'] ?? '') === 'ok',
+            ]],
+        ],
+        'hallucination' => [
+            'risk' => 'low',
+            'flags' => ['config_sourced_no_generation'],
+        ],
+        'safety' => [
+            'blocked' => false,
+            'flags' => $safetyAnalysis['flags'] ?? [],
+            'redactions' => [],
+        ],
+        'trace' => $liveTrace ? $trace : null,
+    ], fn($v) => $v !== null));
+    exit;
+}
+
+// Deterministic capability self-description. "What can you do?" and "can you <operation>?"
+// are answered from the capability registry, never generated. A brain that misdescribes its
+// own capabilities either promises work it cannot do or ignores a tool it actually has, so
+// this answer is read from the registry at request time rather than written by a model.
+$capabilityFactsPayload = chat_capability_facts_answer((string)$latestUserMsg);
+if (is_array($capabilityFactsPayload) && !empty($capabilityFactsPayload['matched'])) {
+    $capOk = ($capabilityFactsPayload['status'] ?? '') === 'ok';
+    trace_add($trace, $liveTrace, 'capability_facts', 'Capability question answered from the capability registry', [
+        'status' => $capabilityFactsPayload['status'] ?? null,
+        'intent' => $capabilityFactsPayload['intent'] ?? null,
+        'capability' => $capabilityFactsPayload['capability'] ?? null,
+    ]);
+    echo json_encode(array_filter([
+        'trace_id' => $traceId,
+        'reply' => (string)($capabilityFactsPayload['reply'] ?? ''),
+        'capability_facts' => $capabilityFactsPayload,
+        'artifact_state' => $artifactState,
+        'routing' => [
+            'task_domain' => $taskControl['task_domain'] ?? ($taskControl['domain'] ?? 'general'),
+            'requested_operation' => $taskControl['requested_operation'] ?? 'analysis',
+            'objective' => $taskControl['objective'] ?? '',
+            'constraints' => $taskControl['constraints'] ?? [],
+            'risk_level' => $taskControl['risk_level'] ?? 'low',
+            'required_tools' => $taskControl['required_tools'] ?? [],
+            'confidence' => $taskControl['confidence'] ?? 'low',
+            'routing_evidence' => $taskControl['routing_evidence'] ?? [],
+        ],
+        'confidence' => [
+            'label' => 'high',
+            'reason' => 'Read directly from the capability registry; no model generation involved.',
+        ],
+        'verification' => [
+            'passed' => $capOk,
+            'issues' => $capOk ? [] : ['No registered capability satisfies the requested operation.'],
+            'checks' => [[
+                'name' => 'capability_from_registry',
+                'pass' => $capOk,
+            ]],
+        ],
+        'hallucination' => [
+            'risk' => 'low',
+            'flags' => ['registry_sourced_no_generation'],
+        ],
+        'safety' => [
+            'blocked' => false,
+            'flags' => $safetyAnalysis['flags'] ?? [],
+            'redactions' => [],
+        ],
+        'trace' => $liveTrace ? $trace : null,
+    ], fn($v) => $v !== null));
+    exit;
+}
+
 $financeEligibility = chat_finance_tool_eligibility((string)$latestUserMsg, $taskControl);
 if (($artifactState['artifact_expected'] ?? false) && !($artifactState['artifact_available'] ?? false)) {
     $artifactReply = 'The request references an artifact, but no artifact is available in the current context. I cannot inspect files, a repository, a policy packet, or logs without the actual material. Provide the artifact and I will cite concrete evidence.';
@@ -785,7 +1029,7 @@ if (is_array($financePayload) && !empty($financePayload['matched'])) {
         ],
         'agent' => $agentPayload,
         'confidence' => $confidence,
-        'verification' => $verificationSummary,
+        'verification' => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
         'hallucination' => $hallucination,
         'safety' => [
             'blocked' => false,
@@ -975,9 +1219,9 @@ $osRuntimeDecision = chat_os_prepare_runtime_decision((string)$latestUserMsg, $r
     'web_runtime_available' => function_exists('chat_web_search_query_with_status') || function_exists('chat_web_search_query'),
     'workspace_available' => true,
     'model_runtime_available' => true,
-    'database_runtime_available' => false,
-    'shell_runtime_available' => false,
-    'deployment_runtime_available' => false,
+    'database_runtime_available' => function_exists('lyra_db_query_available') ? lyra_db_query_available() : false,
+    'shell_runtime_available' => function_exists('lyra_sandbox_available') ? lyra_sandbox_available() : false,
+    'deployment_runtime_available' => function_exists('lyra_server_inspect_available') ? lyra_server_inspect_available() : false,
     'needs_fresh_web' => $needsFreshWeb,
 ]);
 $stageTelemetry['stages']['control_plane'] = [
@@ -1109,7 +1353,6 @@ if ($allowWebSearch && !$isImageRequest && $webSearchLifecycle['tool_required'])
 $webSearchLifecycle['execution_records'] = chat_execution_records_from_legacy($webSearchLifecycle, $traceId);
 chat_os_persist_execution_records((string)($osRuntimeDecision['task']['task_id'] ?? ''), $webSearchLifecycle['execution_records'] ?? [], $traceId, $db);
 
-
 require_once __DIR__ . '/dataset_search.php';
 
 if (!$degradedMode && !$db->connect_error && count($messages) > 0 && !$skipExpensiveContext) {
@@ -1124,7 +1367,22 @@ if (!$degradedMode && !$db->connect_error && count($messages) > 0 && !$skipExpen
 
     $datasetSearchMinChars = max(8, (int)api_get_secret('CHAT_DATASET_SEARCH_MIN_CHARS', '20'));
     $skipDatasetSearch = ($hardBudgetEnabled && $hardBudgetSkipDataset) || $needsFreshWeb || $streamUltraFastMode;
-    $useDatasetSearch = !$skipDatasetSearch && $latestUserMsg
+
+    // Dataset context is OFF unless explicitly enabled with CHAT_DATASET_CONTEXT=1.
+    //
+    // This corpus was collected to gather responses for training a model. That purpose
+    // no longer applies, and as a chat context source it does not retrieve reliably:
+    // 18,875 of 38,204 approved rows (49.4%) share a "Moltbook thread context:" prefix,
+    // FULLTEXT relevance ties across hundreds of rows (score 1.92 matches 1041 rows) so
+    // LIMIT 3 picks arbitrarily, the default path applies no relevance floor at all (the
+    // 0.8 filter only gates an internal early return), and self-recall is 0/15 - a row is
+    // not returned by its own verbatim question. Reintroducing this needs retrieval
+    // repaired first; see the dataset context notes in the development memory.
+    //
+    // Gating here rather than filtering the results means no unrelated row can be injected
+    // AND the query is skipped entirely, so every request loses a useless hop.
+    $datasetContextEnabled = api_get_secret('CHAT_DATASET_CONTEXT', '0') === '1';
+    $useDatasetSearch = $datasetContextEnabled && !$skipDatasetSearch && $latestUserMsg
         && (
             $deepThinkingRequested
             || chat_message_is_technical($latestUserMsg)
@@ -1264,6 +1522,7 @@ if (
 $requestedProvider = $userProvider;
 $requestedModel = $userModel;
 $providerFallbackUsed = false;
+$contextDegraded = false;
 $autoRoutedForPricing = !$providerExplicitlyRequested && !$modelExplicitlyRequested;
 
 $speedPriorityLocal = api_get_secret('LOCAL_LLM_SPEED_PRIORITY', '1') === '1';
@@ -1395,6 +1654,7 @@ if ($multipartDeepRequest) {
     $systemPrompt .= "\n\nMulti-part answer mode is active. If the user explicitly asks for a numbered or sectioned answer, produce every requested part in order and do not stop after the first section. Keep the structure clear and complete, e.g. Part 1, Part 2, Part 3 ... through the final requested part, with each part substantive and detailed. When the user requests many parts, continue until the final part and maintain the numbering exactly.";
 }
 $systemPrompt .= "\n\nFor ordinary conversation, default to natural prose paragraphs and short, flowing responses. Only use numbered or sectioned formatting when the user explicitly requests it.";
+
 
 $safetySystemPrompt = $publicSafetyEnabled ? ai_safeguards_system_prompt($safetyAnalysis) : '';
 if ($safetySystemPrompt !== '') {
@@ -1590,8 +1850,15 @@ $devMode     = $isDevUser; // auto-on for dev account
 // Frontend can override with dev_mode: false to toggle off
 if (isset($input['dev_mode'])) $devMode = (bool)$input['dev_mode'] && $isDevUser;
 
+// Generation here is CPU-only at 8-15 tokens/second, so the reply allowance is
+// effectively the latency budget. The old hard 512 floor meant lowering
+// CHAT_MAX_REPLY_TOKENS below 512 had no effect at all - the config knob did not do
+// what it claimed. The floor still exists to protect answer quality, but it is now
+// configurable.
 $replyMaxTokens = (int)api_get_secret('CHAT_MAX_REPLY_TOKENS', '1536');
-if ($replyMaxTokens < 512) $replyMaxTokens = 512;
+$replyMaxTokensMin = (int)api_get_secret('CHAT_MAX_REPLY_TOKENS_MIN', '256');
+if ($replyMaxTokensMin < 32) $replyMaxTokensMin = 32;
+if ($replyMaxTokens < $replyMaxTokensMin) $replyMaxTokens = $replyMaxTokensMin;
 if ($replyMaxTokens > 8192) $replyMaxTokens = 8192;
 
 if ($requestedReplyMaxTokens > 0) {
@@ -1649,8 +1916,23 @@ if ($isFastCasualTurn && !$preferFullReplies) {
     $replyMaxTokens = min($replyMaxTokens, 40);
 }
 
-if (!$taskMode && !$deepThinkingRequested && !$multipartDeepRequest && strlen(trim((string)$latestUserMsg)) >= 120) {
-    $replyMaxTokens = max($replyMaxTokens, 1024);
+// REMOVED: this used to force $replyMaxTokens to at least 1024 whenever the user
+// message was 120+ characters - an ordinary sentence - which cost 68-128 seconds of
+// generation on CPU-only inference for nearly every real turn. Message LENGTH is a
+// poor proxy for answer length: a long question often wants a short answer. Escalation
+// is now driven by an explicit request for detail, applied as a single ceiling below.
+
+// BUGFIX (ordering): $lengthTarget was read in the condition below but only
+// assigned further down, inside the `function_exists('chat_response_length_expectation')`
+// block. It was therefore always undefined, `?? ''` produced an empty string, and
+// the in_array() test was permanently false - so $isUltraSimpleTurn never became
+// true and its 160-token clamp was dead code. Compute the expectation first.
+if (!isset($lengthTarget) && function_exists('chat_response_length_expectation')) {
+    $lengthExpectation = chat_response_length_expectation(
+        (string)$latestUserMsg,
+        (string)($requestTrustProfile['request_class'] ?? 'GENERAL_INFORMATION')
+    );
+    $lengthTarget = (string)($lengthExpectation['target'] ?? 'standard');
 }
 
 $isUltraSimpleTurn = !$taskMode
@@ -1662,6 +1944,24 @@ $isUltraSimpleTurn = !$taskMode
     && in_array((string)($lengthTarget ?? ''), ['minimal', 'concise_rewrite', 'concise_calc'], true);
 if ($isUltraSimpleTurn) {
     $replyMaxTokens = min($replyMaxTokens, 160);
+    $preferFullReplies = false;
+}
+
+// Trivial, self-contained arithmetic questions ("what is 2+2?") must not be
+// answered at essay length. Deliberately NARROW: it requires digits, an operator,
+// and a question/verb word, and it does not apply to ordinary short technical
+// questions such as "why is nginx returning 502?". Measured before this fix:
+// 383 tokens generated in 17.7s for "what is 2+2?" with no answer produced.
+$isTrivialArithmeticTurn = !$taskMode
+    && !$deepThinkingRequested
+    && !$multipartDeepRequest
+    && !$attachmentMeta
+    && strlen(trim((string)$latestUserMsg)) > 0
+    && strlen(trim((string)$latestUserMsg)) <= 120
+    && preg_match('/\d\s*[-+*\/x\u00d7\u00f7^]\s*\d/iu', (string)$latestUserMsg) === 1
+    && preg_match('/\b(what|how much|calculate|compute|solve|equals?)\b|\?/iu', (string)$latestUserMsg) === 1;
+if ($isTrivialArithmeticTurn) {
+    $replyMaxTokens = min($replyMaxTokens, 64);
     $preferFullReplies = false;
 }
 
@@ -1693,7 +1993,46 @@ if (function_exists('chat_response_length_expectation')) {
     }
 }
 
-$trimResult   = trimMessages($messages, $systemPrompt, $userModel, $replyMaxTokens);
+// Compact BEFORE trimming. trimMessages() keeps the newest N messages and drops
+// the rest outright, so a long conversation silently loses its older turns.
+// Compaction folds those turns into a small digest instead, which both retains
+// the context and shrinks the prompt (prefill latency scales with prompt size).
+// The compacted array is deliberately digest+keepRecent messages, i.e. smaller
+// than trimMessages()' 12-message budget, so the digest cannot itself be trimmed
+// away - if it were, the digest would sit at the front and be dropped first.
+// ── Interactive latency ceiling ──────────────────────────────────────────────
+// Applied HERE, after all other replyMaxTokens logic, so nothing downstream can
+// raise the cap back up. Measured generation on this hardware is 8-15 tokens/second,
+// so this value is the dominant term in end-to-end latency.
+//   interactive turns -> CHAT_REPLY_TOKEN_INTERACTIVE (default 384)
+//   explicit detail  -> CHAT_REPLY_TOKEN_DETAIL      (default 768)
+// Task mode and deep thinking are excluded: those are deliberately requested and
+// need room, and they are already bounded by their own timeouts.
+$wantsDetailedReply = (bool)preg_match(
+    '/\b(detailed?|in[- ]depth|comprehensive|thorough|exhaustive|step[- ]by[- ]step|elaborate|'
+    . 'walk me through|full (?:explanation|breakdown|analysis|report)|write (?:an?|the) (?:essay|report|article)|'
+    . 'as much detail|everything you know)\b/i',
+    (string)$latestUserMsg
+);
+if (!$taskMode && !$deepThinkingRequested && !$multipartDeepRequest) {
+    $replyCeiling = $wantsDetailedReply
+        ? (int)api_get_secret('CHAT_REPLY_TOKEN_DETAIL', '768')
+        : (int)api_get_secret('CHAT_REPLY_TOKEN_INTERACTIVE', '384');
+    if ($replyCeiling < 32) $replyCeiling = 32;
+    if ($replyMaxTokens > $replyCeiling) $replyMaxTokens = $replyCeiling;
+}
+
+$contextCompaction = chat_compact_conversation($messages);
+// The digest goes into the SYSTEM PROMPT, not the message array. Measured: as a
+// message it was discarded, because trimMessages() keeps the newest messages and its
+// cap depends on the reply budget (4 at maxReplyTokens=60), so a front-positioned
+// digest is trimmed away first and the model never sees it. The system prompt is
+// never trimmed, so this is where folded context has to live. Prompt size stays
+// bounded because trimMessages() subtracts system-prompt tokens from its budget.
+if (($contextCompaction['applied'] ?? false) && ($contextCompaction['digest'] ?? '') !== '') {
+    $systemPrompt .= "\n\n" . $contextCompaction['digest'];
+}
+$trimResult   = trimMessages($contextCompaction['messages'], $systemPrompt, $userModel, $replyMaxTokens);
 $trimmedMsgs  = $trimResult['messages'];
 $trimmedCount = $trimResult['trimmed'];
 
@@ -1723,7 +2062,80 @@ if ($streamUltraFastMode) {
 // ════════════════════════════════
 $groqStart    = microtime(true);
 $fullMessages = array_merge([['role' => 'system', 'content' => $systemPrompt]], $trimmedMsgs);
+
+// Runtime tool context. Assembled here, immediately before the model call and
+// after every system-prompt path has run, then written back into the system
+// message: chat.php has an alternate prompt branch that assigns rather than
+// appends, so appending at a fixed earlier point could be discarded.
+$lyraToolContext = [
+    'is_dev_user' => !empty($isDevUser),
+    'granted_permissions' => (array)$osGrantedPermissions,
+    'workspace_available' => is_string($workspaceRoot ?? null) && $workspaceRoot !== '',
+    'model_runtime_available' => true,
+    'web_runtime_available' => true,
+    'database_runtime_available' => function_exists('lyra_db_query_available') ? lyra_db_query_available() : false,
+    'deployment_runtime_available' => function_exists('lyra_server_inspect_available') ? lyra_server_inspect_available() : false,
+    // Row-level tenancy for database.query. Taken from the SESSION only: $userId
+    // above comes from the request body and a caller controls it, so scoping on that
+    // value would enforce nothing.
+    'tenant_identity' => [
+        'authenticated' => !empty($_SESSION['user_id']),
+        'user_id' => (string)($_SESSION['user_id'] ?? ''),
+        'org_id' => (string)($_SESSION['org_id'] ?? ''),
+        // $_SESSION['org_id'] is never populated by this codebase, so resolve the
+        // caller's memberships rather than leaving org tenancy permanently inert.
+        'org_ids' => function_exists('chat_tenant_user_org_ids')
+            ? chat_tenant_user_org_ids($db, (string)($_SESSION['user_id'] ?? ''))
+            : [],
+        'is_dev' => !empty($isDevUser),
+    ],
+    'shell_runtime_available' => function_exists('lyra_sandbox_available') ? lyra_sandbox_available() : false,
+];
+if (function_exists('chat_capability_tool_manifest')) {
+    $lyraManifestPrompt = chat_tool_manifest_prompt(chat_capability_tool_manifest($lyraToolContext));
+    if ($lyraManifestPrompt !== '') {
+        $systemPrompt .= $lyraManifestPrompt;
+        $fullMessages[0] = ['role' => 'system', 'content' => $systemPrompt];
+    }
+}
+$lyraApprovalRecords = [];
+
+// Approval gate. A follow-up turn may confirm or cancel a parked action, and
+// this is the only path by which user text authorises a consequential
+// capability. Resolved before generation so the reply reflects what actually
+// happened rather than what the model expected to happen.
+$lyraApprovalNote = '';
+if (function_exists('chat_approval_resolve_from_message')) {
+    $lyraToolContext['db'] = $db;
+    $lyraToolContext['session_id'] = (string)session_id();
+    $lyraToolContext['user_id'] = (string)$userId;
+    $lyraToolContext['request_id'] = (string)$traceId;
+    $lyraToolContext['risk_level'] = 'HIGH';
+    $lyraApproval = chat_approval_resolve_from_message((string)$latestUserMsg, $lyraToolContext);
+    if (is_array($lyraApproval) && !empty($lyraApproval['handled'])) {
+        if (!empty($lyraApproval['record'])) {
+            $lyraApprovalRecords[] = $lyraApproval['record'];
+        }
+        if (!empty($lyraApproval['dispatch'])) {
+            $lyraApprovalNote = chat_tool_result_block([$lyraApproval['dispatch']]);
+        } elseif (!empty($lyraApproval['reply'])) {
+            $lyraApprovalNote = 'The user cancelled the pending action. Nothing was executed.';
+        }
+    }
+}
+if ($lyraApprovalNote !== '') {
+    $fullMessages[] = [
+        'role' => 'user',
+        'content' => $lyraApprovalNote
+            . "\n\nReport this outcome to the user exactly as given. Do not claim any action beyond what is listed.",
+    ];
+}
+
 $mainMeta     = [];
+// Deliberately separate from $mainMeta: the rescue, regeneration and escalation
+// branches reassign $mainMeta, so a degraded-fallback flag stored there is
+// silently dropped before the response is assembled.
+$degradedFallbackInfo = null;
 $cacheEligible = chat_response_cache_enabled()
     && !$disableResponseCache
     && !$degradedMode
@@ -1768,6 +2180,47 @@ if ($cacheEligible) {
             'total_tokens' => null,
             'transport_failure' => false,
         ];
+// Tool loop. Reached only when the model actually emits a tool marker, so an
+// ordinary turn costs exactly one model call. Bounded, and it never continues
+// past a confirmation request.
+if (isset($reply) && is_string($reply) && function_exists('chat_tool_marker_open')
+    && strpos($reply, chat_tool_marker_open()) !== false) {
+    $lyraToolContext['db'] = $db;
+    $lyraToolContext['session_id'] = (string)session_id();
+    $lyraToolContext['user_id'] = (string)$userId;
+    $lyraToolContext['request_id'] = (string)$traceId;
+    $lyraToolContext['task_id'] = (string)($osRuntimeDecision['task']['task_id'] ?? '');
+    try {
+        $lyraLoop = chat_tool_loop_run(
+            $reply,
+            $fullMessages,
+            static function (array $lyraMsgs) use ($userProvider, $replyMaxTokens, $replyTemperature, $userModel, $effectiveDeadlineTs) {
+                $lyraLoopMeta = null;
+                return callLlm($userProvider, $lyraMsgs, $replyMaxTokens, $replyTemperature, $userModel, $lyraLoopMeta, $effectiveDeadlineTs);
+            },
+            $lyraToolContext,
+            2
+        );
+        if (!empty($lyraLoop['reply']) && trim((string)$lyraLoop['reply']) !== '') {
+            $reply = (string)$lyraLoop['reply'];
+        }
+        if (!empty($lyraLoop['records'])) {
+            chat_os_persist_execution_records(
+                (string)($osRuntimeDecision['task']['task_id'] ?? ''),
+                $lyraLoop['records'],
+                (string)$traceId,
+                $db
+            );
+        }
+    } catch (Throwable $lyraLoopError) {
+        // Never let tool plumbing take down a reply that already exists.
+        $reply = chat_tool_calls_strip((string)$reply);
+        trace_add($trace, $liveTrace, 'tool', 'Tool loop failed; returning the plain reply', [
+            'error' => $lyraLoopError->getMessage(),
+        ]);
+    }
+}
+
         $groqMs = round((microtime(true) - $groqStart) * 1000);
         trace_add($trace, $liveTrace, 'llm', 'Served from response cache', [
             'cache_ttl' => $responseCacheTtl,
@@ -1789,6 +2242,9 @@ $traceTokens  = [
     'reply_token_budget' => $replyMaxTokens,
     'messages_sent' => count($trimmedMsgs),
     'messages_trimmed' => $trimmedCount,
+    'compaction_applied' => (bool)($contextCompaction['applied'] ?? false),
+    'messages_compacted' => (int)($contextCompaction['compacted'] ?? 0),
+    'compaction_digest_chars' => (int)($contextCompaction['digest_chars'] ?? 0),
 ];
 trace_add($trace, $liveTrace, 'llm', 'Generating reply', $traceTokens);
 $fullPromptTokenEstimate = 0;
@@ -1939,6 +2395,7 @@ if (!$reply && !$streamStrictNoFallback && !($attachmentMeta && ($attachmentMeta
         );
         if ($reply) {
             $providerFallbackUsed = true;
+            $contextDegraded = true;
             $mainMeta = $rescueMeta;
             trace_add($trace, $liveTrace, 'llm', 'Minimal-context recovery succeeded', [
                 'provider' => $rescueMeta['provider'] ?? $rescueProvider,
@@ -1974,6 +2431,15 @@ if (!$reply) {
 
         if (is_string($benchmarkFallback) && trim($benchmarkFallback) !== '') {
             $reply = trim($benchmarkFallback);
+            // Capture the real cause before it is replaced. Rewriting this to
+            // transport_failure=false / error=null made a total provider outage
+            // indistinguishable from a model that answered badly: the templated
+            // fallback was delivered and scored as a normal response. Keep the
+            // cause, and mark the reply as a substituted fallback rather than a
+            // model output.
+            $fallbackCause = trim((string)($mainMeta['error'] ?? ''));
+            $fallbackTransport = !empty($mainMeta['transport_failure']);
+            $fallbackTimedOut = !empty($mainMeta['timed_out']);
             $mainMeta = [
                 'provider' => $mainMeta['provider'] ?? $userProvider,
                 'requested_provider' => $requestedProvider,
@@ -1985,10 +2451,24 @@ if (!$reply) {
                 'prompt_tokens' => null,
                 'completion_tokens' => null,
                 'total_tokens' => null,
-                'transport_failure' => false,
+                'transport_failure' => $fallbackTransport,
                 'recovered_from_error' => true,
                 'failure_status' => 'RECOVERED',
-                'error' => null,
+                'degraded_fallback' => true,
+                'fallback_kind' => $fallbackTimedOut
+                    ? 'timeout'
+                    : ($fallbackTransport ? 'infrastructure' : 'model'),
+                'fallback_cause' => $fallbackCause !== ''
+                    ? $fallbackCause
+                    : 'no usable model response',
+                'error' => $fallbackCause !== ''
+                    ? $fallbackCause
+                    : 'Provider returned no usable response; deterministic fallback substituted',
+            ];
+            $degradedFallbackInfo = [
+                'degraded' => true,
+                'kind' => $fallbackTimedOut ? 'timeout' : ($fallbackTransport ? 'infrastructure' : 'model'),
+                'cause' => $fallbackCause !== '' ? $fallbackCause : 'no usable model response',
             ];
             trace_add($trace, $liveTrace, 'llm', 'Benchmark recovery fallback used after provider failure', [
                 'provider' => $mainMeta['provider'] ?? $userProvider,
@@ -2001,15 +2481,37 @@ if (!$reply) {
 if (!$reply) {
     $httpCode = isset($mainMeta['http_code']) && is_numeric($mainMeta['http_code']) ? (int)$mainMeta['http_code'] : 0;
     $providerError = (string)($mainMeta['error'] ?? '');
-    $errorDetail = trim($providerError !== '' ? $providerError : 'Provider request failed without a usable response.');
-    $errorCode = $httpCode > 0 ? (string)$httpCode : 'provider_error';
     $isTimeout = !empty($mainMeta['timed_out']) || (($mainMeta['failure_status'] ?? '') === 'TIMED_OUT');
-    $isEmptyOutput = !empty($mainMeta['empty_output']) || (($mainMeta['failure_status'] ?? '') === 'EMPTY_OUTPUT');
+    $isUpstreamError = (($mainMeta['failure_status'] ?? '') === 'UPSTREAM_ERROR');
+    $isEmptyOutput = (!empty($mainMeta['empty_output']) || (($mainMeta['failure_status'] ?? '') === 'EMPTY_OUTPUT'))
+        && !$isUpstreamError;
+    // transport_failure was previously never consulted here, so an unreachable
+    // provider and a model returning nothing produced the same user-facing
+    // story. They need different responses: one is an outage to retry, the
+    // other is a model fault to investigate.
+    $isTransportFailure = !empty($mainMeta['transport_failure']) && !$isTimeout;
+    $failureKind = $isTimeout
+        ? 'timeout'
+        : ($isTransportFailure
+            ? 'infrastructure'
+            : ($isUpstreamError ? 'upstream' : ($isEmptyOutput ? 'model' : 'unknown')));
+    $errorDetail = trim($providerError !== ''
+        ? $providerError
+        : ($isTransportFailure
+            ? 'The model service could not be reached.'
+            : 'Provider request failed without a usable response.'));
+    $errorCode = $httpCode > 0
+        ? (string)$httpCode
+        : ($isTransportFailure ? 'transport_failure' : 'provider_error');
     $publicReply = $isTimeout
         ? 'The request timed out before Lyralink could complete the operation. Please try again with a shorter request.'
-        : ($isEmptyOutput
-            ? 'The model returned an empty response, so Lyralink could not complete the request. Please try again.'
-            : 'Sorry, something went wrong on my end. Please try again in a moment.');
+        : ($isTransportFailure
+            ? 'Lyralink could not reach the model service, so this request could not be completed. This is an infrastructure problem, not a problem with your request. Please try again shortly.'
+            : ($isUpstreamError
+                ? 'The model service reported an error, so Lyralink could not complete the request. Please try again.'
+                : ($isEmptyOutput
+                    ? 'The model returned an empty response, so Lyralink could not complete the request. Please try again.'
+                    : 'Sorry, something went wrong on my end. Please try again in a moment.')));
     $errorPayload = [
         'trace_id' => $traceId,
         'reply' => $publicReply,
@@ -2019,6 +2521,15 @@ if (!$reply) {
         'status' => $httpCode > 0 ? $httpCode : null,
         'failure_status' => $mainMeta['failure_status'] ?? ($isTimeout ? 'TIMED_OUT' : ($isEmptyOutput ? 'EMPTY_OUTPUT' : 'FAILED')),
     ];
+    // An outage must never be indistinguishable from a model fault, so these are
+    // emitted for every caller rather than only in dev mode. They carry no
+    // secrets: a provider error string, an HTTP status and a curl errno.
+    $errorPayload['failure_kind'] = $failureKind;
+    $errorPayload['error_code'] = $errorCode;
+    $errorPayload['error_detail'] = $errorDetail;
+    if (isset($mainMeta['curl_errno'])) {
+        $errorPayload['curl_errno'] = $mainMeta['curl_errno'];
+    }
     if ($liveTrace || $devMode || $isDevUser) {
         $errorPayload['trace'] = $trace;
         $errorPayload['llm_meta'] = $mainMeta;
@@ -2030,11 +2541,13 @@ if (!$reply) {
         $errorPayload['error_code'] = $errorCode;
         $errorPayload['message'] = $errorDetail;
     }
-    $stageTelemetry['terminal_status'] = $isTimeout ? 'TIMEOUT' : ($isEmptyOutput ? 'EMPTY_OUTPUT' : 'FAILED');
+    $stageTelemetry['terminal_status'] = $isTimeout
+        ? 'TIMEOUT'
+        : ($isTransportFailure ? 'TRANSPORT_FAILURE' : ($isUpstreamError ? 'UPSTREAM_ERROR' : ($isEmptyOutput ? 'EMPTY_OUTPUT' : 'FAILED')));
     $stageTelemetry['failure_type'] = $errorPayload['failure_status'];
     $stageMark('request', $stageTelemetry['terminal_status'], $errorDetail);
     $errorPayload['telemetry'] = $stageTelemetry;
-    echo json_encode($errorPayload);
+    echo json_encode($errorPayload, JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
@@ -2154,6 +2667,46 @@ $verificationContext = [
     'execution_records' => $webSearchLifecycle['execution_records'] ?? [],
 ];
 $verificationSummary = chat_self_verify_summary((string)$latestUserMsg, (string)$reply, $taskMode, $taskFocus, $verificationContext);
+
+/*
+ * Contradiction repair.
+ *
+ * The evidence check above withdraws the verified flag from a claim the retrieved
+ * sources actively contradict, but on its own that only corrects the metadata: the
+ * user still reads the false sentence. Measured 2026-09-21, a reply stating
+ * "The latest supported major version of PostgreSQL is 14" was delivered as
+ * CONTRADICTED_BY_EVIDENCE while the evidence said 18. Acting on the signal is the
+ * difference between recording a problem and fixing it.
+ *
+ * The repair is deterministic (no extra model call) and the reply is then
+ * re-verified so the metadata describes the text actually being returned.
+ */
+$contradictionRepairApplied = false;
+$contradictionRepairCount = 0;
+if (!empty($verificationSummary['claim_provenance']) && function_exists('chat_repair_contradicted_claims')) {
+    $contradictionRepair = chat_repair_contradicted_claims(
+        (string)$reply,
+        (array)$verificationSummary['claim_provenance']
+    );
+    if (!empty($contradictionRepair['applied'])) {
+        $reply = (string)$contradictionRepair['reply'];
+        $verificationSummary = chat_self_verify_summary((string)$latestUserMsg, (string)$reply, $taskMode, $taskFocus, $verificationContext);
+        $verificationSummary['contradiction_repair'] = [
+            'applied' => true,
+            'repairs' => (int)$contradictionRepair['repairs'],
+            'replaced' => (array)$contradictionRepair['replaced'],
+            'strategy' => 'deterministic:contradiction_withdrawal',
+        ];
+        // Kept independently of $verificationSummary, which later repair and
+        // regeneration branches reassign (dropping the key).
+        if (function_exists('chat_claim_repair_record')) {
+            chat_claim_repair_record($verificationSummary['contradiction_repair']);
+        }
+        $contradictionRepairApplied = true;
+        $contradictionRepairCount = (int)$contradictionRepair['repairs'];
+    }
+}
+
 $stageTelemetry['stages']['validation'] = ['started_at' => $validationStartedAt, 'completed_at' => microtime(true), 'duration_ms' => (int)round((microtime(true) - $validationStartedAt) * 1000), 'status' => ($verificationSummary['passed'] ?? false) ? 'COMPLETED' : 'REPAIR_REQUIRED', 'error' => null];
 $verificationSummary['answerability'] = chat_answerability_arbitrator(
     (string)$latestUserMsg,
@@ -2186,6 +2739,10 @@ $confidence = chat_confidence_assessment(
 $validationRegenerationCount = 0;
 $regenerationLatencyMs = 0;
 $validationFailureClass = 'NONE';
+// Repair telemetry. Initialised alongside the failure class so the response
+// payload can report which branch ran even when no repair was attempted.
+$deterministicRepairApplied = false;
+$repairStrategy = 'none';
 $validationResult = 'pass';
 if (!($verificationSummary['passed'] ?? false)) {
     $validationFailureClass = chat_verification_failure_class((string)$latestUserMsg, (string)$reply, $verificationSummary, $requestTrustProfile, !empty($webSearchResults));
@@ -2203,6 +2760,15 @@ if (!($verificationSummary['passed'] ?? false)) {
         'SECURITY_FACT_ERROR',
         'MISSING_EXTERNAL_EVIDENCE',
         'PRODUCTION_SAFETY_FAILURE',
+        // Added so a fabricated retrieval or observation claim can be repaired.
+        // This class was previously absent, which made its purpose-written
+        // instruction ("state lack of access plainly and provide the safest next
+        // steps without pretending execution") unreachable, so a reply claiming
+        // it had searched or inspected something was never corrected.
+        'TOOL_UNAVAILABLE',
+        // A fabricated specific detail must be regenerable, otherwise the
+        // invented value survives with no repair attempt at all.
+        'FABRICATED_SPECIFIC_DETAIL',
         ];
         $blockedModes = ['TOOL_LIMITATION', 'PRODUCTION_SAFETY_STOP'];
         $regenAllowedByAnswerability = $answerable
@@ -2214,7 +2780,23 @@ if (!($verificationSummary['passed'] ?? false)) {
 
         if ($allowValidationRegeneration) {
                 $deterministicRepairApplied = false;
-                if ($validationFailureClass === 'WRITING_INSTRUCTION_FAILURE' && function_exists('chat_repair_writing_scope')) {
+                if ($validationFailureClass === 'TOOL_UNAVAILABLE' && function_exists('chat_repair_false_retrieval_claims')) {
+                        // Deterministic first: strip the unsupported retrieval claim
+                        // without a model call. Accepted only if it clears validation or
+                        // strictly reduces the issue count, so a bad rewrite cannot win.
+                        $repairedReply = chat_repair_false_retrieval_claims((string)$reply);
+                        if ($repairedReply !== (string)$reply) {
+                                $repairVerification = chat_self_verify_summary((string)$latestUserMsg, $repairedReply, $taskMode, $taskFocus, $verificationContext);
+                                $repairVerification['answerability'] = $verificationSummary['answerability'] ?? [];
+                                if (($repairVerification['passed'] ?? false) || count($repairVerification['issues'] ?? []) < count($verificationSummary['issues'] ?? [])) {
+                                        $reply = $repairedReply;
+                                        $verificationSummary = $repairVerification;
+                                        $validationResult = 'pass_after_deterministic_retrieval_repair';
+                                        $repairStrategy = 'deterministic:retrieval_claims';
+                                        $deterministicRepairApplied = true;
+                                }
+                        }
+                } elseif ($validationFailureClass === 'WRITING_INSTRUCTION_FAILURE' && function_exists('chat_repair_writing_scope')) {
                         $repairedReply = chat_repair_writing_scope((string)$latestUserMsg, (string)$reply);
                         $repairVerification = chat_self_verify_summary((string)$latestUserMsg, $repairedReply, $taskMode, $taskFocus, $verificationContext);
                         $repairVerification['answerability'] = $verificationSummary['answerability'] ?? [];
@@ -2222,7 +2804,24 @@ if (!($verificationSummary['passed'] ?? false)) {
                                 $reply = $repairedReply;
                                 $verificationSummary = $repairVerification;
                                 $validationResult = 'pass_after_deterministic_writing_repair';
+                                        $repairStrategy = 'deterministic:writing_scope';
                                 $deterministicRepairApplied = true;
+                        }
+                            } elseif ($validationFailureClass === 'FABRICATED_SPECIFIC_DETAIL' && function_exists('chat_repair_fabricated_specifics')) {
+                        // Deterministic first: strip the invented value without a model
+                        // call. For an invented IP or hostname the fix is mechanical, and
+                        // a rewrite could invent a different value.
+                        $repairedReply = chat_repair_fabricated_specifics((string)$latestUserMsg, (string)$reply);
+                        if ($repairedReply !== (string)$reply) {
+                                $repairVerification = chat_self_verify_summary((string)$latestUserMsg, $repairedReply, $taskMode, $taskFocus, $verificationContext);
+                                $repairVerification['answerability'] = $verificationSummary['answerability'] ?? [];
+                                if (($repairVerification['passed'] ?? false) || count($repairVerification['issues'] ?? []) < count($verificationSummary['issues'] ?? [])) {
+                                        $reply = $repairedReply;
+                                        $verificationSummary = $repairVerification;
+                                        $validationResult = 'pass_after_deterministic_fabrication_repair';
+                                        $repairStrategy = 'deterministic:fabrication_guard';
+                                        $deterministicRepairApplied = true;
+                                }
                         }
             } elseif ($validationFailureClass === 'PRODUCTION_SAFETY_FAILURE' && function_exists('chat_repair_production_incident_response')) {
                 $repairedReply = chat_repair_production_incident_response((string)$latestUserMsg, (string)$reply);
@@ -2232,6 +2831,7 @@ if (!($verificationSummary['passed'] ?? false)) {
                     $reply = $repairedReply;
                     $verificationSummary = $repairVerification;
                     $validationResult = 'pass_after_deterministic_production_repair';
+                                        $repairStrategy = 'deterministic:production_incident';
                     $deterministicRepairApplied = true;
                 }
             } elseif ($validationFailureClass === 'MISSING_EXTERNAL_EVIDENCE' && empty($webSearchResults) && function_exists('chat_repair_evidence_bound_response')) {
@@ -2242,6 +2842,7 @@ if (!($verificationSummary['passed'] ?? false)) {
                     $reply = $repairedReply;
                     $verificationSummary = $repairVerification;
                     $validationResult = 'pass_after_deterministic_evidence_repair';
+                                        $repairStrategy = 'deterministic:evidence_bound';
                     $deterministicRepairApplied = true;
                 }
                 }
@@ -2295,6 +2896,7 @@ if (!($verificationSummary['passed'] ?? false)) {
                 $mainMeta = array_merge($mainMeta, $regenMeta);
                 $verificationSummary = $regenVerification;
                 $validationResult = ($verificationSummary['passed'] ?? false) ? 'pass_after_regen' : 'improved_after_regen';
+                $repairStrategy = 'llm_regeneration';
                 trace_add($trace, $liveTrace, 'validation', 'Applied failure-specific regeneration', [
                     'failure_class' => $validationFailureClass,
                     'regeneration_mode' => chat_failure_regeneration_mode($validationFailureClass),
@@ -2407,7 +3009,18 @@ if ($verificationHardStop['blocked']) {
 }
 
 if (function_exists('chat_runtime_quality_repair')) {
-    $qualityRepairedReply = chat_runtime_quality_repair((string)$latestUserMsg, (string)$reply, $requestTrustProfile, $osRuntimeDecision, !empty($webSearchResults));
+    // Guarded separately from the outer check: chat_runtime_quality_repair lives in
+    // execution_foundation.php while chat_turn_had_execution_evidence lives in
+    // validators_enhanced.php, so a partial include graph could define one and not the
+    // other and make the argument list fatal.
+    // Fallback is true (assume evidence existed) on purpose: the damaging direction is
+    // reporting false after a REAL successful execution, because that lets the repair
+    // answer "I cannot run this" about something that actually ran. Suppressing the
+    // repair degrades behaviour; the opposite direction produces a false denial.
+    $executionEvidenceInTurn = function_exists('chat_turn_had_execution_evidence')
+        ? chat_turn_had_execution_evidence($verificationSummary['tool_state']['execution_records'] ?? null)
+        : true;
+    $qualityRepairedReply = chat_runtime_quality_repair((string)$latestUserMsg, (string)$reply, $requestTrustProfile, $osRuntimeDecision, !empty($webSearchResults), $executionEvidenceInTurn);
     if (is_string($qualityRepairedReply) && trim($qualityRepairedReply) !== '' && trim($qualityRepairedReply) !== trim((string)$reply)) {
         $reply = trim($qualityRepairedReply);
         $verificationSummary = chat_self_verify_summary((string)$latestUserMsg, (string)$reply, $taskMode, $taskFocus, $verificationContext);
@@ -2537,7 +3150,7 @@ if ($agentEconomyEnabled) {
     $rewardUpdate = chat_agent_economy_update($agentEconomy, [
         'reply' => $reply,
         'deep_thinking_requested' => $deepThinkingRequested,
-        'verification' => $verificationSummary,
+        'verification' => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
         'confidence' => $confidence,
         'hallucination' => $hallucination,
         'reply_safety' => $replySafety,
@@ -2661,7 +3274,7 @@ $executionPayload = [
     'trust_policy' => $requestTrustProfile,
     'tool_execution_state' => $verificationSummary['tool_state'] ?? $webSearchLifecycle,
     'confidence' => $confidence,
-    'verification' => $verificationSummary,
+    'verification' => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
     'hallucination' => $hallucination,
     'escalation' => $escalationDecision,
     'model_capabilities' => $modelCapabilities,
@@ -2722,6 +3335,10 @@ $executionPayload = [
         'regeneration_count' => $validationRegenerationCount + (!empty($escalationDecision['attempted']) ? 1 : 0),
         'validation_result' => $validationResult,
         'validation_failure_class' => $validationFailureClass,
+        // Which repair branch actually ran - so this is measured, not inferred.
+        // 'deterministic:*' costs no model call; 'llm_regeneration' does.
+        'repair_strategy' => $repairStrategy,
+        'deterministic_repair_applied' => (bool)$deterministicRepairApplied,
     ],
 ];
 
@@ -2771,7 +3388,7 @@ chat_append_audit_log([
         'post' => $forensicPost,
     ],
     'confidence' => $confidence,
-    'verification' => $verificationSummary,
+    'verification' => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
     'hallucination' => $hallucination,
     'escalation' => $escalationDecision,
     'experiment' => $experiment,
@@ -2855,10 +3472,44 @@ if (!$db->connect_error && count($messages) > 0) {
         if ($messages[$i]['role'] === 'user') { $lastUserMsg = $messages[$i]['content']; break; }
     }
     if ($lastUserMsg) {
-        $stmt = $db->prepare("INSERT INTO conversations (user_id, ip_address, user_message, ai_reply, created_at) VALUES (?, ?, ?, ?, NOW())");
-        $stmt->bind_param('ssss', $userId, $clientIp, $lastUserMsg, $reply);
-        $stmt->execute();
-        $stmt->close();
+        // Provenance: the runtime already computed these; record them so the
+        // corpus can be filtered by evidence instead of being taken on faith.
+        $lyraEvidenceRank = ['E0' => 0, 'E1' => 1, 'E2' => 2, 'E3' => 3, 'E4' => 4, 'E5' => 5];
+        $lyraConvEvidence = 'E2';
+        foreach ((array)($executionRecords ?? []) as $lyraExecRecord) {
+            if (!is_array($lyraExecRecord)) { continue; }
+            $lyraLevel = strtoupper(substr((string)($lyraExecRecord['evidence_level'] ?? ''), 0, 2));
+            if ($lyraLevel !== '' && isset($lyraEvidenceRank[$lyraLevel])
+                && $lyraEvidenceRank[$lyraLevel] > $lyraEvidenceRank[$lyraConvEvidence]) {
+                $lyraConvEvidence = $lyraLevel;
+            }
+        }
+        $lyraConvVerified = (isset($verificationState) && $verificationState === 'VERIFIED');
+        $stmt = $db->prepare("INSERT INTO conversations (user_id, ip_address, user_message, ai_reply, evidence_level, verification_status, verified_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+        // bind_param() takes its arguments by reference, so expressions cannot be
+        // passed inline. Hoist the two conditional values first: passing the
+        // ternaries directly was a fatal 'Argument #7 could not be passed by
+        // reference' error that returned HTTP 500 to every chat request.
+        $lyraConvStatus = $lyraConvVerified ? 'verified' : 'unverified';
+        $lyraConvVerifiedAt = $lyraConvVerified ? date('Y-m-d H:i:s') : null;
+        if ($stmt) {
+            $stmt->bind_param(
+                'sssssss',
+                $userId,
+                $clientIp,
+                $lastUserMsg,
+                $reply,
+                $lyraConvEvidence,
+                $lyraConvStatus,
+                $lyraConvVerifiedAt
+            );
+            $stmt->execute();
+            $stmt->close();
+        } else {
+            // Losing one corpus row is bad; returning 500 after the answer was
+            // produced correctly is worse. Log it and let the request succeed.
+            error_log('conversations insert prepare failed: ' . $db->error);
+        }
     }
     $db->close();
 }
@@ -2938,7 +3589,7 @@ $finalPayload = array_filter([
     ],
     'distribution'       => $distributionProfile,
     'confidence'         => $confidence,
-    'verification'       => $verificationSummary,
+    'verification'       => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
     'telemetry'          => $stageTelemetry,
     'answerability'      => $verificationSummary['answerability'] ?? null,
     'hallucination'      => $hallucination,
@@ -2949,6 +3600,18 @@ $finalPayload = array_filter([
     ],
     'posted_to_moltbook' => $postedToMoltbook,
     'code_test'          => $codeTestResult,
+    // Top level deliberately: these were first added inside the 'debug' block
+    // below, which is 'null' unless $devMode is set, so array_filter() discarded
+    // them in exactly the situation they exist to describe. A substituted
+    // fallback reply must never be presented as model output, to a user or to
+    // the benchmark scorer, so this is emitted for every caller. null rather
+    // than false so array_filter() omits them when nothing is degraded - their
+    // presence is itself the signal.
+    'degraded_fallback'  => is_array($degradedFallbackInfo) ? true : null,
+    'fallback_kind'      => $degradedFallbackInfo['kind'] ?? null,
+    'fallback_cause'     => $degradedFallbackInfo['cause'] ?? null,
+    'failure_kind'       => $degradedFallbackInfo['kind'] ?? ($mainMeta['failure_kind'] ?? null),
+    'context_degraded'   => $contextDegraded ? true : null,
     'trace'              => $liveTrace ? $trace : null,
     'debug'              => $devMode ? [
         'model'              => $mainMeta['model'] ?? $requestedModel,
@@ -2992,6 +3655,10 @@ $finalPayload = array_filter([
         'regeneration_count' => $validationRegenerationCount + (!empty($escalationDecision['attempted']) ? 1 : 0),
         'validation_result'  => $validationResult,
         'validation_failure_class' => $validationFailureClass,
+        // Which repair branch actually ran - so this is measured, not inferred.
+        // 'deterministic:*' costs no model call; 'llm_regeneration' does.
+        'repair_strategy' => $repairStrategy,
+        'deterministic_repair_applied' => (bool)$deterministicRepairApplied,
         'request_class'      => $requestTrustProfile['request_class'] ?? 'GENERAL_INFORMATION',
         'risk_level'         => $requestTrustProfile['risk_level'] ?? 'low',
         'response_mode'      => $requestTrustProfile['response_mode'] ?? 'general_information',
@@ -3061,7 +3728,7 @@ $finalPayload = array_filter([
         'reply_token_budget' => $replyMaxTokens,
         'trace_id'           => $traceId,
         'confidence'         => $confidence,
-        'verification'       => $verificationSummary,
+        'verification'       => (function_exists('chat_claim_repair_attach_record') ? chat_claim_repair_attach_record($verificationSummary) : $verificationSummary),
         'hallucination'      => $hallucination,
         'agent_economy'      => $executionPayload['agent_economy'] ?? null,
         'escalation'         => $escalationDecision,
@@ -3075,5 +3742,5 @@ if ($streamResponseActive) {
     $chatStreamEmit('final', $finalPayload);
     exit;
 }
-echo json_encode($finalPayload);
+echo json_encode($finalPayload, JSON_INVALID_UTF8_SUBSTITUTE);
 ?>

@@ -309,7 +309,48 @@ $degradedMode = $degradedModeAuto;
 $attachmentRoute = null;
 $attachmentVisionOverride = false;
 $financePayload = null;
-$benchmarkMode = chat_parse_bool($input['benchmark_mode'] ?? null, false);
+/* ── Benchmark mode is a privileged capability, granted server-side ──────
+ * It disables the guest rate limit and the response cache (so every call is a
+ * fresh paid inference). It used to be read straight from the request body, which
+ * let any anonymous caller switch the rate limit off with benchmark_mode=1.
+ * A request may ASK for it; only this host may GRANT it.
+ */
+if (!function_exists('chat_benchmark_authorized')) {
+    function chat_benchmark_authorized(?string $presentedKey = null): bool {
+        // 1. The local CLI harness; the web SAPI can never be 'cli'.
+        if (PHP_SAPI === 'cli') {
+            return true;
+        }
+        // 2. Loopback, for the on-host HTTP harness.
+        $remoteIp = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($remoteIp === '127.0.0.1' || $remoteIp === '::1') {
+            return true;
+        }
+        // 3. A shared secret, for a harness running off-box.
+        $expectedKey = (string)(function_exists('api_get_secret')
+            ? (api_get_secret('BENCHMARK_SECRET', '') ?? '')
+            : '');
+        if ($expectedKey !== '') {
+            $given = (string)($presentedKey
+                ?? $_SERVER['HTTP_X_LYRALINK_BENCHMARK_KEY']
+                ?? '');
+            if ($given !== '' && hash_equals($expectedKey, $given)) {
+                return true;
+            }
+        }
+        // 4. A developer session.
+        if ((string)($_SESSION['username'] ?? '') === 'developer') {
+            return true;
+        }
+        return false;
+    }
+}
+
+$benchmarkRequested = chat_parse_bool($input['benchmark_mode'] ?? null, false);
+$benchmarkAuthorized = chat_benchmark_authorized(
+    isset($input['benchmark_key']) ? (string)$input['benchmark_key'] : null
+);
+$benchmarkMode = $benchmarkRequested && $benchmarkAuthorized;
 $benchmarkTimeoutSeconds = max(20, min(240, (int)($input['benchmark_timeout_seconds'] ?? 0)));
 $runtimeTimeoutOverride = $benchmarkMode
     ? max(30, ($benchmarkTimeoutSeconds > 0 ? $benchmarkTimeoutSeconds : 75))

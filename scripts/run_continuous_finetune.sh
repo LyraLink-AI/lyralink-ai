@@ -18,6 +18,7 @@ TRAIN_COMMAND="${CONTINUOUS_FINETUNE_TRAIN_COMMAND:-}"
 ACTIVATE_COMMAND="${CONTINUOUS_FINETUNE_ACTIVATE_COMMAND:-}"
 ROLLBACK_COMMAND="${CONTINUOUS_FINETUNE_ROLLBACK_COMMAND:-}"
 POST_TRAIN_VALIDATE_COMMAND="${CONTINUOUS_FINETUNE_VALIDATE_COMMAND:-}"
+EVAL_GATE_COMMAND="${CONTINUOUS_FINETUNE_EVAL_GATE_COMMAND:-}"
 HEALTH_URL="${CONTINUOUS_FINETUNE_HEALTH_URL:-https://lyralinkai.com/api/chat.php?health=1}"
 HEALTH_TIMEOUT="${CONTINUOUS_FINETUNE_HEALTH_TIMEOUT:-12}"
 CANARY_REQUIRED_SUCCESSES="${CONTINUOUS_FINETUNE_CANARY_REQUIRED_SUCCESSES:-2}"
@@ -114,6 +115,24 @@ if [[ -n "${ACTIVATE_COMMAND}" ]]; then
       log "step=rollback status=done"
     fi
     exit 1
+  fi
+
+  # Step 3b: quality eval gate. The candidate is serving at this point, so a
+  # regression here is measurable; blocking forces a rollback.
+  if [[ -n "${EVAL_GATE_COMMAND}" ]]; then
+    log "step=eval_gate status=start"
+    if bash --noprofile --norc -lc "${EVAL_GATE_COMMAND}"; then
+      log "step=eval_gate status=ok"
+    else
+      gate_rc=$?
+      log "step=eval_gate status=blocked rc=${gate_rc}"
+      if [[ -n "${ROLLBACK_COMMAND}" ]]; then
+        log "step=rollback status=start reason=eval_gate_blocked"
+        bash --noprofile --norc -lc "${ROLLBACK_COMMAND}" || true
+        log "step=rollback status=done"
+      fi
+      exit 1
+    fi
   fi
 else
   log "step=activate status=skipped reason=no_activate_command"

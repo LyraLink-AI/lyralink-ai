@@ -1637,6 +1637,19 @@ if ($action === 'hf_delegate_train') {
     $waitForTraining = (string)($_POST['wait_for_training'] ?? $_GET['wait_for_training'] ?? '0') === '1';
     $prepareCorpus = $trainNow || ((string)($_POST['prepare_corpus'] ?? $_GET['prepare_corpus'] ?? '0') === '1');
 
+    // Continuous learning rebuilds the production lyralink-* model aliases that
+    // the live chat router depends on, so it must be a deliberate operator
+    // decision rather than a side effect of a request parameter. Defaults to
+    // OFF; set HF_DELEGATE_TRAIN_ALLOW=1 to re-enable. Requesting training
+    // without the flag is refused and reported, never silently ignored.
+    $trainDenied = false;
+    if ($trainNow && (string)api_get_secret('HF_DELEGATE_TRAIN_ALLOW', '0') !== '1') {
+        $trainNow = false;
+        $waitForTraining = false;
+        $prepareCorpus = false;
+        $trainDenied = true;
+    }
+
     if ($repoOverride === '' && ($query === '' || strlen($query) < 2)) {
         echo json_encode(['success' => false, 'error' => 'Query is required']);
         exit;
@@ -1691,7 +1704,12 @@ if ($action === 'hf_delegate_train') {
         $loadDatasetRes = ['enabled' => true, 'attempted' => false, 'ok' => null, 'output' => 'skipped'];
     }
 
-    $training = ['attempted' => false, 'ok' => null, 'exit_code' => null, 'output' => 'not_requested'];
+    $training = [
+        'attempted' => false,
+        'ok' => null,
+        'exit_code' => null,
+        'output' => $trainDenied ? 'blocked_by_HF_DELEGATE_TRAIN_ALLOW' : 'not_requested',
+    ];
     if ($trainNow) {
         $trainEnv = [];
         $ingestOutputAbs = '';

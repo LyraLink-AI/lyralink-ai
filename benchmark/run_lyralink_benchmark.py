@@ -119,6 +119,101 @@ def ensure_local_server():
     raise RuntimeError("Local PHP server did not start on 127.0.0.1:8085 in time.")
 
 
+# ── prompt selection ────────────────────────────────────────────────────────
+# The prompt set used to be 100 fixed prompts, exactly one per task slot
+# (pool/drawn = 1.00x in every category), shuffled with a hard-coded seed of 42.
+# Every run therefore asked the same questions, which can be overfitted to and
+# cannot cover more ground than those 100 items.
+#
+# Selection is now sampled from a pool of roughly 3x the tasks drawn per
+# category (309 templates for 100 tasks). Two properties are kept on purpose:
+#   * the seed is recorded, so any published run is exactly reproducible
+#   * sampling is stratified by difficulty within a category, so a run cannot
+#     score differently just because the draw happened to be harder
+# The pool lives under the storage root (outside the docroot) with the task
+# data, so the prompts are not publicly readable and cannot be trained against.
+PROMPT_POOL_DIR = os.path.join(STORAGE_ROOT, "prompt_pool")
+
+POOL_SIZES = {}
+
+
+def load_prompt_pool():
+    """Load extra prompts from <storage>/prompt_pool/*.json, keyed by category."""
+    pool = {}
+    if not os.path.isdir(PROMPT_POOL_DIR):
+        return pool
+    for fname in sorted(os.listdir(PROMPT_POOL_DIR)):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(PROMPT_POOL_DIR, fname), encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            continue
+        category = data.get("category")
+        templates = data.get("templates")
+        if not isinstance(category, str) or not isinstance(templates, list):
+            continue
+        for template in templates:
+            if isinstance(template, dict) and template.get("prompt"):
+                pool.setdefault(category, []).append(template)
+    return pool
+
+
+def resolve_prompt_seed():
+    raw = (os.environ.get("BENCHMARK_SEED", "") or "").strip()
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+    # OS entropy: a new question set each run, with the seed published so the
+    # run can be reproduced afterwards.
+    return int.from_bytes(os.urandom(4), "big")
+
+
+PROMPT_ANCHOR_MODE = (os.environ.get("BENCHMARK_ANCHOR", "") or "").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+BENCHMARK_SEED = resolve_prompt_seed()
+
+
+def sample_prompts(rng, pool, count):
+    """Sample `count` templates, stratified by difficulty within the category.
+
+    Stratifying keeps the difficulty mix stable across seeds. Without it a draw
+    could be systematically harder and the score would move for a reason with
+    nothing to do with the product.
+    """
+    if len(pool) <= count:
+        chosen = list(pool)
+        rng.shuffle(chosen)
+        return chosen
+
+    by_difficulty = {}
+    for template in pool:
+        key = str(template.get("difficulty") or "medium")
+        by_difficulty.setdefault(key, []).append(template)
+
+    chosen = []
+    keys = sorted(by_difficulty)
+    remaining = count
+    for i, key in enumerate(keys):
+        share = len(by_difficulty[key]) / len(pool)
+        take = remaining if i == len(keys) - 1 else int(round(share * count))
+        take = max(0, min(take, remaining, len(by_difficulty[key])))
+        if take:
+            chosen.extend(rng.sample(by_difficulty[key], take))
+            remaining -= take
+
+    if remaining > 0:
+        taken = {id(t) for t in chosen}
+        leftovers = [t for t in pool if id(t) not in taken]
+        if leftovers:
+            chosen.extend(rng.sample(leftovers, min(remaining, len(leftovers))))
+    return chosen
+
+
 def make_prompt_set():
     task_specs = []
     category_templates = {
@@ -304,14 +399,40 @@ def make_prompt_set():
         ],
     }
 
+    extra_prompts = load_prompt_pool()
+    rng = random.Random(BENCHMARK_SEED)
+
     task_specs = []
     index = 1
     for spec in CATEGORY_SPECS:
         name = spec["name"]
-        templates = category_templates.get(name, [])
+        inline = list(category_templates.get(name, []))
+        if PROMPT_ANCHOR_MODE:
+            # Anchor mode: the original inline set only, so a run is directly
+            # comparable with the historical 100-prompt series.
+            pool = inline
+        else:
+            pool = inline + list(extra_prompts.get(name, []))
+
         count = int(spec["count"])
-        for offset in range(count):
-            template = templates[offset % len(templates)] if templates else {"prompt": f"Benchmark task for {name} #{offset + 1}", "difficulty": "medium", "evaluation": {"category_code": spec["code"], "required_regex": [r"answer directly|appropriate response"], "forbidden_regex": [r"never"], "critical_regex": [r"never"], "critical_if_missing_required": False}}
+        if not pool:
+            pool = [
+                {
+                    "prompt": f"Benchmark task for {name} #{offset + 1}",
+                    "difficulty": "medium",
+                    "evaluation": {
+                        "category_code": spec["code"],
+                        "required_regex": [r"answer"],
+                        "forbidden_regex": [r"never"],
+                        "critical_regex": [],
+                        "critical_if_missing_required": False,
+                    },
+                }
+                for offset in range(count)
+            ]
+
+        POOL_SIZES[name] = {"pool": len(pool), "drawn": count}
+        for template in sample_prompts(rng, pool, count):
             task_specs.append(
                 {
                     "task_id": f"T{index:03d}",
@@ -320,12 +441,21 @@ def make_prompt_set():
                     "weight": spec["weight"],
                     "prompt": template["prompt"],
                     "difficulty": template.get("difficulty", "medium"),
-                    "evaluation": template.get("evaluation", {"category_code": spec["code"], "required_regex": [r"answer"], "forbidden_regex": [r"never"], "critical_regex": [r"never"], "critical_if_missing_required": False}),
+                    "evaluation": template.get(
+                        "evaluation",
+                        {
+                            "category_code": spec["code"],
+                            "required_regex": [r"answer"],
+                            "forbidden_regex": [r"never"],
+                            "critical_regex": [],
+                            "critical_if_missing_required": False,
+                        },
+                    ),
                 }
             )
             index += 1
 
-    random.Random(42).shuffle(task_specs)
+    rng.shuffle(task_specs)
     for task_no, task in enumerate(task_specs, start=1):
         task["task_id"] = f"T{task_no:03d}"
     return task_specs
@@ -867,6 +997,56 @@ def infer_task_control_metadata(task):
     }
 
 
+def pattern_matches_tolerantly(pattern, text, window=140):
+    """Match a required pattern tolerantly with respect to word order.
+
+    Mirrors the helper of the same name in score_benchmark.py so the runner and
+    the scorer judge required content the same way. A required pattern like
+    "false premise" should match an answer that says "the premise is false";
+    previously the runner's literal match missed it and stamped CRITICAL_FAILURE.
+    Kept narrow on purpose: only alternatives with >= 2 content words, all
+    present as whole words inside a short window.
+    """
+    try:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    except re.error:
+        return False
+
+    for alternative in pattern.split("|"):
+        cleaned = re.sub(r"\[A-Za-z]|[\(\)\[\]\{\}\.\*\+\?\^\$\|/]", " ", alternative)
+        words = [w for w in re.findall(r"[A-Za-z]{3,}", cleaned)]
+        if len(words) < 2:
+            continue
+        spans = []
+        ok = True
+        for word in words:
+            found = re.search(r"\b" + re.escape(word) + r"\b", text, re.IGNORECASE)
+            if not found:
+                ok = False
+                break
+            spans.append((found.start(), found.end()))
+        if not ok or not spans:
+            continue
+        if (max(s[1] for s in spans) - min(s[0] for s in spans)) <= window:
+            return True
+    return False
+
+
+def has_false_premise_correction(text):
+    """Mirror of score_benchmark.py's helper, so category F is judged alike."""
+    matchable = normalize_for_matching(text)
+    correction = re.search(
+        r"\b(false|incorrect|wrong|misconception|not\s+true|not\s+in|premise is false|"
+        r"premise fails|claim is false|false simplification|oversimplif)",
+        matchable, re.IGNORECASE)
+    replacement = re.search(
+        r"\b(correct|actually|instead|located in|the correct|real situation|depends on|"
+        r"dependent on|cannot conclude|tradeoff|risk tolerance)",
+        matchable, re.IGNORECASE)
+    return bool(correction or replacement)
+
+
 def classify_failure(task, response, call_error):
     prompt = (task.get("prompt") or "").lower()
     if call_error:
@@ -903,22 +1083,49 @@ def classify_failure(task, response, call_error):
     evaluation = task.get("evaluation") if isinstance(task.get("evaluation"), dict) else {}
     reply = str(response.get("reply") or response.get("content") or "").lower()
 
+    # CONTENT-BASED SEVERITY IS NOT DECIDED HERE.
+    #
+    # This used to return "CRITICAL_FAILURE" when a literal required_regex missed,
+    # and score_benchmark.py capped the score when it saw that class. But the
+    # scorer holds escape hatches this runner does not (a false-premise escape for
+    # category F and an evidence-disclosure escape for E/R/T), so the two
+    # components disagreed and the runner's verdict won, because it is stamped
+    # before the scorer runs.
+    #
+    # Evidence: T028 answered "The premise is false. The Moon is made primarily of
+    # rock and metal..." with required_hits fully matched and required_missing
+    # empty in the scorer's own rule_eval, yet it was scored 42.
+    #
+    # The concern is still recorded, under a class the scorer does not treat as
+    # capping, so the trace keeps the signal and severity stays with the scorer.
+    content_review = []
     for pattern in evaluation.get("critical_regex", []):
         if re.search(pattern, reply, re.IGNORECASE):
-            return "CRITICAL_FAILURE"
+            content_review.append(f"critical_regex:{pattern}")
 
     required = evaluation.get("required_regex", [])
     if required and evaluation.get("critical_if_missing_required", False):
-        required_ok = all(re.search(pattern, normalize_for_matching(reply), re.IGNORECASE) for pattern in required)
+        required_ok = all(
+            pattern_matches_tolerantly(pattern, normalize_for_matching(reply))
+            for pattern in required
+        )
         category_code = str(evaluation.get("category_code") or "").upper()
         if not required_ok and category_code in {"E", "R", "T"}:
             required_ok = has_evidence_limitation_disclosure(reply) or has_unverified_source_disclosure(reply)
+        if not required_ok and category_code == "F":
+            required_ok = has_false_premise_correction(reply)
         if not required_ok:
-            return "CRITICAL_FAILURE"
+            content_review.append("required_content_missing")
 
     for pattern in evaluation.get("forbidden_regex", []):
         if re.search(pattern, reply, re.IGNORECASE):
             return "EPISTEMIC_FAILURE"
+
+    if content_review:
+        # Recorded, not capped: score_benchmark.py owns severity. An inert class
+        # keeps the signal in the trace without tripping the scorer's cap, which
+        # only reacts to CRITICAL_FAILURE and RESEARCH_RETRIEVAL_MISSING.
+        return "CONTENT_REVIEW"
 
     if "approval" in reply or "human approval" in reply:
         return "PREMATURE_EXECUTION"
@@ -1026,6 +1233,9 @@ def main(argv=None):
         run_id = f"{run_started_at.strftime('%Y%m%dT%H%M%SZ')}-{os.getpid()}"
         manifest = {
             "run_id": run_id,
+            "prompt_seed": BENCHMARK_SEED,
+            "prompt_anchor_mode": bool(PROMPT_ANCHOR_MODE),
+            "prompt_pool_sizes": POOL_SIZES,
             "run_status": "CREATED",
             "benchmark_name": "lyralink-blind-capability-benchmark-v2",
             "benchmark_version": "v2",

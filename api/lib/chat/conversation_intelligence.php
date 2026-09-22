@@ -244,6 +244,155 @@ function chat_web_wikipedia_query(string $query, int $limit = 5): array {
     return $results;
 }
 
+/**
+ * Query the local OpenSERP service (https://github.com/karust/openserp).
+ *
+ * OpenSERP drives a real browser, so consent pages and JS-rendered SERPs are
+ * resolved rather than scraped as if they were results - the exact failure mode
+ * that made SearXNG return a block page's titles as search results.
+ *
+ * Config (never hardcoded):
+ *   OPENSRP_BASE_URL  default http://127.0.0.1:7000
+ *   OPENSRP_ENGINES   default 'google,duckduckgo'  (bing is excluded: measured
+ *                     inconsistent, returning unrelated results)
+ *   OPENSRP_LIMIT     default 20, max 100. OpenSERP only parses the first SERP
+ *                     page when this is omitted or <= 10, so 20 reads two pages.
+ *   OPENSRP_EXTRACT   default 2: how many top results get page content embedded
+ *                     (OpenSERP allows 0-5). Embedded content counts as verified.
+ *   OPENSRP_TIMEOUT   default 12s upper bound on the HTTP call.
+ *
+ * $deadlineTs, when given, is a wall-clock Unix timestamp and caps the HTTP call
+ * at the time actually remaining, so a slow search cannot starve the fetch stage
+ * that produces the verification signal.
+ */
+function chat_web_openserp_query(string $query, int $limit = 0, ?float $deadlineTs = null): array {
+    $query = trim($query);
+    if ($query === '') {
+        return [];
+    }
+
+    $base = rtrim(trim((string)api_get_secret('OPENSRP_BASE_URL', '')), '/');
+    if ($base === '') {
+        $base = 'http://127.0.0.1:7000';
+    }
+    $engines = trim((string)api_get_secret('OPENSRP_ENGINES', 'google,duckduckgo'));
+    if ($engines === '') {
+        $engines = 'google,duckduckgo';
+    }
+
+    if ($limit <= 0) {
+        $limit = (int)api_get_secret('OPENSRP_LIMIT', '20');
+    }
+    // OpenSERP documents a hard maximum of 100 organic results.
+    $limit = max(1, min(100, $limit));
+
+    $extractDepth = (int)api_get_secret('OPENSRP_EXTRACT', '2');
+    $extractDepth = max(0, min(5, $extractDepth));
+
+    $timeout = (int)api_get_secret('OPENSRP_TIMEOUT', '12');
+    if ($deadlineTs !== null) {
+        $remaining = (int)floor($deadlineTs - microtime(true));
+        if ($remaining < 2) {
+            return []; // no budget left; let the caller fall through
+        }
+        $timeout = min($timeout, $remaining);
+    }
+    $timeout = max(2, min(30, $timeout));
+
+    // /mega/search merges and dedupes across engines. mode=any returns as soon as
+    // one engine answers, which keeps the common case fast.
+    $url = $base . '/mega/search?engines=' . rawurlencode($engines)
+        . '&text=' . rawurlencode($query)
+        . '&limit=' . $limit
+        . '&mode=any';
+    if ($extractDepth > 0) {
+        $url .= '&extract=' . $extractDepth;
+    }
+
+    // OpenSERP is served over plain http on 127.0.0.1, which the shared helper
+    // rejects. The exemption is limited to local hosts by netpolicy_is_local_host()
+    // and applied here only, so no other outbound fetch is weakened.
+    if (function_exists('netpolicy_validate_outbound_url')) {
+        $validation = netpolicy_validate_outbound_url($url, true);
+        if (!($validation['ok'] ?? false)) {
+            return [];
+        }
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_USERAGENT => 'LyralinkWebSearch/1.0 (+https://lyralinkai.com)',
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $body = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false || $httpCode < 200 || $httpCode >= 400) {
+        return [];
+    }
+
+    $data = json_decode((string)$body, true);
+    $rows = $data['results'] ?? [];
+    if (!is_array($rows)) {
+        return [];
+    }
+
+    $results = [];
+    $seen = [];
+    foreach ($rows as $row) {
+        $link = trim((string)($row['url'] ?? ''));
+        if ($link === '' || isset($seen[$link])) {
+            continue;
+        }
+        $host = strtolower((string)($row['domain'] ?? parse_url($link, PHP_URL_HOST) ?? ''));
+        if ($host === '') {
+            continue;
+        }
+
+        $title = trim((string)($row['title'] ?? ''));
+        if ($title === '') {
+            $title = $host;
+        }
+        $snippet = trim(preg_replace('/\s+/', ' ', (string)($row['snippet'] ?? '')) ?? '');
+
+        $seen[$link] = true;
+
+        $entry = [
+            'title' => $title,
+            'url' => $link,
+            'host' => $host,
+            'snippet' => $snippet,
+            'source_type' => 'search_result',
+            'content_safety' => chat_web_content_safety($snippet),
+            'authority_tier' => chat_web_authority_tier($host, 'search_result'),
+            'retrieved_at' => gmdate('c'),
+            'evidence_state' => 'SEARCH_RESULT',
+        ];
+
+        // OpenSERP can embed the target page's text. That is a real retrieval, so
+        // the result is marked verified and the runtime can cite it - and because
+        // the browser already fetched it, no second request is needed.
+        $extracted = $row['extracted'] ?? null;
+        if (is_array($extracted) && trim((string)($extracted['content'] ?? '')) !== '') {
+            $content = trim((string)$extracted['content']);
+            $entry['excerpt'] = mb_substr($content, 0, 4000);
+            $entry['fetched'] = true;
+            $entry['source_type'] = 'web_page';
+            $entry['content_safety'] = chat_web_content_safety($content);
+            $entry['authority_tier'] = chat_web_authority_tier($host, 'web_page');
+            $entry['evidence_state'] = 'RETRIEVED_PAGE';
+        }
+
+        $results[] = $entry;
+    }
+
+    return $results;
+}
 function chat_web_searxng_query(string $query, int $limit = 6): array {
     // Local SearXNG instance. Aggregates several engines, so a single engine
     // being blocked cannot empty search, and it needs no HTML scraping.
@@ -332,15 +481,296 @@ function chat_web_searxng_query(string $query, int $limit = 6): array {
     return $results;
 }
 
-function chat_web_search_query(string $query, bool $degradedMode = false): array {
+/**
+ * Rank search results for the query.
+ *
+ * SearXNG interleaves engines and one of them returns poor results, measured as:
+ *   [bing]   "Convertisseur won en euro - Boursorama"            (junk: "won" -> Won)
+ *   [google] "The Nobel Prize in Physics 2024 - NobelPrize.org"  (correct)
+ * The correct result existed but arrived second, and results used to be consumed
+ * in arrival order.
+ *
+ * Scoring is deliberately simple and deterministic so it can be tested: query
+ * content words are matched against the title (weight 2) and the snippet
+ * (weight 1); ties break on authority tier, then original engine order. Results
+ * are re-ordered, never removed, so recall is unchanged and only the leading
+ * results the model reads are affected.
+ */
+/**
+ * Content words of a query, used for relevance scoring and gating.
+ *
+ * Short tokens and common function words are dropped; numbers are kept because
+ * they carry meaning in queries ("2024", "5"). Shared deliberately by
+ * chat_web_rank_results() and chat_web_results_are_relevant() so ranking and
+ * gating can never disagree about what "relevant" means.
+ */
+function chat_web_query_terms(string $query): array {
+    static $stop = [
+        'the', 'a', 'an', 'of', 'in', 'on', 'for', 'and', 'or', 'to', 'is', 'are', 'was',
+        'were', 'who', 'what', 'when', 'where', 'how', 'why', 'did', 'does', 'do', 'that',
+        'this', 'with', 'from', 'by', 'at', 'as', 'it', 'its', 'be', 'been', 'you', 'your',
+        'can', 'could', 'should', 'would', 'will', 'about', 'into', 'over', 'than', 'then',
+    ];
+    $terms = [];
+    foreach (preg_split('/[^a-z0-9]+/', strtolower($query)) ?: [] as $word) {
+        if ($word === '' || strlen($word) < 3 || in_array($word, $stop, true)) {
+            continue;
+        }
+        $terms[$word] = true;
+    }
+    return $terms;
+}
+
+/**
+ * Score one result against the query terms (title weighted 2, body 1).
+ */
+function chat_web_result_score(array $result, array $terms): int {
+    if ($terms === []) {
+        return 0;
+    }
+    $title = strtolower((string)($result['title'] ?? ''));
+    $body = strtolower((string)($result['snippet'] ?? ($result['excerpt'] ?? '')));
+    $score = 0;
+    foreach ($terms as $term => $_) {
+        if (str_contains($title, $term)) {
+            $score += 2;
+        }
+        if (str_contains($body, $term)) {
+            $score += 1;
+        }
+    }
+    return $score;
+}
+
+/**
+ * Does this result set answer the query at all?
+ *
+ * Measured failure this guards against: SearXNG's blocked bing engine yielded the
+ * titles of an unrelated page, so a query for "AWS multi-region failover
+ * whitepaper" produced "Chase Bank Branch in Redmond". Feeding that to the model
+ * as retrieval is worse than retrieving nothing, because the model then cites it.
+ *
+ * A set passes when at least one result matches a term in its TITLE. Requiring a
+ * title match (not just a body match) is what rejects block-page scrapes, whose
+ * titles share nothing with the query.
+ */
+function chat_web_results_are_relevant(array $results, string $query): bool {
+    $terms = chat_web_query_terms($query);
+    if ($terms === []) {
+        return true; // nothing to judge against; do not block
+    }
+    // Require more than one term match when the query has several terms.
+    //
+    // A single coincidental word is not evidence of relevance. Measured: the
+    // blocked engine returned "Capital : Actualites Economie, Business,
+    // Immobilier & Argent" for "what is the capital of France" - one match on
+    // "capital" - while the correct answer "Paris facts: the capital of France in
+    // history" matches two. Requiring two separates them.
+    $required = count($terms) >= 2 ? 2 : 1;
+    foreach ($results as $result) {
+        $title = strtolower((string)($result['title'] ?? ''));
+        $hits = 0;
+        foreach ($terms as $term => $_) {
+            if (str_contains($title, $term)) {
+                $hits++;
+            }
+        }
+        if ($hits >= $required) {
+            return true;
+        }
+    }
+    return false;
+}
+function chat_web_rank_results(array $results, string $query): array {
+    if (count($results) < 2) {
+        return array_values($results);
+    }
+
+    $terms = chat_web_query_terms($query);
+    if ($terms === []) {
+        return array_values($results);
+    }
+
+    $scored = [];
+    foreach ($results as $idx => $result) {
+        $scored[] = [
+            'idx' => $idx,
+            'score' => chat_web_result_score($result, $terms),
+            'tier' => (int)($result['authority_tier'] ?? 4),
+        ];
+    }
+
+    usort($scored, static function (array $a, array $b): int {
+        if ($a['score'] !== $b['score']) {
+            return $b['score'] <=> $a['score'];
+        }
+        if ($a['tier'] !== $b['tier']) {
+            return $a['tier'] <=> $b['tier'];
+        }
+        return $a['idx'] <=> $b['idx'];
+    });
+
+    $ranked = [];
+    $seen = [];
+    foreach ($scored as $row) {
+        $result = $results[$row['idx']];
+        $url = (string)($result['url'] ?? '');
+        if ($url !== '') {
+            if (isset($seen[$url])) {
+                continue;
+            }
+            $seen[$url] = true;
+        }
+        $ranked[] = $result;
+    }
+
+    return $ranked;
+}
+
+/**
+ * Fetch each leading result's page and mark it verified.
+ *
+ * This is the stage that lets the runtime cite a verified source. Without it the
+ * status reported SOURCE_FETCH_FAILED with fetched_count 0, so result_verified
+ * was always false and WEB_SOURCE provenance could never be satisfied.
+ *
+ * Every result is first given excerpt=snippet and fetched=false, so the shape is
+ * identical whether or not fetching is enabled - callers can rely on the keys.
+ *
+ * The optional $deadlineTs is a wall-clock Unix timestamp. Each fetch is given
+ * only the time actually left (capped at 3s), and the loop stops when less than
+ * ~0.8s remains. That matters because chat_web_search_query_with_status() treats
+ * exceeding its budget as timed_out, which would set result_verified back to
+ * false - so an unbounded fetch here would be a regression, not a fix.
+ */
+function chat_web_enrich_results(array $results, bool $degradedMode = false, ?float $deadlineTs = null): array {
+    if ($results === []) {
+        return [];
+    }
+
+    foreach ($results as $idx => $result) {
+        $results[$idx]['excerpt'] = (string)($result['snippet'] ?? '');
+        $results[$idx]['fetched'] = false;
+    }
+
+    $fetchPages = api_get_secret('CHAT_WEB_FETCH_PAGES', '0') === '1';
+    if (!$fetchPages) {
+        return $results;
+    }
+
+    // Desired number of VERIFIED pages, and a separate ceiling on attempts so a
+    // run of refusals cannot consume the whole deadline. Bounding on index
+    // instead meant one unfriendly site at position 0 disabled verification for
+    // the entire search (measured: degraded mode reported fetched_count 0).
+    $wantFetched = $degradedMode ? 3 : 5;
+    $maxAttempts = $wantFetched + 3;
+    $fetched = 0;
+    $attempts = 0;
+
+    foreach ($results as $idx => $result) {
+        if ($fetched >= $wantFetched || $attempts >= $maxAttempts) {
+            break;
+        }
+        $remaining = $deadlineTs === null ? 10.0 : ($deadlineTs - microtime(true));
+        if ($remaining < 0.8) {
+            break;
+        }
+        $attempts++;
+        $perRequest = (int)max(1, min(3, (int)floor($remaining - 0.4)));
+
+        $page = chat_web_fetch_html((string)($result['url'] ?? ''), $perRequest);
+        if (!$page || empty($page['body'])) {
+            continue;
+        }
+        $text = chat_web_extract_text((string)$page['body']);
+        if (trim($text) === '') {
+            continue;
+        }
+        $fetched++;
+
+        $host = strtolower((string)(parse_url((string)($page['url'] ?? ($result['url'] ?? '')), PHP_URL_HOST) ?? ($result['host'] ?? '')));
+        $results[$idx]['excerpt'] = $text;
+        $results[$idx]['url'] = (string)($page['url'] ?? ($result['url'] ?? ''));
+        $results[$idx]['host'] = $host;
+        $results[$idx]['fetched'] = true;
+        $results[$idx]['source_type'] = 'web_page';
+        $results[$idx]['content_safety'] = chat_web_content_safety($text);
+        $results[$idx]['authority_tier'] = chat_web_authority_tier($host, 'web_page');
+        $results[$idx]['retrieved_at'] = gmdate('c');
+        $results[$idx]['evidence_state'] = 'RETRIEVED_PAGE';
+    }
+
+    return $results;
+}
+
+/**
+ * Resolve a source, rank the results, then fetch and verify the leading pages.
+ *
+ * The wrapper exists because the resolver below returns early at seven points
+ * (SearXNG, curated, Wikipedia, RSS, and three fallbacks). Fetching used to sit
+ * after those returns, so it ran only on the DuckDuckGo branch - the one path
+ * that is normally never taken.
+ */
+function chat_web_search_query(string $query, bool $degradedMode = false, ?float $fetchDeadlineTs = null): array {
+    $query = trim($query);
+    if ($query === '') {
+        return [];
+    }
+    $resolved = chat_web_resolve_sources($query, $degradedMode, $fetchDeadlineTs);
+
+    // Reject a result set that does not mention the query. A blocked engine
+    // returned block-page titles ("Chase Bank Branch in Redmond" for an AWS
+    // query) and nothing noticed. Falling through to sources that answer the
+    // question is strictly better than handing the model unrelated 'evidence'.
+    if ($resolved !== [] && !chat_web_results_are_relevant($resolved, $query)) {
+        $alternatives = [
+            static fn() => chat_web_searxng_query($query, 10),
+            static fn() => chat_web_wikipedia_query($query, 5),
+            static fn() => chat_web_news_rss_query($query, 5),
+        ];
+        $resolved = [];
+        foreach ($alternatives as $altSource) {
+            $alt = $altSource();
+            if ($alt !== [] && chat_web_results_are_relevant($alt, $query)) {
+                $resolved = $alt;
+                break;
+            }
+        }
+    }
+    if ($resolved === []) {
+        return [];
+    }
+    return chat_web_enrich_results(chat_web_rank_results($resolved, $query), $degradedMode, $fetchDeadlineTs);
+}
+function chat_web_resolve_sources(string $query, bool $degradedMode = false, ?float $deadlineTs = null): array {
     $query = trim($query);
     if ($query === '') {
         return [];
     }
 
-    // Primary source: local SearXNG (multi-engine). Measured 42 results where
-    // the raw DuckDuckGo scrape managed 5-6 and intermittently 0.
-    $searxResults = chat_web_searxng_query($query, 6);
+    // PRIMARY: OpenSERP (browser-rendered). SearXNG scrapes engine HTML, so when an
+    // engine blocks the request SearXNG parses the BLOCK PAGE and returns its
+    // titles as results - measured as "Chase Bank Branch in Redmond" for a query
+    // about AWS failover. A real browser resolves consent pages instead.
+    $openserpResults = chat_web_openserp_query($query, 0, $deadlineTs);
+    if (!empty($openserpResults)) {
+        if (function_exists('chat_serp_quality_filter')) {
+            $serpFiltered = chat_serp_quality_filter($openserpResults, ['query' => $query]);
+            if (!empty($serpFiltered['results'])) {
+                return $serpFiltered['results'];
+            }
+            // OpenSERP returned only ads, unfollowable redirect wrappers or
+            // duplicates. Fall through to the next provider rather than handing the
+            // model an advertisement as a citable source.
+        } else {
+            return $openserpResults;
+        }
+    }
+
+    // FALLBACK: local SearXNG (multi-engine). Fast - measured ~180ms against
+    // OpenSERP's 2-6s - so it still earns its place when OpenSERP is unavailable.
+    // Limit raised 6 -> 10 now that the relevance gate can reject junk.
+    $searxResults = chat_web_searxng_query($query, 10);
     if (!empty($searxResults)) {
         return $searxResults;
     }
@@ -454,32 +884,10 @@ function chat_web_search_query(string $query, bool $degradedMode = false): array
         }
     }
 
-    $fetchPages = api_get_secret('CHAT_WEB_FETCH_PAGES', '0') === '1';
-    $pageFetchLimit = $fetchPages ? ($degradedMode ? 1 : 2) : 0;
-    foreach ($results as $idx => $result) {
-        if ($idx >= $pageFetchLimit) {
-            $results[$idx]['excerpt'] = (string)($result['snippet'] ?? '');
-            $results[$idx]['fetched'] = false;
-            continue;
-        }
-
-        $page = chat_web_fetch_html((string)$result['url'], $degradedMode ? 5 : 7);
-        if ($page && !empty($page['body'])) {
-            $results[$idx]['excerpt'] = chat_web_extract_text((string)$page['body']);
-            $results[$idx]['url'] = (string)($page['url'] ?? $result['url']);
-            $results[$idx]['host'] = strtolower((string)(parse_url((string)$results[$idx]['url'], PHP_URL_HOST) ?? $result['host']));
-            $results[$idx]['fetched'] = true;
-            $results[$idx]['source_type'] = 'web_page';
-            $results[$idx]['content_safety'] = chat_web_content_safety((string)$results[$idx]['excerpt']);
-            $results[$idx]['authority_tier'] = chat_web_authority_tier((string)$results[$idx]['host'], 'web_page');
-            $results[$idx]['retrieved_at'] = gmdate('c');
-            $results[$idx]['evidence_state'] = 'RETRIEVED_PAGE';
-        } else {
-            $results[$idx]['excerpt'] = (string)($result['snippet'] ?? '');
-            $results[$idx]['fetched'] = false;
-            $results[$idx]['content_safety'] = chat_web_content_safety((string)$results[$idx]['excerpt']);
-        }
-    }
+    // Source fetching moved to chat_web_enrich_results(), which the
+    // chat_web_search_query() wrapper applies to every source path. It used to
+    // live only here, in the DuckDuckGo fallback branch, so it never ran when
+    // SearXNG (the primary source) succeeded.
 
     $needsFresh = chat_needs_fresh_web_context($query);
     $usableExcerptCount = 0;
@@ -534,10 +942,22 @@ function chat_web_search_query_with_status(string $query, bool $degradedMode = f
         ];
     }
 
-    $results = chat_web_search_query($query, $degradedMode);
+    // The budget is computed before the search, because source fetching runs
+    // inside chat_web_search_query() and must fit in the same window. Otherwise a
+    // slow fetch pushes duration past the budget, timed_out becomes true, and
+    // result_verified drops back to false - i.e. the fetch would defeat itself.
+    //
+    // Raised from (5000|7000)+800 when OpenSERP became the primary source: browser
+    // rendering measured 2-6s, where the SearXNG scrape measured ~180ms. At the old
+    // budget a normal OpenSERP search could exceed the window on its own, set
+    // timed_out, and force result_verified back to false. The cap increase and this
+    // budget increase have to ship together or verification regresses.
+    $timeoutBudget = (int)api_get_secret('CHAT_WEB_SEARCH_BUDGET_MS', $degradedMode ? '10000' : '16000');
+    $timeoutBudget = max(3000, min(60000, $timeoutBudget));
+    $fetchDeadlineTs = $startedAt + ($timeoutBudget / 1000) - 0.8;
+    $results = chat_web_search_query($query, $degradedMode, $fetchDeadlineTs);
     $durationMs = (int)round((microtime(true) - $startedAt) * 1000);
     $hasResults = !empty($results);
-    $timeoutBudget = ($degradedMode ? 5000 : 7000) + 800;
     $fetchedCount = 0;
     $parsedCount = 0;
     foreach ($results as $result) {
@@ -658,6 +1078,179 @@ function chat_workspace_read_file(string $path, int $maxBytes = 20000): ?array {
         'bytes' => strlen($content),
         'truncated' => $truncated,
     ];
+}
+
+/**
+ * Directory that generated files may be written into.
+ *
+ * Deliberately separate from chat_workspace_root_dir(): reads may span the
+ * application, writes may not. This directory is covered by a default-deny
+ * .htaccess, so a written file is never served over HTTP.
+ */
+function chat_workspace_write_root_dir(): string {
+    $root = chat_workspace_root_dir() . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'workspace';
+    if (!is_dir($root)) {
+        @mkdir($root, 0775, true);
+    }
+    return $root;
+}
+
+/**
+ * File types this capability is willing to create.
+ *
+ * An allowlist, not a blocklist: the site-level .htaccess missed `.json` for
+ * long enough that internal JSON was served publicly. Anything absent here is
+ * refused, so a name the model invents cannot become executable or served.
+ */
+function chat_workspace_write_allowed_extensions(): array {
+    return ['md', 'txt', 'json', 'jsonl', 'csv', 'tsv', 'yaml', 'yml',
+            'log', 'sql', 'xml', 'diff', 'patch'];
+}
+
+/**
+ * Write a text artifact into the confined workspace.
+ *
+ * Returns a structured outcome. Failure reasons are specific so the caller can
+ * state what actually happened rather than claiming success or silently
+ * producing nothing.
+ */
+function chat_workspace_write_file(string $relativePath, string $content, int $maxBytes = 2000000, bool $backup = true): array {
+    $result = [
+        'ok' => false,
+        'reason' => '',
+        'relative_path' => '',
+        'path' => null,
+        'bytes_written' => 0,
+        'created' => false,
+        'backup_path' => null,
+        'syntax' => null,
+    ];
+
+    $rel = ltrim(str_replace('\\', '/', (string)$relativePath), '/');
+    $result['relative_path'] = $rel;
+
+    if ($rel === '') {
+        $result['reason'] = 'empty_path';
+        return $result;
+    }
+    if (strpos($rel, "\0") !== false) {
+        $result['reason'] = 'invalid_path';
+        return $result;
+    }
+    // Reject traversal before touching the filesystem, so the check does not
+    // depend on realpath() resolving a not-yet-existing file.
+    if (preg_match('#(^|/)\.\.(/|$)#', $rel) === 1) {
+        $result['reason'] = 'path_traversal_rejected';
+        return $result;
+    }
+    if (chat_workspace_is_sensitive_relative_path($rel)) {
+        $result['reason'] = 'sensitive_path_rejected';
+        return $result;
+    }
+
+    // Refuse dotfile segments. The sensitive-path guard above is anchored to
+    // known names, so `.htaccess.txt` slipped through it; requiring every
+    // segment to be visible removes the whole class rather than the examples.
+    foreach (explode('/', $rel) as $segment) {
+        if ($segment !== '' && $segment[0] === '.') {
+            $result['reason'] = 'dotfile_rejected';
+            return $result;
+        }
+    }
+
+    $ext = strtolower((string)pathinfo($rel, PATHINFO_EXTENSION));
+    if ($ext === '' || !in_array($ext, chat_workspace_write_allowed_extensions(), true)) {
+        $result['reason'] = 'extension_not_allowed:' . ($ext === '' ? '(none)' : $ext);
+        return $result;
+    }
+
+    if ($maxBytes > 0 && strlen($content) > $maxBytes) {
+        $result['reason'] = 'content_too_large';
+        return $result;
+    }
+
+    $rootRaw = chat_workspace_write_root_dir();
+    $root = realpath($rootRaw) ?: $rootRaw;
+    $root = rtrim($root, DIRECTORY_SEPARATOR);
+
+    $target = $root . DIRECTORY_SEPARATOR . $rel;
+    $dir = dirname($target);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        $result['reason'] = 'parent_dir_create_failed';
+        return $result;
+    }
+
+    // The parent must resolve inside the root; realpath collapses any symlink.
+    $dirReal = realpath($dir);
+    if ($dirReal === false) {
+        $result['reason'] = 'parent_dir_unresolvable';
+        return $result;
+    }
+    $dirReal = rtrim($dirReal, DIRECTORY_SEPARATOR);
+    if ($dirReal !== $root
+        && strncmp($dirReal . DIRECTORY_SEPARATOR, $root . DIRECTORY_SEPARATOR, strlen($root) + 1) !== 0) {
+        $result['reason'] = 'outside_write_root';
+        return $result;
+    }
+
+    // Never write through a symlink: it would escape the root after the check.
+    if (is_link($target)) {
+        $result['reason'] = 'symlink_rejected';
+        return $result;
+    }
+    if (is_dir($target)) {
+        $result['reason'] = 'target_is_directory';
+        return $result;
+    }
+
+    $existed = is_file($target);
+    $mode = $existed ? (fileperms($target) & 0777) : 0664;
+    $mode &= ~0111; // a generated artifact must never be executable
+
+    if ($existed && $backup) {
+        $backupPath = $target . '.' . gmdate('Ymd\THis\Z') . '.bak';
+        if (@copy($target, $backupPath)) {
+            $result['backup_path'] = ltrim(str_replace($root, '', $backupPath), DIRECTORY_SEPARATOR);
+        }
+    }
+
+    // Write to a sibling temp file and rename, so a reader never sees a
+    // half-written artifact and a failure leaves the original intact.
+    $tmp = $dir . DIRECTORY_SEPARATOR . '.lyra-tmp-' . bin2hex(random_bytes(6)) . '.' . $ext;
+    if (@file_put_contents($tmp, $content) === false) {
+        $result['reason'] = 'temp_write_failed';
+        return $result;
+    }
+    @chmod($tmp, $mode);
+    if (!@rename($tmp, $target)) {
+        @unlink($tmp);
+        $result['reason'] = 'atomic_rename_failed';
+        return $result;
+    }
+
+    // Structured formats get a parse gate, mirroring the registry's declared
+    // 'file_diff+syntax' verification method.
+    if ($ext === 'json' || $ext === 'jsonl') {
+        $lines = ($ext === 'jsonl') ? preg_split('/\r?\n/', trim($content)) : [trim($content)];
+        $bad = 0;
+        foreach ($lines as $line) {
+            $line = trim((string)$line);
+            if ($line === '') {
+                continue;
+            }
+            if (json_decode($line, true) === null && strtolower($line) !== 'null') {
+                $bad++;
+            }
+        }
+        $result['syntax'] = $bad === 0 ? 'ok' : ('json_parse_failed:' . $bad);
+    }
+
+    $result['ok'] = true;
+    $result['reason'] = 'written';
+    $result['path'] = $target;
+    $result['bytes_written'] = strlen($content);
+    $result['created'] = !$existed;
+    return $result;
 }
 
 function chat_workspace_default_context_targets(string $query, string $workspaceRoot): array {

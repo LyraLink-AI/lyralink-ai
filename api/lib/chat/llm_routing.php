@@ -1,16 +1,70 @@
 <?php
+// Capability metadata for local models (rule 18 / section 26). Guarded so the
+// library stays usable if the registry is ever absent.
+if (!function_exists('model_registry') && is_file(__DIR__ . '/model_registry.php')) {
+    require_once __DIR__ . '/model_registry.php';
+}
 
 function llm_is_lyralink_model(string $model): bool {
     return stripos(trim($model), 'lyralink') !== false;
 }
 
+/**
+ * Admin-controlled allowlist of selectable LOCAL models.
+ *
+ * Sources, all trusted:
+ *   1. LLM_LOCAL_MODELS / LOCAL_LLM_MODEL - explicit .env configuration. This is the
+ *      intended way to permit a non-lyralink model, and it was previously ignored.
+ *   2. Registry-declared chat models - capability metadata in code (rule 18).
+ *   3. The built-in lyralink set - always present, so a bad .env cannot remove the
+ *      models the product depends on.
+ *
+ * No request-derived value is ever merged in, so widening this list does not widen
+ * what an untrusted caller can cause to be loaded.
+ */
+function llm_local_model_allowlist(): array {
+    $allow = [];
+    foreach (llm_parse_csv((string)api_get_secret('LLM_LOCAL_MODELS', '')) as $m) {
+        $allow[trim($m)] = true;
+    }
+    $configured = trim((string)api_get_secret('LOCAL_LLM_MODEL', ''));
+    if ($configured !== '') {
+        $allow[$configured] = true;
+    }
+    if (function_exists('model_registry_local_chat_models')) {
+        foreach (model_registry_local_chat_models() as $m) {
+            $allow[trim($m)] = true;
+        }
+    }
+    foreach ([
+        'lyralink-auto-canary:latest',
+        'lyralink-fast:latest',
+        'lyralink-code:latest',
+        'lyralink-reasoning:latest',
+        'lyralink-creative:latest',
+    ] as $m) {
+        $allow[$m] = true;
+    }
+    unset($allow['']);
+    return array_keys($allow);
+}
+
+/**
+ * Accept a local model name only if it is allowlisted.
+ *
+ * Historically this required the substring "lyralink", which made every non-lyralink
+ * model unreachable through the router regardless of configuration. Allowlisting
+ * keeps the same protection (an unlisted name cannot be selected) without that
+ * restriction.
+ */
 function llm_safe_local_model(string $candidate, string $fallback = 'lyralink-auto-canary:latest'): string {
+    $allow = llm_local_model_allowlist();
     $candidate = trim($candidate);
-    if ($candidate !== '' && llm_is_lyralink_model($candidate)) {
+    if ($candidate !== '' && (llm_is_lyralink_model($candidate) || in_array($candidate, $allow, true))) {
         return $candidate;
     }
     $fallback = trim($fallback);
-    if ($fallback !== '' && llm_is_lyralink_model($fallback)) {
+    if ($fallback !== '' && (llm_is_lyralink_model($fallback) || in_array($fallback, $allow, true))) {
         return $fallback;
     }
     return 'lyralink-auto-canary:latest';
@@ -21,7 +75,11 @@ function llm_default_model(string $provider): string {
     $openRouterModel = trim(api_get_secret('OPENROUTER_MODEL', 'openai/gpt-oss-20b'));
     $openAiModel = trim(api_get_secret('OPENAI_MODEL', 'gpt-4o-mini'));
     if ($provider === 'local' || $provider === 'hermes') {
-        if ($localModel !== '' && stripos($localModel, 'lyralink') !== false) {
+        // DEFENSIBLE ANY LOCAL MODEL: this used to require the name to contain
+        // "lyralink", which silently discarded a configured LOCAL_LLM_MODEL such
+        // as qwen2.5:3b and substituted the hardcoded alias below instead. A model
+        // name is not a capability claim, so any non-empty configured value wins.
+        if ($localModel !== '') {
             return $localModel;
         }
         return 'lyralink-auto-canary:latest';
@@ -172,7 +230,22 @@ function llm_provider_models(string $provider): array {
         foreach (['lyralink-auto-canary:latest', 'lyralink-fast:latest', 'lyralink-code:latest', 'lyralink-reasoning:latest', 'lyralink-creative:latest'] as $model) {
             $models[] = $model;
         }
-        $models = array_values(array_unique(array_filter(array_map('trim', $models), static fn($m) => $m !== '' && stripos((string)$m, 'lyralink') !== false)));
+        // Validate against the allowlist rather than requiring "lyralink" in the
+        // name. The previous predicate discarded hermes3:3b even though
+        // LLM_LOCAL_MODELS in .env listed it, so the configuration and the code
+        // disagreed about what was permitted.
+        // Registry-declared chat models are part of the permitted set. Without this,
+        // llm_provider_models() and the registry disagreed about which models exist:
+        // the router map named qwen2.5-coder:3b for 'code' while this check rejected
+        // it, so the selector silently fell back to the general model and the intent
+        // appeared routed when it was not.
+        if (function_exists('model_registry_local_chat_models')) {
+            foreach (model_registry_local_chat_models() as $registryModel) {
+                $models[] = $registryModel;
+            }
+        }
+        $allowedLocal = llm_local_model_allowlist();
+        $models = array_values(array_unique(array_filter(array_map('trim', $models), static fn($m) => $m !== '' && in_array($m, $allowedLocal, true))));
         return $models;
     }
     return match (strtolower($provider)) {
@@ -405,3 +478,28 @@ function chat_select_context_model(string $intent, string $plan, bool $degradedM
     return $safeModel;
 }
 
+/**
+ * Capability metadata for a model tag, or [] when undeclared.
+ */
+function llm_model_capabilities(string $model): array {
+    if (!function_exists('model_registry')) {
+        return [];
+    }
+    $reg = model_registry();
+    return $reg[trim($model)] ?? [];
+}
+
+/**
+ * Report which router intents resolve to identical weights.
+ *
+ * "The router selected the code model" must not be an illusion: when several intents
+ * share one set of weights, routing is renaming, not routing. Measured 2026-09-22 on
+ * this host, all seven intents resolved to a single blob.
+ */
+function llm_router_weights_report(?array $routerMap = null): array {
+    if (!function_exists('model_registry_router_report')) {
+        return ['available' => false];
+    }
+    $map = $routerMap ?? chat_model_router_map();
+    return ['available' => true] + model_registry_router_report($map);
+}

@@ -1,0 +1,311 @@
+{
+    "generated_at": "2026-09-22T03:10:19+00:00",
+    "docroot": "/var/www/vhosts/lyralinkai.com/httpdocs",
+    "method": {
+        "registry": "dynamic (chat_os_capability_registry)",
+        "symbol_check": "static scan of api/ for function declarations",
+        "php_files_scanned": 62,
+        "functions_indexed": 837
+    },
+    "summary": {
+        "capabilities_declared": 11,
+        "capabilities_enabled": 11,
+        "capabilities_advertised_to_model": 8,
+        "routing_capabilities": 3,
+        "distinct_permissions": 7,
+        "distinct_execution_methods": 8,
+        "resources_in_registry": 8,
+        "findings": {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0
+        },
+        "total_findings": 0
+    },
+    "permission_enforcement": {
+        "network.read": 9,
+        "database.read": 1,
+        "shell.execute": 3,
+        "filesystem.read": 3,
+        "filesystem.write": 1,
+        "server.inspect": 4,
+        "model.generate": 9
+    },
+    "execution_methods": [
+        "chat_web_search_query_with_status",
+        "chat_web_fetch_html",
+        "chat_claim_provenance_summary",
+        "lyra_db_query_execute",
+        "chat_capability_dispatch",
+        "chat_workspace_read_file",
+        "lyra_server_inspect",
+        "callLlm"
+    ],
+    "resource_registry": [
+        "internet_search",
+        "internet_fetch",
+        "workspace_filesystem",
+        "local_model_runtime",
+        "production_mysql",
+        "server_shell",
+        "deployment_control_plane",
+        "general_runtime"
+    ],
+    "findings": [],
+    "inventory": [
+        {
+            "capability_id": "database.query",
+            "class": "tool",
+            "name": "Database Query",
+            "description": "Query a connected database resource.",
+            "enabled": true,
+            "risk_level": "HIGH",
+            "requires_confirmation": true,
+            "required_permissions": [
+                "database.read"
+            ],
+            "required_resources": [
+                "production_mysql"
+            ],
+            "execution_method": "lyra_db_query_execute",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/data_plane.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "query_result_artifact",
+            "timeout_sec": 15,
+            "provider": "mysqli"
+        },
+        {
+            "capability_id": "filesystem.read",
+            "class": "tool",
+            "name": "Filesystem Read",
+            "description": "Read approved files from the workspace or runtime.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "filesystem.read"
+            ],
+            "required_resources": [
+                "workspace_filesystem"
+            ],
+            "execution_method": "chat_workspace_read_file",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/conversation_intelligence.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "file_hash",
+            "timeout_sec": 5,
+            "provider": "workspace_reader"
+        },
+        {
+            "capability_id": "filesystem.write",
+            "class": "tool",
+            "name": "Filesystem Write",
+            "description": "Write approved files through controlled edit paths.",
+            "enabled": true,
+            "risk_level": "HIGH",
+            "requires_confirmation": true,
+            "required_permissions": [
+                "filesystem.write"
+            ],
+            "required_resources": [
+                "workspace_filesystem"
+            ],
+            "execution_method": "chat_capability_dispatch",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/capability_executor.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "file_diff+syntax",
+            "timeout_sec": 20,
+            "provider": "capability_dispatcher"
+        },
+        {
+            "capability_id": "model.code",
+            "class": "routing",
+            "name": "Code Model Response",
+            "description": "Code-focused model path for build and debug requests.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "model.generate"
+            ],
+            "required_resources": [
+                "local_model_runtime"
+            ],
+            "execution_method": "callLlm",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/runtime_core.php",
+            "has_executor_branch": false,
+            "advertised_to_model": false,
+            "verification_method": "chat_self_verify_summary",
+            "timeout_sec": 45,
+            "provider": "llm_router"
+        },
+        {
+            "capability_id": "model.fast",
+            "class": "routing",
+            "name": "Fast Model Response",
+            "description": "Low-latency response generation for simple requests.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "model.generate"
+            ],
+            "required_resources": [
+                "local_model_runtime"
+            ],
+            "execution_method": "callLlm",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/runtime_core.php",
+            "has_executor_branch": false,
+            "advertised_to_model": false,
+            "verification_method": "chat_self_verify_summary",
+            "timeout_sec": 18,
+            "provider": "llm_router"
+        },
+        {
+            "capability_id": "model.reason",
+            "class": "routing",
+            "name": "Reasoning Model Response",
+            "description": "Higher-depth reasoning path for multi-step analysis.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "model.generate"
+            ],
+            "required_resources": [
+                "local_model_runtime"
+            ],
+            "execution_method": "callLlm",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/runtime_core.php",
+            "has_executor_branch": false,
+            "advertised_to_model": false,
+            "verification_method": "chat_self_verify_summary",
+            "timeout_sec": 40,
+            "provider": "llm_router"
+        },
+        {
+            "capability_id": "server.inspect",
+            "class": "tool",
+            "name": "Server Inspect",
+            "description": "Inspect the local host runtime state: load average, uptime, memory, disk, PHP runtime, listening TCP ports and key service processes. Local host only - it cannot inspect a remote deployment.",
+            "enabled": true,
+            "risk_level": "HIGH",
+            "requires_confirmation": true,
+            "required_permissions": [
+                "server.inspect"
+            ],
+            "required_resources": [
+                "deployment_control_plane"
+            ],
+            "execution_method": "lyra_server_inspect",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/data_plane.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "deployment_artifact",
+            "timeout_sec": 20,
+            "provider": "chat_api_local_host"
+        },
+        {
+            "capability_id": "shell.execute",
+            "class": "tool",
+            "name": "Shell Execute",
+            "description": "Execute shell commands on a provisioned host.",
+            "enabled": true,
+            "risk_level": "CRITICAL",
+            "requires_confirmation": true,
+            "required_permissions": [
+                "shell.execute"
+            ],
+            "required_resources": [
+                "server_shell"
+            ],
+            "execution_method": "chat_capability_dispatch",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/capability_executor.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "execution_artifact_required",
+            "timeout_sec": 30,
+            "provider": "sandbox_container"
+        },
+        {
+            "capability_id": "web.retrieve",
+            "class": "tool",
+            "name": "Web Retrieve",
+            "description": "Retrieve full page content for source inspection.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "network.read"
+            ],
+            "required_resources": [
+                "internet_fetch"
+            ],
+            "execution_method": "chat_web_fetch_html",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/conversation_intelligence.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "retrieved_content_hash",
+            "timeout_sec": 8,
+            "provider": "php_http_fetch"
+        },
+        {
+            "capability_id": "web.search",
+            "class": "tool",
+            "name": "Web Search",
+            "description": "Search the public web for fresh candidate sources.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "network.read"
+            ],
+            "required_resources": [
+                "internet_search"
+            ],
+            "execution_method": "chat_web_search_query_with_status",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/conversation_intelligence.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "result_count_and_retrieval_flags",
+            "timeout_sec": 10,
+            "provider": "duckduckgo+rss"
+        },
+        {
+            "capability_id": "web.verify_source",
+            "class": "tool",
+            "name": "Web Source Verification",
+            "description": "Verify that a source was actually retrieved and is suitable to cite.",
+            "enabled": true,
+            "risk_level": "LOW",
+            "requires_confirmation": false,
+            "required_permissions": [
+                "network.read"
+            ],
+            "required_resources": [
+                "internet_fetch"
+            ],
+            "execution_method": "chat_claim_provenance_summary",
+            "execution_method_defined": true,
+            "execution_method_defined_in": "lib/chat/execution_foundation.php",
+            "has_executor_branch": true,
+            "advertised_to_model": true,
+            "verification_method": "source_content_hash_and_metadata",
+            "timeout_sec": 8,
+            "provider": "verification_pipeline"
+        }
+    ]
+}

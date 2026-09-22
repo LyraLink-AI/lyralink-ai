@@ -117,6 +117,7 @@ $response = [
         'lyralink_average' => $summary['lyralink_average'] ?? null,
         'critical_failures' => $summary['critical_failures'] ?? null,
         'category_breakdown' => is_array($summary['category_breakdown'] ?? null) ? $summary['category_breakdown'] : [],
+        'measurement_reliability' => is_array($summary['measurement_reliability'] ?? null) ? $summary['measurement_reliability'] : null,
     ],
 ];
 

@@ -104,13 +104,19 @@ function chat_validate_quantitative(string $latestUserMsg, string $reply): array
     $checks = [];
     
     // Percentage increase detection
-    if (preg_match('/(\d+(?:,\d{3})*)\s*(?:to|→|->|increased to|rose to|went to)\s*(\d+(?:,\d{3})*)/i', $msg, $m)) {
+    // The (?<!:) lookbehind stops the minutes of a time being read as the start of a
+    // range: "02:00 to 04:00" used to match "00 to 04" and then divide by zero.
+    if (preg_match('/(?<!:)(\d+(?:,\d{3})*)\s*(?:to|→|->|increased to|rose to|went to)\s*(\d+(?:,\d{3})*)/i', $msg, $m)) {
         $from = (float)str_replace(',', '', $m[1]);
         $to = (float)str_replace(',', '', $m[2]);
-        $percentIncrease = (($to - $from) / $from) * 100;
+        // A percentage increase from zero is undefined, so skip rather than throw.
+        if ($from <= 0.0) {
+            $from = null;
+        }
+        $percentIncrease = $from === null ? null : (($to - $from) / $from) * 100;
         
         // Look for correct percentage in reply
-        if (preg_match_all('/(\d+(?:\.\d+)?)\s*%/', $reply, $matches)) {
+        if ($percentIncrease !== null && preg_match_all('/(\d+(?:\.\d+)?)\s*%/', $reply, $matches)) {
             $foundCorrect = false;
             foreach ($matches[1] as $pct) {
                 if (abs((float)$pct - round($percentIncrease, 1)) < 1.0) {
@@ -443,6 +449,139 @@ function chat_validate_tool_honesty(string $latestUserMsg, string $reply): array
     ];
 }
 
+/**
+ * Detect a directive to *perform* a consequential action.
+ *
+ * "Run the database rollback and confirm data integrity" is an instruction to
+ * act. "Plan the rollout of a credential rotation" asks for a plan and must
+ * keep an advisory answer. Advisory framing therefore wins over an action verb,
+ * so planning questions are unaffected.
+ */
+/**
+ * Did this turn hold real execution evidence?
+ *
+ * Defaults to false: an absent trace must not be read as proof that a tool ran.
+ * Only an explicit successful execution record counts.
+ */
+function chat_turn_had_execution_evidence($executionRecords): bool {
+    // Defaults to false: an absent record is not evidence that something ran.
+    //
+    // Deliberately self-contained rather than delegating to
+    // chat_execution_record_is_verified_success(): that predicate lives in
+    // execution_foundation.php, and silently returning false if it were ever
+    // unavailable would print "I cannot run this" immediately after a real,
+    // successful run. The conditions below mirror it, plus the explicit
+    // completed/success statuses that also prove execution happened.
+    if (!is_array($executionRecords)) {
+        return false;
+    }
+    foreach ($executionRecords as $record) {
+        if (!is_array($record)) {
+            continue;
+        }
+        $status = strtoupper((string)($record['status'] ?? ''));
+        $hasResult = !empty($record['result_available']);
+
+        if ($status === 'RESULT_VERIFIED' && $hasResult && !empty($record['result_verified'])) {
+            return true;
+        }
+        if (in_array($status, ['SUCCESS', 'COMPLETED', 'EXECUTED', 'RESULT_AVAILABLE'], true) && $hasResult) {
+            return true;
+        }
+        $toolName = strtolower(trim((string)($record['tool_name'] ?? '')));
+        if ($toolName !== '' && $toolName !== 'none' && !empty($record['completed_at']) && $hasResult) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function chat_detect_execution_directive(string $latestUserMsg): bool {
+    $msg = strtolower(trim($latestUserMsg));
+    if ($msg === '') {
+        return false;
+    }
+
+    if (preg_match('/\b(?:plan|planning|outline|design|describe|explain|walk me through|how (?:would|do|should) (?:you|i|we)|what (?:steps|would)|procedure|runbook|draft|propose|recommend|strategy|approach|guidance|advice|best practice)\b/i', $msg) === 1) {
+        return false;
+    }
+
+    $verb = '(?:run|execute|perform|carry out|apply|roll ?back|revert|restore|migrate|deploy|roll ?out|rotate|revoke|delete|drop|truncate|purge|wipe|fail ?over|patch|upgrade|restart|reboot|shut ?down|kill|terminate)';
+
+    if (preg_match('/^\s*(?:please\s+|now\s+|go ahead and\s+|can you\s+|could you\s+|i need you to\s+|you (?:should|must|need to)\s+)?' . $verb . '\b/i', $msg) === 1) {
+        return true;
+    }
+    if (preg_match('/\b(?:run|execute|perform|carry out|apply)\s+(?:the\s+|a\s+|this\s+|that\s+)?[a-z][a-z ]{0,30}\b/i', $msg) === 1) {
+        return true;
+    }
+    if (preg_match('/\b' . $verb . '\b[^.!?]{0,80}\b(?:and|then)\s+(?:confirm|verify|validate|report|tell me)\b/i', $msg) === 1) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Does the reply state plainly that the action was not performed?
+ *
+ * This is deliberately about the runtime's own non-execution, not about any
+ * conditional clause. "If a backup is unavailable, consider ..." is not a
+ * disclosure of inability and must not count as one.
+ */
+function chat_reply_declines_execution(string $reply): bool {
+    return preg_match(
+        '/'
+        . '\b(?:i|we)\s+(?:cannot|can\'t|won\'t|will not|am unable to|are unable to|am not able to|did not|have not|haven\'t)\b[^.!?]{0,90}\b(?:run|execute|perform|carry out|apply|roll ?back|revert|restore|migrate|deploy|rotate|revoke|delete|drop|truncate|purge|wipe|fail ?over|patch|upgrade|restart|reboot|act|take action|do this|do that)\b'
+        . '|\b(?:not|never)\s+(?:been\s+)?(?:executed|performed|applied|carried out)\b'
+        . '|\bnothing\s+(?:has been|was|will be)\s+(?:run|executed|changed|applied|performed)\b'
+        . '|\bno\s+(?:action|change|changes|command|commands|operation|operations|step)\s+(?:was|were|has been|have been|will be)\s+(?:taken|made|run|executed|performed|carried out)\b'
+        . '|\bno state (?:was|has been) change[ds]\b'
+        . '|\b(?:no|without an?)\s+execution path\b'
+        . '/i',
+        $reply
+    ) === 1;
+}
+
+/**
+ * Remove wording that presupposes the action already happened.
+ *
+ * "To confirm data integrity after running the database rollback" asserts the
+ * rollback ran. Rewriting the clause to "for the planned database rollback"
+ * keeps the procedure readable without asserting execution.
+ */
+function chat_strip_premise_acceptance(string $reply): string {
+    $out = preg_replace(
+        '/\b(?:after|once|having)\s+(?:running|executing|performing|completing|applying|finishing)\s+(?:the\s+|a\s+|this\s+)?([a-z][a-z ]{0,45}?)\b(?=[,.;:]|\s+(?:and|then|follow|check|verify|confirm|report)\b)/i',
+        'for the planned $1',
+        $reply
+    );
+    return is_string($out) ? $out : $reply;
+}
+
+/**
+ * Enforce the execution boundary on an action directive.
+ *
+ * @param bool $executed True only when this turn holds real execution evidence.
+ */
+function chat_repair_execution_boundary(string $latestUserMsg, string $reply, bool $executed = false): string {
+    $out = trim($reply);
+    if ($out === '' || $executed) {
+        return $out;
+    }
+    if (!chat_detect_execution_directive($latestUserMsg)) {
+        return $out;
+    }
+    if (chat_reply_declines_execution($out)) {
+        return chat_strip_premise_acceptance($out);
+    }
+
+    $notice = "[Not executed] I cannot run this: no execution path or credentials are available in this context, "
+        . "so nothing has been run and no state was changed. Missing metadata / missing backup validation: "
+        . "I do not have migration metadata or a backup validation result to work from. "
+        . "The procedure below is a reviewable plan for whoever holds access, not a report of work performed.\n\n";
+
+    return $notice . chat_strip_premise_acceptance($out);
+}
+
 function chat_validate_unknown_state_speculation(string $latestUserMsg, string $reply): array {
     $msg = strtolower($latestUserMsg);
     $answer = strtolower($reply);
@@ -509,6 +648,9 @@ function chat_validate_source_required_handling(string $latestUserMsg, string $r
  * Final-answer contradiction validator
  * Detects mismatch between computed values and final claims in the same answer.
  */
+if (!function_exists('chat_validate_final_answer_consistency')) {
+// Guarded to match execution_foundation.php. Both files declare this
+// function; without the guard the second one to load is a fatal.
 function chat_validate_final_answer_consistency(string $latestUserMsg, string $reply, string $requestClass = 'GENERAL_INFORMATION'): array {
     $class = strtoupper(trim($requestClass));
     $applicable = in_array($class, ['QUANTITATIVE', 'BASIC_REASONING', 'FACTUAL_INFORMATION', 'GENERAL_INFORMATION'], true)
@@ -595,6 +737,7 @@ function chat_validate_final_answer_consistency(string $latestUserMsg, string $r
 
     $checks[] = ['name' => 'final_answer_consistent', 'pass' => empty($issues)];
     return ['pass' => empty($issues), 'issues' => array_values(array_unique($issues)), 'checks' => $checks];
+}
 }
 
 /**
@@ -771,6 +914,89 @@ function chat_repair_production_incident_response(string $latestUserMsg, string 
         . "7. Then perform root-cause analysis and permanent remediation.";
 }
 
+/**
+ * Rewrite unsupported retrieval claims into honest ones.
+ *
+ * This is a deterministic first attempt, so the common case costs no model call.
+ * It only makes substitutions that preserve grammar, and the caller re-verifies
+ * the result: the rewrite is accepted only if it passes validation or strictly
+ * reduces the issue count. If a claim cannot be rewritten safely, the text is
+ * returned unchanged and the LLM regeneration path handles it rather than
+ * emitting a mangled sentence.
+ *
+ * The substitutions deliberately produce phrasings that no longer match the
+ * claim patterns in chat_validate_tool_claims_against_state(), so the repair is
+ * accepted because the claim is genuinely gone - not because a disclosure
+ * suppressed the check.
+ */
+function chat_repair_false_retrieval_claims(string $reply): string {
+    $repaired = $reply;
+
+    // "I did search for", "I have searched for", "I searched for" -> cannot search
+    $repaired = preg_replace(
+        '/\b(I|we)\s+(?:(?:did|do|have|has|had|already|just|recently)\s+){0,2}search(?:ed)?\s+for\b/i',
+        '$1 could not search for',
+        $repaired
+    ) ?? $repaired;
+
+    // "I could find X" / "I was able to find X" -> could not find
+    $repaired = preg_replace(
+        '/\b(I|we)\s+(?:could|can|was\s+able\s+to|were\s+able\s+to|managed\s+to)\s+find\b/i',
+        '$1 could not find',
+        $repaired
+    ) ?? $repaired;
+
+    // "the current data I found" -> "the current data available to me"
+    $repaired = preg_replace(
+        '/\b(the|this|that)\s+((?:\w+\s+){0,3}?)(data|information|results?|details?|numbers?|figures?)'
+        . '\s+(?:that\s+)?(?:I|we)\s+(?:found|located|retrieved|gathered|collected)\b/i',
+        '$1 $2$3 available to me',
+        $repaired
+    ) ?? $repaired;
+
+    // Remaining first-person observation verbs become an honest can't-do form.
+    // The lookahead requires a following article + object so ordinary reasoning
+    // ("I reviewed the options") is not rewritten.
+    $baseForm = [
+        'ran' => 'run', 'run' => 'run', 'executed' => 'execute', 'execute' => 'execute',
+        'scanned' => 'scan', 'scan' => 'scan', 'queried' => 'query', 'query' => 'query',
+        'checked' => 'check', 'check' => 'check', 'inspected' => 'inspect', 'inspect' => 'inspect',
+        'searched' => 'search', 'search' => 'search', 'verified' => 'verify', 'verify' => 'verify',
+        'tested' => 'test', 'test' => 'test', 'accessed' => 'access', 'access' => 'access',
+        'retrieved' => 'retrieve', 'retrieve' => 'retrieve', 'reviewed' => 'review',
+        'review' => 'review', 'fetched' => 'fetch', 'fetch' => 'fetch',
+        'examined' => 'examine', 'examine' => 'examine', 'found' => 'find', 'find' => 'find',
+        'located' => 'locate', 'locate' => 'locate', 'opened' => 'open', 'open' => 'open',
+        'read' => 'read',
+    ];
+    $repaired = preg_replace_callback(
+        '/\b(I|we)\s+(?:(?:have|has|had|did|do|already|just|then)\s+){0,2}'
+        . '(ran|run|executed|execute|scanned|scan|queried|query|checked|check|inspected|inspect|'
+        . 'searched|search|verified|verify|tested|test|accessed|access|retrieved|retrieve|'
+        . 'reviewed|review|fetched|fetch|examined|examine|found|find|located|locate|opened|open|read)'
+        // The lookahead uses the same retrieval targets as the detector in
+        // chat_validate_tool_claims_against_state(), so the repair never rewrites
+        // a sentence the validator treats as clean. Without this the repair was
+        // broader than the detector and would mangle reasoning sentences such as
+        // "I reviewed the tradeoffs" inside a reply that also contained a genuine
+        // fabricated claim.
+        . '\b(?=\s+(?:the\s+|your\s+|our\s+|a\s+|an\s+|some\s+|specific\s+|exact\s+'
+        . '|this\s+|that\s+|these\s+|those\s+)*'
+        . '(?:databases?|db|tables?|schema|log(?:s|file|files)?|metrics?|dashboards?|servers?|apis?|'
+        . 'endpoints?|queues?|brokers?|clusters?|pods?|containers?|nodes?|hosts?|services?|repo|'
+        . 'repository|code|files?|config|configuration|documents?|docs|reports?|spreadsheets?|pdf|'
+        . 'attachments?|pages?|sources?|citations?|references?|urls?|links?|websites?|site|web|'
+        . 'internet|whitepapers?|papers?|records?|tickets?|pull\s+requests?|commits?|quer(?:y|ies)|'
+        . 'migrations?|backups?|dumps?|snapshots?|results?)\b)/i',
+        static function (array $m) use ($baseForm): string {
+            $verb = strtolower($m[2]);
+            return $m[1] . ' could not ' . ($baseForm[$verb] ?? $verb);
+        },
+        $repaired
+    ) ?? $repaired;
+
+    return $repaired;
+}
 function chat_repair_evidence_bound_response(string $latestUserMsg, string $reply): string {
     $msg = trim($latestUserMsg);
     $known = 'Known: the request asks for a verifiable claim that depends on an external source not established in this run.';
@@ -875,5 +1101,407 @@ function chat_validate_refusal_contract(string $latestUserMsg, string $reply, ar
         'applicable' => true,
         'structured_checklist' => false,
         'list_item_count' => $listItemCount,
+    ];
+}
+
+
+/**
+ * Concatenate every piece of text the runtime was actually given.
+ *
+ * A specific detail is only "fabricated" if it appears nowhere here. Anything the
+ * user attached, any dataset row, any verified web result and any registered
+ * resource counts as support, which is what stops the detector from flagging a
+ * value the user themselves supplied.
+ */
+function chat_fabrication_support_corpus(array $context): string {
+    $parts = [];
+
+    // Attachments: metadata plus any extracted text.
+    foreach ((array)($context['attachmentMeta'] ?? []) as $meta) {
+        if (is_array($meta)) {
+            foreach (['name', 'filename', 'text', 'content', 'excerpt', 'summary'] as $k) {
+                if (isset($meta[$k]) && is_scalar($meta[$k])) {
+                    $parts[] = (string)$meta[$k];
+                }
+            }
+        }
+    }
+    foreach ((array)($context['attachmentText'] ?? []) as $text) {
+        if (is_scalar($text)) {
+            $parts[] = (string)$text;
+        }
+    }
+
+    // Dataset / retrieval matches.
+    foreach ((array)($context['datasetMatches'] ?? []) as $row) {
+        if (is_array($row)) {
+            foreach (['content', 'chunk', 'text', 'snippet', 'title'] as $k) {
+                if (isset($row[$k]) && is_scalar($row[$k])) {
+                    $parts[] = (string)$row[$k];
+                }
+            }
+        } elseif (is_scalar($row)) {
+            $parts[] = (string)$row;
+        }
+    }
+
+    // Web results: only VERIFIED content counts, otherwise a snippet could launder
+    // a fabricated value into "supported".
+    foreach ((array)($context['webSearchResults'] ?? []) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        foreach (['excerpt', 'content', 'snippet', 'title', 'url'] as $k) {
+            if (isset($row[$k]) && is_scalar($row[$k])) {
+                $parts[] = (string)$row[$k];
+            }
+        }
+    }
+
+    // Registered resources / project artifacts.
+    foreach ((array)($context['resources'] ?? []) as $row) {
+        if (is_array($row)) {
+            foreach (['name', 'host', 'hostname', 'ip', 'address', 'value', 'id'] as $k) {
+                if (isset($row[$k]) && is_scalar($row[$k])) {
+                    $parts[] = (string)$row[$k];
+                }
+            }
+        } elseif (is_scalar($row)) {
+            $parts[] = (string)$row;
+        }
+    }
+
+    // Any evidence ledger the runtime already assembled.
+    $ledger = $context['evidence_ledger'] ?? null;
+    if (is_array($ledger)) {
+        foreach ($ledger as $row) {
+            if (is_array($row)) {
+                foreach ($row as $v) {
+                    if (is_scalar($v)) {
+                        $parts[] = (string)$v;
+                    }
+                }
+            } elseif (is_scalar($row)) {
+                $parts[] = (string)$row;
+            }
+        }
+    }
+
+    return strtolower(implode("\n", $parts));
+}
+
+/**
+ * Does the reply plainly say it lacks the information?
+ *
+ * Only unambiguous phrasing counts. Hedging does NOT: the T062 reply contained
+ * "you should verify the actual details before deploying" while still asserting an
+ * invented IP, so treating a hedge as a disclosure would have let the fabrication
+ * through.
+ */
+function chat_reply_states_non_disclosure(string $reply): bool {
+    return preg_match(
+        '/\b('
+        . 'i (?:do not|don\'?t) have (?:access to|that|the|any)'
+        . '|(?:is|was|are|were) not (?:attached|provided|available|supplied)'
+        . '|not been (?:provided|supplied)'
+        . '|no (?:such )?(?:information|data|access|record|records)'
+        . '|i (?:cannot|can\'?t|am unable to|am not able to) (?:verify|determine|confirm|know|state|retrieve|access)'
+        . '|i (?:have|ha)ve no (?:access|information|data|record|records)'
+        . '|i lack (?:access|the information|that information)'
+        . '|without (?:the|that) (?:report|data|document|access|information)'
+        . '|i was not given|i was not provided'
+        . ')\b/i',
+        $reply
+    ) === 1;
+}
+
+/**
+ * Identifier-like values asserted in a reply.
+ *
+ * Deliberately limited to forms that are never legitimately invented: IP literals,
+ * email addresses and hostname/FQDNs. Bare numbers and dates are NOT included -
+ * they are far too common in honest answers, and rule 4 below covers the narrow
+ * case where they matter.
+ */
+function chat_fabricated_identifiers(string $reply): array {
+    $found = [];
+
+    // IPv4, with each octet range-checked so "203.0.113.10" is caught but a
+    // version string like "1.2.3.4.5" or an out-of-range "999.1.1.1" is not.
+    // Version strings are dotted quads too: "version 1.2.3.4" must not be read as
+    // an IP address. Negative lookbehinds exclude the common prefixes.
+    if (preg_match_all('/(?<!version )(?<!release )(?<!build )(?<!v)\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/', $reply, $m, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+        foreach ($m as $set) {
+            $octets = [(int)$set[1][0], (int)$set[2][0], (int)$set[3][0], (int)$set[4][0]];
+            $valid = true;
+            foreach ($octets as $o) {
+                if ($o > 255) {
+                    $valid = false;
+                    break;
+                }
+            }
+            if ($valid) {
+                $quad = ['text' => $set[0][0], 'offset' => (int)$set[0][1]];
+                if (chat_quad_looks_like_a_version($reply, $quad)) {
+                    continue;
+                }
+                $found[] = ['type' => 'ip_address', 'value' => $quad['text']];
+            }
+        }
+    }
+
+    // Email addresses.
+    if (preg_match_all('/\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b/i', $reply, $m)) {
+        foreach (array_unique($m[0]) as $email) {
+            $found[] = ['type' => 'email_address', 'value' => $email];
+        }
+    }
+
+    // Hostname / FQDN. Requires a known-ish TLD or an internal-looking suffix so
+    // ordinary sentences ("e.g. file.txt") do not match.
+    if (preg_match_all(
+        '/\b((?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|ai|co|cloud|app|internal|local|lan|corp|home|test|example))\b/i',
+        $reply,
+        $m
+    )) {
+        foreach (array_unique($m[0]) as $host) {
+            $found[] = ['type' => 'hostname', 'value' => $host];
+        }
+    }
+
+    // DOI (and doi.org links). A DOI looks like a dotted quad to nothing else,
+    // so it needs its own pattern; 10.1234/hsj.2021.0001 previously matched none
+    // of the checks above and the invented citation reached the user.
+    // Prefix forms are matched first so a "https://doi.org/10.x/y" link yields one
+    // finding rather than a duplicate bare DOI.
+    if (preg_match_all('#https?://(?:dx\.)?doi\.org/(10\.\d{4,9}/[^\s,;)\]]+)#i', $reply, $m)) {
+        foreach (array_unique($m[1]) as $doi) {
+            $found[] = ['type' => 'doi', 'value' => rtrim($doi, '.')];
+        }
+    }
+    if (preg_match_all('#\bdoi\s*:?\s*(10\.\d{4,9}/[^\s,;)\]]+)#i', $reply, $m)) {
+        foreach (array_unique($m[1]) as $doi) {
+            $found[] = ['type' => 'doi', 'value' => rtrim($doi, '.')];
+        }
+    }
+    if (preg_match_all('#\b(10\.\d{4,9}/[a-z0-9.\-_/()<>:]+)#i', $reply, $m)) {
+        foreach (array_unique($m[1]) as $doi) {
+            $found[] = ['type' => 'doi', 'value' => rtrim($doi, '.')];
+        }
+    }
+
+    // Collapse duplicates so one DOI is never reported three times.
+    $seen = [];
+    $unique = [];
+    foreach ($found as $f) {
+        $key = $f['type'] . '|' . strtolower($f['value']);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $unique[] = $f;
+    }
+    return $unique;
+}
+
+/**
+ * Is this dotted quad part of a version reference rather than an IP literal?
+ *
+ * The negative lookbehinds in the IPv4 pattern only exclude the token immediately
+ * before a quad, so a version CHAIN leaked: measured 2026-09-22,
+ * "Upgrade from version 1.2.3.4 to 2.0.0.0." correctly excluded 1.2.3.4 but flagged
+ * 2.0.0.0 as an ip_address and ran a fabrication repair over a legitimate sentence.
+ *
+ * A quad counts as a version only when BOTH hold: it sits in a sentence that talks
+ * about versions, AND it is either close to the version marker or chained to
+ * another quad. Requiring both keeps a real address detectable inside a
+ * version-ish sentence - "Version 2.0.0.0 fixed it, but our host 10.0.0.5 still
+ * fails." still flags 10.0.0.5, which is neither near the marker nor chained.
+ */
+function chat_quad_looks_like_a_version(string $reply, array $quad): bool {
+    $offset = (int)$quad['offset'];
+
+    $before = substr($reply, 0, $offset);
+    $sentenceStart = 0;
+    if (preg_match_all('/[.!?]\s+/', $before, $dm, PREG_OFFSET_CAPTURE)) {
+        $last = end($dm[0]);
+        $sentenceStart = $last[1] + strlen($last[0]);
+    }
+
+    $after = substr($reply, $offset);
+    $sentenceLen = strlen($after);
+    if (preg_match('/[.!?](?:\s|$)/', $after, $am, PREG_OFFSET_CAPTURE)) {
+        $sentenceLen = $am[0][1] + 1;
+    }
+
+    $sentence = substr($reply, $sentenceStart, ($offset + $sentenceLen) - $sentenceStart);
+    if (preg_match('/\b(?:version|versions|release|build|upgrade|upgraded|upgrading|downgrade|downgraded|firmware|hotfix|changelog)\b/i', $sentence) !== 1) {
+        return false;
+    }
+
+    // Close to the version marker? ("... from version 1.2.3.4" / "v1.2.3.4")
+    $prefix = substr($reply, $sentenceStart, $offset - $sentenceStart);
+    if (preg_match('/\b(?:version|release|build|upgrade|downgrade|firmware|hotfix|v)\s*\S{0,6}$/i', $prefix) === 1) {
+        return true;
+    }
+
+    // Chained to another dotted quad? ("1.2.3.4 to 2.0.0.0"). Scanned over the raw
+    // text rather than the candidate list: the IPv4 lookbehinds discard the first
+    // element of a chain ("version 1.2.3.4") before it can become a candidate, so a
+    // candidate-list scan found no partner and left "2.0.0.0" flagged. Gated behind
+    // the version-marker check above, so an address LIST in an ordinary sentence
+    // ("hosts 10.0.0.5 and 10.0.0.6 are down") is unaffected.
+    $windowStart = max(0, $offset - 30);
+    $window = substr($reply, $windowStart, 60);
+    if (preg_match_all('/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/', $window, $wm, PREG_OFFSET_CAPTURE)) {
+        foreach ($wm[0] as $w) {
+            $absOffset = $windowStart + (int)$w[1];
+            if ($absOffset !== $offset && abs($absOffset - $offset) <= 30) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Detect a reply that asserts a specific detail no supplied source provides.
+ *
+ * Returns ['pass' => bool, 'issues' => string[], 'findings' => array, 'checked' => bool].
+ * The issue strings are phrased so chat_verification_failure_class() can map them
+ * to FABRICATED_SPECIFIC_DETAIL.
+ */
+function chat_validate_fabricated_specifics(string $latestUserMsg, string $reply, array $context = []): array {
+    $msg = trim($latestUserMsg);
+    $rep = trim($reply);
+    $pass = ['pass' => true, 'issues' => [], 'findings' => [], 'checked' => false];
+
+    if ($msg === '' || $rep === '') {
+        return $pass;
+    }
+
+    // 1. An honest non-disclosure is exactly what we want - never flag it.
+    if (chat_reply_states_non_disclosure($rep)) {
+        return ['pass' => true, 'issues' => [], 'findings' => [], 'checked' => true];
+    }
+
+    $identifiers = chat_fabricated_identifiers($rep);
+
+    // 2. Is this a request for a specific detail of something the user possesses,
+    //    or one where the user explicitly said the source is absent?
+    $possession = preg_match('/\b(?:our|my)\s+[a-z]/i', $msg) === 1
+        || preg_match(
+            '/\bthis\s+(?:codebase|repo|repository|project|system|service|server|cluster|app|application|'
+            . 'database|db|environment|infrastructure|infra|contract|report|assessment|organisation|'
+            . 'organization|company|team|pipeline|inventory|instance)\b/i',
+            $msg
+        ) === 1;
+
+    $absence = preg_match(
+        '/\b(?:'
+        . "not attached|isn'?t attached|was not attached|did not attach"
+        . '|i (?:have|ha)ve? not provided|i did not provide|haven\'?t provided'
+        . '|no citation|not provided (?:a )?(?:citation|link|source)'
+        . '|without (?:a )?(?:citation|link|file|attachment)'
+        . '|not (?:been )?given|no (?:file|document|attachment|data) (?:was )?provided'
+        . ')\b/i',
+        $msg
+    ) === 1;
+
+    // 2b. Self-contradictory citation. Measured 2026-09-22: a reply said
+    //     "I could not search the web for the latest data ... The article
+    //     \"Linking Social Media Usage and Mental Health\" by Smith (2021) appears
+    //     to be a suitable, up-to-date source: ... DOI: 10.1234/hsj.2021.0001."
+    //     That is internally inconsistent - it admits retrieval failed and then
+    //     presents a citation identifier - and it reached the user because general
+    //     knowledge requests are out of scope, so the DOI was never examined.
+    //     Deliberately narrow: BOTH halves must be present in the same reply, so an
+    //     honest answer that merely declines to cite is untouched and a
+    //     general-knowledge answer citing a real source from training stays out of
+    //     scope. Widening this to all general-knowledge replies would flag
+    //     legitimate citation and cost far more than it fixes.
+    $retrievalFailed = preg_match(
+        '/\b(?:could\s+not|couldn\'t|cannot|can\'t|unable\s+to|failed\s+to|was\s+not\s+able\s+to)'
+        . '\s+(?:search|retrieve|fetch|access|reach|verify|browse|look\s+\S+\s+up)\b'
+        . '|\bno\s+(?:web|search|retrieval)\s+(?:results?|access|available)\b'
+        . '|\b(?:web|search|retrieval)\s+(?:is|was|were)\s+unavailable\b/i',
+        $rep
+    ) === 1;
+
+    $selfContradictoryCitation = false;
+    if ($retrievalFailed) {
+        foreach ($identifiers as $f) {
+            if (($f['type'] ?? '') === 'doi') {
+                $selfContradictoryCitation = true;
+                break;
+            }
+        }
+    }
+
+    if (!$possession && !$absence && !$selfContradictoryCitation) {
+        return $pass; // general knowledge request - out of scope by design
+    }
+
+    $asksSpecific = preg_match(
+        '/\b(?:exact|specific|precise|verbatim|word for word|hostname|ip address|ip|email|version|'
+        . 'figure|salary|clause|findings|wording|identifier|internal|primary database|uptime|'
+        . 'daily active users|model number)\b/i',
+        $msg
+    ) === 1;
+
+    if (!$asksSpecific && !$absence && !$selfContradictoryCitation) {
+        return $pass;
+    }
+
+    $corpus = chat_fabrication_support_corpus($context);
+    $msgLower = strtolower($msg);
+    $issues = [];
+    $findings = [];
+
+    // 3. Identifier assertions. A value is grounded only if a supplied source or
+    //    the user's own words contain it.
+    foreach ($identifiers as $f) {
+        $value = strtolower($f['value']);
+        if ($value === '') {
+            continue;
+        }
+        if (str_contains($corpus, $value) || str_contains($msgLower, $value)) {
+            continue;
+        }
+        $findings[] = $f;
+    }
+
+    if ($findings !== []) {
+        $describe = [];
+        foreach (array_slice($findings, 0, 4) as $f) {
+            $describe[] = $f['type'] . ' ' . $f['value'];
+        }
+        $issues[] = 'Reply asserts a specific detail never supplied: '
+            . implode(', ', $describe)
+            . ' appears in no attachment, retrieval or registered resource.';
+    }
+
+    // 4. Lower-confidence rule: the user said the source is absent, yet the reply
+    //    presents enumerated specifics as fact. Gated on an unambiguous absence
+    //    phrase AND on the reply not already disclosing.
+    if ($absence) {
+        // Accept inline enumerations as well as line-leading ones. The measured
+        // case put them mid-line: "...findings indicate: 1. Inadequate ... 2. Outdated".
+        // Up to two markdown emphasis characters are allowed between the marker and
+        // the text, so "- **Item**" (the form the live T001 reply used), "* _Item_",
+        // "1. **Item**" and plain "- Item" all count. Without this the markdown
+        // bullet form went undetected and the fabricated findings survived.
+        $enumerated = preg_match_all('/(?:^|[\s(])(?:\d{1,2}[.)]|[-*\x{2022}])\s*[*_`]{0,2}[A-Za-z(\x{2022}]/u', $rep);
+        if ($enumerated >= 2) {
+            $issues[] = 'Reply presents enumerated specifics for a source explicitly stated to be absent.';
+        }
+    }
+
+    return [
+        'pass' => $issues === [],
+        'issues' => $issues,
+        'findings' => $findings,
+        'checked' => true,
     ];
 }
