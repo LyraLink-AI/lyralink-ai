@@ -52,7 +52,7 @@ RewriteRule ^chat/index\.php$ - [E=LYRA_WIDGET_EMBED:1]
 RewriteCond %{REQUEST_URI} !^/\.well-known/ [NC]
 RewriteRule (^|/)\.(?!well-known/) - [F,L]
 
-<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|composer\.phar|phpunit\.xml(\.dist)?|\.git|\.gitignore|\.gitattributes|\.htaccess|\.php-version|\.php-ini|.*\.(ini|log|sql|sqlite|bak|old|dist))$">
+<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|composer\.phar|phpunit\.xml(\.dist)?|\.git|\.gitignore|\.gitattributes|\.htaccess|\.php-version|\.php-ini|.*\.(ini|log|sql|sqlite|bak|old|dist)|.*\.backup\..*|.*\.php\.[0-9]+)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

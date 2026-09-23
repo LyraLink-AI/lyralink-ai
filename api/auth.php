@@ -1145,6 +1145,7 @@ if ($action === 'register') {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $verified = 0;
     $stmt = $db->prepare("INSERT INTO users (username, email, password, email_verified) VALUES (?, ?, ?, ?)");
+    if (!$stmt) { echo json_encode(['success' => false, 'error' => 'Service temporarily unavailable']); exit; }
     $stmt->bind_param('sssi', $username, $email, $hash, $verified);
 
     if ($stmt->execute()) {
@@ -1199,6 +1200,7 @@ if ($action === 'login') {
     }
 
     $stmt = $db->prepare("SELECT id, username, email, password, plan, email_verified, two_factor_enabled, two_factor_method, must_change_password FROM users WHERE email = ?");
+    if (!$stmt) { echo json_encode(['success' => false, 'error' => 'Service temporarily unavailable']); exit; }
     $stmt->bind_param('s', $email);
     $stmt->execute();
     $user = $stmt->get_result()->fetch_assoc();

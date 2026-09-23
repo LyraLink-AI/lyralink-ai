@@ -1075,7 +1075,7 @@ if ($action === 'admin_get_applications') {
     $allowed = ['pending', 'approved', 'rejected', 'all'];
     if (!in_array($status, $allowed, true)) $status = 'pending';
 
-    $where = $status === 'all' ? '1' : "status = '$status'";
+    $where = $status === 'all' ? '1' : "ra.status = '$status'";
     $rows = $db->query("SELECT ra.*, u.username FROM reseller_applications ra
         LEFT JOIN users u ON u.id = ra.user_id
         WHERE $where ORDER BY ra.created_at DESC LIMIT 100");

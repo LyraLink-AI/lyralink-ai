@@ -19,6 +19,32 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
     . '<path d="M16 2.6c1.5 0 2.9.4 4.1 1.1l7.2 4.2c2.2 1.3 3.6 3.7 3.6 6.3v6.6c0 2.6-1.4 5-3.6 6.3l-7.2 4.2c-1.2.7-2.6 1.1-4.1 1.1s-2.9-.4-4.1-1.1l-7.2-4.2C2.5 26.4 1.1 24 1.1 21.4v-6.6c0-2.6 1.4-5 3.6-6.3l7.2-4.2C13.1 3 14.5 2.6 16 2.6Z" fill="url(#lmg)"/>'
     . '<path d="M12.4 10.2h3.1v7.2h4.6v2.9h-7.7V10.2Z" fill="#fff" fill-opacity="0.95"/>'
     . '<circle cx="22.6" cy="11.9" r="2.1" fill="#fff" fill-opacity="0.72"/></svg>';
+
+/* Hero model labels - resolved from configuration, never hardcoded.
+ *
+ * This page previously displayed a fixed "Llama 3.3 70B". No host in this
+ * deployment serves that model: the largest resident model is 7B, and the
+ * inference GPU has 8GB of VRAM, which cannot hold a 70B model at any
+ * quantization. Advertising a model the product does not run is a launch
+ * credibility risk, and it directly contradicts a product whose stated
+ * thesis is verification.
+ *
+ * Everything below degrades to a neutral, always-true label. A landing page
+ * must never break over a display string.
+ */
+$lyraRouterLabel = 'Auto-routed';
+$lyraModelLabel  = 'Auto';
+try {
+    if (function_exists('api_get_secret')) {
+        $lyraLocalDefault = trim((string) (api_get_secret('LLM_MODEL') ?? ''));
+        if ($lyraLocalDefault !== '') {
+            $lyraModelLabel = preg_replace('/:latest$/', '', $lyraLocalDefault);
+        }
+    }
+} catch (Throwable $e) {
+    $lyraRouterLabel = 'Auto-routed';
+    $lyraModelLabel  = 'Auto';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,6 +60,14 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
     <meta property="og:url" content="https://lyralinkai.com/">
     <meta property="og:title" content="Lyralink | The AI operating system for real work">
     <meta property="og:description" content="More than a chatbot. An AI workspace that plans, researches, executes and verifies.">
+    <meta property="og:image" content="https://lyralinkai.com/assets/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Lyralink - the AI operating system for real work">
+    <meta property="og:site_name" content="Lyralink">
+    <meta name="twitter:image" content="https://lyralinkai.com/assets/og-image.png">
+    <meta name="twitter:title" content="Lyralink | The AI operating system for real work">
+    <meta name="twitter:description" content="More than a chatbot. An AI workspace that plans, researches, executes and verifies.">
     <meta name="twitter:card" content="summary_large_image">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/lyra-ui.css">
@@ -222,7 +256,7 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
 
             <div class="lp-app-main">
                 <div class="lp-app-bar">
-                    <span class="ly-badge">Llama 3.3 70B</span>
+                    <span class="ly-badge"><?php echo htmlspecialchars($lyraRouterLabel, ENT_QUOTES); ?></span>
                     <span><span class="ly-dot ly-dot-online"></span> Production</span>
                     <span class="ly-spacer"></span>
                     <span class="ly-badge ly-badge-primary">Task Mode</span>
@@ -267,7 +301,7 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
                     <div style="font-size:10.5px;color:var(--ly-text-4);margin-bottom:6px">Current Model</div>
                     <div class="ly-row" style="gap:8px">
                         <span class="ly-avatar ly-avatar-sm" style="background:var(--ly-grad)">L</span>
-                        <span style="font-size:11.5px">Llama 3.3 70B</span>
+                        <span style="font-size:11.5px"><?php echo htmlspecialchars($lyraModelLabel, ENT_QUOTES); ?></span>
                         <span class="ly-status ly-status-online" style="margin-left:auto;font-size:10.5px">Online</span>
                     </div>
                 </div>
@@ -367,12 +401,12 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
             <div>
                 <div class="ly-card">
                     <svg class="ly-ico" viewBox="0 0 24 24" fill="none" stroke="var(--ly-primary-text)" stroke-linecap="round" style="margin-bottom:10px"><path d="M7 7h4v4H7zM13 13h4v4h-4z"/><path d="M11 9h2v2M13 11v2"/></svg>
-                    <p class="lp-quote">&ldquo;Lyralink helps me get more done, without the constant back and forth.&rdquo;</p>
+                    <p class="lp-quote">MIT licensed and built in the open. Read the source, self-host it, and check the benchmarks yourself.</p>
                     <div class="ly-row ly-mt-5" style="gap:10px">
-                        <span class="ly-avatar ly-avatar-sm">AW</span>
+                        <span class="ly-avatar ly-avatar-sm">L</span>
                         <div>
-                            <div style="font-size:12.5px;font-weight:600">&mdash; Alex W.</div>
-                            <div style="font-size:11px;color:var(--ly-text-4)">Operator</div>
+                            <div style="font-size:12.5px;font-weight:600">&mdash; <a href="https://github.com/LyraLink-AI/lyralink-ai" target="_blank" rel="noopener noreferrer">LyraLink on GitHub</a></div>
+                            <div style="font-size:11px;color:var(--ly-text-4)">Open source &middot; MIT licensed</div>
                         </div>
                     </div>
                 </div>
@@ -382,6 +416,94 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
 </section>
 
 <!-- ══ FOOTER ══ -->
+<!-- ══ LAUNCH LIST ══ -->
+<section class="ly-section" id="launch-list" style="border-top:1px solid var(--ly-border)">
+    <div class="ly-wrap ly-center">
+        <div class="ly-card" style="max-width:620px;margin:0 auto">
+            <h2 style="font-size:21px;font-weight:700;letter-spacing:-.025em;margin-bottom:8px">Follow the build</h2>
+            <p style="font-size:13.5px;color:var(--ly-text-3);margin-bottom:16px">
+                Occasional engineering notes on orchestration, verification, and running models locally. No spam, and one click to leave.
+            </p>
+            <form id="lySubscribeForm" novalidate>
+                <div class="ly-row" style="gap:8px;flex-wrap:wrap">
+                    <label for="lySubEmail" style="position:absolute;left:-9999px">Email address</label>
+                    <input type="email" id="lySubEmail" name="email" required maxlength="254"
+                           placeholder="you@example.com" autocomplete="email"
+                           style="flex:1;min-width:220px;padding:10px 12px;border-radius:var(--ly-r-md);border:1px solid var(--ly-border);background:transparent;color:inherit;font-size:13.5px;font-family:inherit">
+                    <button type="submit" class="ly-btn ly-btn-primary">Subscribe</button>
+                </div>
+                <div style="position:absolute;left:-9999px" aria-hidden="true">
+                    <label for="lyra_hp">Leave this empty</label>
+                    <input type="text" id="lyra_hp" name="lyra_hp" tabindex="-1" autocomplete="off">
+                </div>
+                <div id="lySubMsg" role="status" aria-live="polite" style="font-size:12.5px;margin-top:10px;min-height:18px"></div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    var form = document.getElementById('lySubscribeForm');
+    if (!form) { return; }
+
+    var emailEl = document.getElementById('lySubEmail');
+    var hpEl    = document.getElementById('lyra_hp');
+    var msgEl   = document.getElementById('lySubMsg');
+    var btn     = form.querySelector('button[type="submit"]');
+
+    function say(text, isError) {
+        msgEl.textContent = text;
+        msgEl.style.color = isError ? '#f87171' : 'var(--ly-primary-text)';
+    }
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        say('', false);
+
+        var email = (emailEl.value || '').trim();
+        if (!email) {
+            say('Please enter an email address.', true);
+            return;
+        }
+
+        var body = new FormData();
+        body.append('action', 'subscribe');
+        body.append('email', email);
+        body.append('source', 'landing');
+        body.append('lyra_hp', hpEl ? hpEl.value : '');
+
+        btn.disabled = true;
+
+        fetch('/api/subscribe.php', {
+            method: 'POST',
+            body: body,
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(function (response) {
+            return response.json().catch(function () {
+                return { success: false, error: 'Unexpected response from the server.' };
+            });
+        })
+        .then(function (data) {
+            if (data && data.success) {
+                form.reset();
+                say('Thanks - you are on the list.', false);
+                btn.textContent = 'Subscribed';
+                return;
+            }
+            say((data && data.error) ? data.error : 'Could not subscribe right now.', true);
+            btn.disabled = false;
+        })
+        .catch(function () {
+            say('Could not subscribe right now.', true);
+            btn.disabled = false;
+        });
+    });
+})();
+</script>
+
 <footer style="border-top:1px solid var(--ly-border);margin-top:56px">
     <div class="ly-wrap" style="padding:36px 24px">
         <div class="ly-row-between" style="flex-wrap:wrap;gap:20px">
@@ -398,6 +520,8 @@ $lyraMark = '<svg class="ly-logo-mark" viewBox="0 0 32 32" fill="none" aria-hidd
                 <a href="/pages/status.php" class="ly-muted">Status</a>
                 <a href="/pages/careers.php" class="ly-muted">Careers</a>
                 <a href="/pages/support.php" class="ly-muted">Support</a>
+                <a href="/benchmark/" class="ly-muted">Benchmarks</a>
+                <a href="https://github.com/LyraLink-AI/lyralink-ai" class="ly-muted" target="_blank" rel="noopener noreferrer">Source</a>
             </div>
             <div style="font-size:11.5px;color:var(--ly-text-4)">&copy; <?php echo date('Y'); ?> Lyralink AI</div>
         </div>

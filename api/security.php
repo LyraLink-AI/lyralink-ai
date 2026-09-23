@@ -369,17 +369,42 @@ function api_require_secret(string $key): string {
 }
 
 function api_db_config(array $fallback = []): array {
-    $defaults = [
-        'host' => $fallback['host'] ?? 'localhost',
-        'user' => $fallback['user'] ?? 'app_user',
-        'pass' => $fallback['pass'] ?? '',
-        'name' => $fallback['name'] ?? 'aicloud',
+    // Callers historically passed ['user' => 'app_user', 'pass' => '', 'name' => 'aicloud'].
+    // Every one of those values is WRONG for this deployment (app_user does not
+    // exist, the schema is admin_). They were harmless only while .env was
+    // readable, because api_get_secret() overrode them. The moment .env became
+    // unreadable, the code silently attempted a PASSWORDLESS connection as a
+    // non-existent user and reported the misleading
+    //   "Access denied for user 'app_user'@'localhost' (using password: NO)"
+    // That exact sequence took the support WebSocket server down for days.
+    // Strip any placeholder before it can ever become a live connection target.
+    $placeholders = ['app_user', 'app_pass', 'aicloud', 'change_me', 'changeme', 'password'];
+
+    $clean = [];
+    foreach (['host', 'user', 'pass', 'name'] as $k) {
+        $v = $fallback[$k] ?? null;
+        if (is_string($v)) {
+            $t = strtolower(trim($v));
+            if ($t === '' || in_array($t, $placeholders, true)) {
+                $v = null; // never inherit a placeholder
+            }
+        }
+        $clean[$k] = $v;
+    }
+
+    $cfg = [
+        'host' => (string)api_get_secret('DB_HOST', $clean['host'] ?? 'localhost'),
+        'user' => (string)api_get_secret('DB_USER', $clean['user'] ?? ''),
+        'pass' => (string)api_get_secret('DB_PASS', $clean['pass'] ?? ''),
+        'name' => (string)api_get_secret('DB_NAME', $clean['name'] ?? 'admin_'),
     ];
 
-    return [
-        'host' => api_get_secret('DB_HOST', $defaults['host']),
-        'user' => api_get_secret('DB_USER', $defaults['user']),
-        'pass' => api_get_secret('DB_PASS', $defaults['pass']),
-        'name' => api_get_secret('DB_NAME', $defaults['name']),
-    ];
+    if ($cfg['user'] === '') {
+        // Loud and specific, so the log names the real problem instead of
+        // blaming a phantom account.
+        error_log('[lyra-db] DB_USER could not be resolved (.env missing or unreadable). '
+            . 'Refusing to attempt a passwordless connection as a placeholder user.');
+    }
+
+    return $cfg;
 }

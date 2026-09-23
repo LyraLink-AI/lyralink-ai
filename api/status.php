@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../api/session_boot.php';
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/lib/status/status_core.php';
 api_json_headers();
 header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -20,80 +21,6 @@ if (in_array($action, $sessionRequiredActions, true)) {
     if (session_status() !== PHP_SESSION_ACTIVE) {
         lyra_session_boot();
     }
-}
-
-function status_live_uptime_pct(string $status): float {
-    return match ($status) {
-        'major_outage'   => 25.00,
-        'partial_outage' => 72.50,
-        'degraded'       => 97.00,
-        'maintenance'    => 99.00,
-        default          => 100.00,
-    };
-}
-
-function status_sync_today_uptime(mysqli $db): void {
-    $today = date('Y-m-d');
-    $existing = [];
-    $todayEsc = $db->real_escape_string($today);
-    $current = $db->query("SELECT service_id, uptime_pct FROM status_uptime WHERE date = '{$todayEsc}'");
-    if ($current) {
-        while ($row = $current->fetch_assoc()) {
-            $existing[(int)($row['service_id'] ?? 0)] = (float)($row['uptime_pct'] ?? 100.00);
-        }
-    }
-
-    $rows = $db->query("SELECT id, status FROM status_services ORDER BY id ASC");
-    if (!$rows) {
-        return;
-    }
-    $stmt = $db->prepare("INSERT INTO status_uptime (service_id, date, uptime_pct) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE uptime_pct = VALUES(uptime_pct)");
-    if (!$stmt) {
-        return;
-    }
-    while ($row = $rows->fetch_assoc()) {
-        $serviceId = (int)($row['id'] ?? 0);
-        $livePct = status_live_uptime_pct((string)($row['status'] ?? 'operational'));
-        $pct = array_key_exists($serviceId, $existing)
-            ? min($existing[$serviceId], $livePct)
-            : $livePct;
-        $stmt->bind_param('isd', $serviceId, $today, $pct);
-        $stmt->execute();
-    }
-    $stmt->close();
-}
-
-function status_backfill_uptime_history(mysqli $db, int $days = 90): void {
-    $days = max(1, min($days, 365));
-    $rows = $db->query("SELECT id, status FROM status_services ORDER BY id ASC");
-    if (!$rows) {
-        return;
-    }
-    $services = [];
-    while ($row = $rows->fetch_assoc()) {
-        $services[] = [
-            'id' => (int)($row['id'] ?? 0),
-            'status' => (string)($row['status'] ?? 'operational'),
-        ];
-    }
-    if (!$services) {
-        return;
-    }
-
-    $stmt = $db->prepare("INSERT IGNORE INTO status_uptime (service_id, date, uptime_pct) VALUES (?, ?, ?)");
-    if (!$stmt) {
-        return;
-    }
-    for ($i = $days - 1; $i >= 0; $i--) {
-        $date = date('Y-m-d', strtotime("-{$i} days"));
-        foreach ($services as $svc) {
-            $pct = $i === 0 ? status_live_uptime_pct($svc['status']) : 100.00;
-            $serviceId = (int)$svc['id'];
-            $stmt->bind_param('isd', $serviceId, $date, $pct);
-            $stmt->execute();
-        }
-    }
-    $stmt->close();
 }
 
 function status_is_outage(string $status): bool {
@@ -356,17 +283,10 @@ if ($svcCount === 0) {
     $idRes = $idRes->get_result();
     $ids = [];
     if ($idRes) { while ($r = $idRes->fetch_assoc()) $ids[] = (int)$r['id']; }
-    $ins2 = $db->prepare("INSERT IGNORE INTO status_uptime (service_id, date, uptime_pct) VALUES (?,?,100.00)");
-    if ($ins2 && $ids) {
-        for ($i = 89; $i >= 0; $i--) {
-            $date = date('Y-m-d', strtotime("-{$i} days"));
-            foreach ($ids as $sid) {
-                $ins2->bind_param('is', $sid, $date);
-                $ins2->execute();
-            }
-        }
-        $ins2->close();
-    }
+        // Uptime history is NOT pre-seeded. It used to be written here as
+        // 100.00 for every service and every one of the last 90 days, which
+        // published uptime that had never been measured. Real values are
+        // recorded by status_sync_today_uptime() as they happen.
 }
 
 api_enforce_post_and_origin_for_actions([
@@ -376,8 +296,11 @@ api_enforce_post_and_origin_for_actions([
 ]);
 
 if ($action === 'get_status') {
-    status_backfill_uptime_history($db, 90);
-    status_sync_today_uptime($db);
+    // NOTE: this is a public, anonymous GET and must stay a pure read.
+    // It previously ran the 90-day backfill (~810 INSERT IGNORE statements)
+    // plus an upsert pass on EVERY request, and reported 100% uptime for
+    // services it never actually checked. Real probing and uptime
+    // bookkeeping now live in cron/status_probe.php.
     $services = [];
     $sr = $db->prepare("SELECT * FROM status_services ORDER BY category, sort_order");
     $sr->execute();

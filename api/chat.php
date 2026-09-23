@@ -11,6 +11,13 @@ require_once __DIR__ . '/lib/finance.php';
 // computed alongside the trace id, above the remaining routing requires.
 require_once __DIR__ . '/lib/chat/orchestrator.php';
 
+// The session MUST exist before anything reads $_SESSION. This call used to
+// sit below, after $isDevMode was already computed, so $_SESSION was empty
+// and $isDevMode was permanently false: the display_errors dev toggle never
+// fired, and any check keyed on it silently misbehaved.
+// lyra_session_boot() is idempotent, so calling it here is safe.
+lyra_session_boot();
+
 /* Was a cookie check, which anyone could satisfy. This only allows
  * display_errors when APP_DEBUG=1, so it is a display toggle rather than an
  * authorization, but it keyed off a cookie nobody had to authenticate for. A
@@ -26,7 +33,6 @@ if ($isDevMode && $isDebugEnabled) {
 }
 error_reporting(E_ALL);
 
-lyra_session_boot();
 api_json_headers();
 header('Cache-Control: no-store, private, max-age=0');
 $requestStartedAt = microtime(true);
@@ -134,13 +140,35 @@ $chatRuntimeState = chat_service_runtime_state($db, 'ai-chat-api');
 if ($chatHealthRequested) {
     $localHealth = chat_local_runtime_health();
     $routerMap = chat_model_router_map();
+    // ── Disclosure boundary ─────────────────────────────────────────────
+    // This endpoint answers a bare unauthenticated GET. The model routing
+    // map and the local model inventory describe internal architecture and
+    // are not needed to answer "is it up?". The admin panel already gate
+    // the same data to a developer session, so the API now matches it.
+    // Keys keep their original types so existing consumers cannot break.
+    if (!$isDevMode) {
+        $routerMap = [];
+        if (isset($localHealth['loaded_models']) && is_array($localHealth['loaded_models'])) {
+            $localHealth['loaded_models'] = [];
+        }
+        // configured_model names the live model as well, so it is withheld
+        // on the same basis as the routing map and the model inventory.
+        $localHealth['configured_model'] = '';
+    }
+
     echo json_encode([
         'success' => true,
         'service' => 'ai-chat-api',
         'ok' => !$db->connect_error && ($localHealth['ok'] ?? false),
         'db' => [
             'connected' => !$db->connect_error,
-            'error' => $db->connect_error ?: null,
+            // Never hand raw connection-error text to an anonymous caller.
+            // mysqli's connect_error can contain the database user, host
+            // and driver detail -- e.g. "Access denied for user
+            // 'admin_xyz'@'localhost'" -- which is exactly the kind of
+            // thing that leaks during the outage you are trying to debug.
+            // The boolean stays, so monitoring still sees connected=false.
+            'error' => $isDevMode ? ($db->connect_error ?: null) : null,
         ],
         'runtime' => $localHealth,
         'routing' => [
@@ -246,6 +274,7 @@ require_once __DIR__ . '/lib/chat/tool_protocol.php';
 require_once __DIR__ . '/lib/chat/sandbox_executor.php';
 require_once __DIR__ . '/lib/chat/data_plane.php';
 require_once __DIR__ . '/lib/chat/serp_quality.php';
+require_once __DIR__ . '/lib/chat/prompt_budget.php';
 require_once __DIR__ . '/lib/chat/claim_verification.php';
 require_once __DIR__ . '/lib/chat/claim_verification_apply.php';
 require_once __DIR__ . '/lib/chat/tenancy.php';
@@ -1958,7 +1987,7 @@ $isTrivialArithmeticTurn = !$taskMode
     && !$attachmentMeta
     && strlen(trim((string)$latestUserMsg)) > 0
     && strlen(trim((string)$latestUserMsg)) <= 120
-    && preg_match('/\d\s*[-+*\/x\u00d7\u00f7^]\s*\d/iu', (string)$latestUserMsg) === 1
+    && preg_match('/\d\s*[-+*\/x\x{00d7}\x{00f7}^]\s*\d/iu', (string)$latestUserMsg) === 1
     && preg_match('/\b(what|how much|calculate|compute|solve|equals?)\b|\?/iu', (string)$latestUserMsg) === 1;
 if ($isTrivialArithmeticTurn) {
     $replyMaxTokens = min($replyMaxTokens, 64);
@@ -2061,6 +2090,15 @@ if ($streamUltraFastMode) {
 // CALL GROQ FOR REPLY (with timing)
 // ════════════════════════════════
 $groqStart    = microtime(true);
+// Prompt-budget telemetry. Additive and best-effort: it reads state and
+// never alters the prompt, so it cannot change model behaviour.
+chat_prompt_budget_log($systemPrompt, $trimmedMsgs, (string)$userModel, (string)$userProvider, [
+    'degraded'  => !empty($degradedMode),
+    'multipart' => !empty($multipartDeepRequest),
+    'safety'    => isset($safetySystemPrompt) && $safetySystemPrompt !== '',
+    'task_mode' => !empty($taskMode),
+]);
+
 $fullMessages = array_merge([['role' => 'system', 'content' => $systemPrompt]], $trimmedMsgs);
 
 // Runtime tool context. Assembled here, immediately before the model call and

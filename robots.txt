@@ -1,9 +1,14 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /cron/
 Disallow: /pages/admin
 Disallow: /pages/support_admin
 Disallow: /pages/maintenance
-Disallow: /cron/
+Disallow: /pages/marketing_admin
+Disallow: /pages/reseller_admin
+Disallow: /pages/security_log
+Disallow: /pages/dev-stats
+Disallow: /pages/dataset_manager
 
-Sitemap: http://lyralinkai.com/sitemap.xml
+Sitemap: https://lyralinkai.com/sitemap.xml

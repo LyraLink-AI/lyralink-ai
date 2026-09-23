@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/asset_version.php';
 require_once __DIR__ . '/../api/session_boot.php';
 /* No session is created for an anonymous visitor; an existing
  * one is continued so a signed-in developer is recognised. */
@@ -215,8 +216,8 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
             .legend { flex-wrap: wrap; gap: 8px; padding: 10px 14px; font-size: 10px; }
         }
     </style>
-    <link rel="stylesheet" href="/assets/css/mobile.css">
-    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(lyra_asset_url('/assets/css/mobile.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(lyra_asset_url('/assets/css/lyra-theme.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>
@@ -311,7 +312,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     <a href="/">Lyralink AI</a>
     <a href="/pages/support/">Support</a>
     <a href="https://discord.gg/JhyPNs5Khn" target="_blank">Discord</a>
-    <div class="footer-copy"> <?= date('Y') ?> Lyralink | An LyralinkAI Company</div>
+    <div class="footer-copy"> <?= date('Y') ?> Lyralink | An ARXD LLC Company</div>
 </footer>
 
 <script>

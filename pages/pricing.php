@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../api/asset_version.php';
 require_once __DIR__ . '/../api/session_boot.php';
 lyra_session_boot();
 require_once __DIR__ . '/../api/security.php';
@@ -227,8 +228,8 @@ $usageMinUnits = max(0, (int)api_get_secret('CHAT_USAGE_MIN_UNITS_PER_REQUEST', 
             .faq-section { padding: 0 16px 60px; }
         }
     </style>
-    <link rel="stylesheet" href="/assets/css/mobile.css">
-    <link rel="stylesheet" href="/assets/css/lyra-theme.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(lyra_asset_url('/assets/css/mobile.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(lyra_asset_url('/assets/css/lyra-theme.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <script src="/assets/js/lyra-theme.js"></script>
 </head>
 <body>

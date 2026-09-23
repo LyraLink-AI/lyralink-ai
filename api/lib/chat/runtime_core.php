@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/llm_capacity.php';
+
 function chat_db_table_exists(mysqli $db, string $table): bool {
     static $cache = [];
     if ($db->connect_error) {
@@ -112,6 +114,115 @@ function chat_local_runtime_health(): array {
         'model_available' => in_array($configuredModel, $models, true),
         'loaded_models' => $models,
     ];
+}
+
+/**
+ * Probe the remote (GPU) runtime and cache the verdict briefly.
+ *
+ * The local equivalent, chat_local_runtime_health(), already existed; remote
+ * had nothing. Without it the capacity gate could only see how many remote
+ * slots were BUSY, which means a dead GPU looked idle and was still chosen.
+ * Every request routed to it then paid a full connect timeout before falling
+ * back, which is the exact wasted-timeout cost the gate exists to remove.
+ *
+ * This matters more than usual here because the GPU is a spot instance reached
+ * over a hand-established SSH tunnel, so it can disappear without warning in
+ * ways that leave the local port looking fine.
+ *
+ * Caching rationale: probing on every request would add a round trip to the
+ * happy path, and cost the entire timeout on every request during an outage.
+ * So a healthy verdict is cached briefly (okTtl) and an unhealthy one for
+ * longer (failTtl), keeping both the steady state and an outage cheap.
+ *
+ * @return array{ok:bool,url:?string,http_code:int,request_ms:int,error:?string,cached:bool}
+ */
+function chat_remote_runtime_health(
+    array $candidates,
+    int $connectTimeout = 2,
+    int $totalTimeout = 4,
+    int $okTtl = 5,
+    int $failTtl = 20
+): array {
+    $unhealthy = [
+        'ok' => false, 'url' => null, 'http_code' => 0,
+        'request_ms' => 0, 'error' => null, 'cached' => false,
+    ];
+
+    if (empty($candidates)) {
+        $unhealthy['error'] = 'no remote candidates configured';
+        return $unhealthy;
+    }
+
+    if (llm_capacity_secret('REMOTE_LLM_HEALTH_PROBE', '1') !== '1') {
+        /* Probe disabled: report healthy so routing is unchanged. Failing open
+         * is the correct default, since refusing here would remove the paid
+         * path entirely if this one setting were misconfigured. */
+        return ['ok' => true, 'url' => null, 'http_code' => 0,
+                'request_ms' => 0, 'error' => null, 'cached' => false];
+    }
+
+    $cacheFile = llm_capacity_state_dir() . '/remote_health.json';
+    $now = microtime(true);
+
+    if (is_file($cacheFile)) {
+        $raw = @file_get_contents($cacheFile);
+        $cached = is_string($raw) ? json_decode($raw, true) : null;
+        if (is_array($cached) && isset($cached['ts'], $cached['ok'])) {
+            $ttl = $cached['ok'] ? $okTtl : $failTtl;
+            if (($now - (float)$cached['ts']) < $ttl) {
+                $cached['cached'] = true;
+                return $cached;
+            }
+        }
+    }
+
+    $result = $unhealthy;
+    $timeout = max(1, min($totalTimeout, (int)llm_capacity_secret('REMOTE_LLM_HEALTH_TIMEOUT', (string)$totalTimeout)));
+
+    foreach ($candidates as $candidate) {
+        $root = preg_replace('#/v1$#', '', (string)$candidate) ?: (string)$candidate;
+        $ch = curl_init(rtrim($root, '/') . '/api/tags');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => max(1, $connectTimeout),
+            CURLOPT_HTTPGET => true,
+        ]);
+        $started = microtime(true);
+        $body = curl_exec($ch);
+        $requestMs = (int)round((microtime(true) - $started) * 1000);
+        $err = curl_error($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($body !== false && $httpCode >= 200 && $httpCode < 300) {
+            $result = [
+                'ok' => true, 'url' => $root, 'http_code' => $httpCode,
+                'request_ms' => $requestMs, 'error' => null, 'cached' => false,
+            ];
+            break;
+        }
+
+        /* Record the last failure so the log says why, then try the next. */
+        $result = [
+            'ok' => false, 'url' => $root, 'http_code' => $httpCode,
+            'request_ms' => $requestMs,
+            'error' => $err !== '' ? $err : ('http ' . $httpCode),
+            'cached' => false,
+        ];
+    }
+
+    $result['ts'] = $now;
+    $dir = llm_capacity_state_dir();
+    if (llm_capacity_ensure_dir($dir)) {
+        @file_put_contents(
+            $cacheFile,
+            json_encode($result, JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
+
+    return $result;
 }
 
 function chat_transform_messages_for_ollama(array $messages): array {
@@ -571,7 +682,15 @@ function chat_provider_stream_request(array $messages, int $maxTokens, float $te
     }
 
     if (in_array($provider, ['local', 'hermes'], true)) {
-        return chat_local_stream_request($messages, $maxTokens, $temperature, $model, $meta, $deadlineTs, $onDelta);
+        /* Local streaming bypasses $doRequest, so take the local slot here
+         * or local load would be undercounted and the routing gate above
+         * would believe the CPU was idle while a long generation ran. */
+        $capacityLocalSlot = llm_capacity_acquire('local');
+        try {
+            return chat_local_stream_request($messages, $maxTokens, $temperature, $model, $meta, $deadlineTs, $onDelta);
+        } finally {
+            llm_capacity_release($capacityLocalSlot['handle'] ?? null);
+        }
     }
 
     $resolvedModel = trim((string)$model);
@@ -1072,6 +1191,76 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         return $hasContent ? $content : false;
     };
 
+    /* Pool-aware wrapper around $doRequest.
+     *
+     * Every LLM transport call in this file goes through $doRequest, so this is
+     * the single place where a pool slot can be taken and reliably returned.
+     * try/finally guarantees the release even if the transport throws, so a
+     * slot cannot leak on an exception path. Combined with the fact that the
+     * kernel drops flock when a process dies, a fatal or an OOM-killed worker
+     * cannot leave a slot permanently held.
+     *
+     * Remote is enforced: with no free GPU slot this returns false at once, so
+     * the existing fallback chain moves the request to local immediately
+     * instead of first burning a 10-35 s remote timeout.
+     *
+     * Local is tracked but never refused. Returning false there would surface
+     * an error to the user, and local is the last resort, so it must stay a
+     * best-effort path. Its slot count is used only as a routing signal.
+     */
+    $doRequestGated = function (
+        string $url,
+        array $headers,
+        array $data,
+        string $effectiveProvider,
+        string $modelName,
+        int $connectTimeout,
+        int $timeout
+    ) use ($doRequest, &$meta): string|false {
+        $capacityPool = null;
+        if ($effectiveProvider === 'remote') {
+            $capacityPool = 'remote';
+        } elseif ($effectiveProvider === 'local') {
+            $capacityPool = 'local';
+        }
+
+        /* Benchmarks bypass capacity control entirely so a benchmark run
+         * takes no slots and logs no events, keeping series comparable
+         * with the existing local-only benchmark convention. */
+        if ($capacityPool === null
+            || !llm_capacity_enabled()
+            || chat_runtime_is_benchmark_mode()
+        ) {
+            return $doRequest($url, $headers, $data, $effectiveProvider, $modelName, $connectTimeout, $timeout);
+        }
+
+        $capacitySlot = llm_capacity_acquire($capacityPool);
+
+        if ($capacityPool === 'remote' && $capacitySlot['state'] !== 'acquired') {
+            if ($meta !== null) {
+                $meta = [
+                    'provider' => $effectiveProvider,
+                    'model' => $modelName,
+                    'error' => 'remote pool saturated; deferred to local',
+                    'capacity_shed' => true,
+                    'transport_failure' => true,
+                ];
+            }
+            llm_capacity_note('remote_dispatch_refused', [
+                'model' => $modelName,
+                'remote_capacity' => llm_capacity_pool_capacity('remote'),
+            ]);
+
+            return false;
+        }
+
+        try {
+            return $doRequest($url, $headers, $data, $effectiveProvider, $modelName, $connectTimeout, $timeout);
+        } finally {
+            llm_capacity_release($capacitySlot['handle'] ?? null);
+        }
+    };
+
     if ($provider === 'groq') {
         $key = trim((string)api_get_secret('GROQ_API_KEY', ''));
         if ($key === '') {
@@ -1085,7 +1274,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         if ($deadlineRemaining !== null) {
             $requestTimeout = min($requestTimeout, max(4, $deadlineRemaining));
         }
-        $r = $doRequest(
+        $r = $doRequestGated(
             'https://api.groq.com/openai/v1/chat/completions',
             ['Content-Type: application/json', 'Authorization: Bearer ' . $key],
             ['model'=>$resolvedModel,'messages'=>$messages,'max_tokens'=>$maxTokens,'temperature'=>$temperature,'stream'=>false],
@@ -1107,7 +1296,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         if ($deadlineRemaining !== null) {
             $requestTimeout = min($requestTimeout, max(4, $deadlineRemaining));
         }
-        $r = $doRequest(
+        $r = $doRequestGated(
             'https://openrouter.ai/api/v1/chat/completions',
             ['Content-Type: application/json', 'Authorization: Bearer ' . $key],
             ['model'=>$resolvedModel,'messages'=>$messages,'max_tokens'=>$maxTokens,'temperature'=>$temperature,'stream'=>false],
@@ -1129,7 +1318,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         if ($deadlineRemaining !== null) {
             $requestTimeout = min($requestTimeout, max(4, $deadlineRemaining));
         }
-        $r = $doRequest(
+        $r = $doRequestGated(
             'https://api.openai.com/v1/chat/completions',
             ['Content-Type: application/json', 'Authorization: Bearer ' . $key],
             ['model'=>$resolvedModel,'messages'=>$messages,'max_tokens'=>$maxTokens,'temperature'=>$temperature,'stream'=>false],
@@ -1196,6 +1385,87 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
         $remoteImageOffloadEnabled = false;
     }
 
+    /* ---- Lyralink LLM capacity gate (see lib/chat/llm_capacity.php) -------
+     *
+     * Measured 2026-09-23 over a 183-request ramp: the remote GPU serves 2
+     * parallel slots and the local box 1 (OLLAMA_NUM_PARALLEL=1 is deliberate
+     * there). Past those counts aggregate throughput stops rising and then
+     * falls, while first-token latency reaches 127 s at 30 concurrent.
+     * Ignoring that causes two concrete harms:
+     *
+     *   1. A request dispatched to a saturated remote pool waits out its whole
+     *      10-35 s remote timeout and then falls back to local anyway, while
+     *      the GPU keeps processing the abandoned request and grows backlog.
+     *   2. Work pushed onto local CPU competes with PHP-FPM and MySQL on the
+     *      same 6-core production box, degrading the site for everyone.
+     *
+     * Policy, covering overflow in both directions:
+     *   - remote saturated -> stop offering remote so the request takes the
+     *     local path immediately rather than burning a timeout first.
+     *   - local saturated and remote has room -> offer remote for eligible
+     *     short requests, moving work off the CPU.
+     *
+     * Advisory and fail-open: this only ever removes remote from consideration
+     * or adds it back. It never blocks a request that would otherwise proceed,
+     * and an unusable state directory degrades to "untracked" rather than an
+     * error. Skipped in benchmark mode so benchmark series stay comparable,
+     * matching the existing local-only convention.
+     */
+    if (llm_capacity_enabled() && !chat_runtime_is_benchmark_mode()) {
+        $capacitySnapshot = llm_capacity_snapshot();
+        $capacityRemote = $capacitySnapshot['remote'] ?? ['capacity' => 0, 'active' => 0, 'free' => 1];
+        $capacityLocal = $capacitySnapshot['local'] ?? ['capacity' => 0, 'active' => 0, 'free' => 1];
+        $capacityShortEligible = !$hasImages
+            && !empty($remoteCandidates)
+            && $maxTokens < 600
+            && !$multipartDeepRequest
+            && !($preferFullReplies && $maxTokens >= 300);
+
+        /* Health before occupancy. A dead GPU has zero busy slots, so an
+         * occupancy-only gate reads it as idle and dispatches to it, burning
+         * a full connect timeout per request before the local fallback. */
+        $capacityRemoteHealth = chat_remote_runtime_health($remoteCandidates);
+        if (!empty($remoteCandidates) && !$capacityRemoteHealth['ok']) {
+            /* Only log a FRESH detection. The verdict is cached for failTtl,
+             * and logging every request during a long outage wrote thousands
+             * of identical lines, burying the signal. Keying off 'cached'
+             * rate-limits this to one line per probe cycle with no extra state. */
+            if (empty($capacityRemoteHealth['cached'])) {
+                llm_capacity_note('remote_unhealthy_stand_down', [
+                    'remote_url' => $capacityRemoteHealth['url'],
+                    'http_code' => $capacityRemoteHealth['http_code'],
+                    'request_ms' => $capacityRemoteHealth['request_ms'],
+                    'error' => $capacityRemoteHealth['error'],
+                ]);
+            }
+            $remoteLoadBalanceEnabled = false;
+            $routeShortRequestsToRemote = false;
+            $routeOnLocalSlow = false;
+            $preferRemoteForDeep = false;
+            $remoteImageOffloadEnabled = false;
+        } elseif ($capacityRemote['free'] <= 0) {
+            llm_capacity_note('remote_saturated_stand_down', [
+                'remote_active' => $capacityRemote['active'],
+                'remote_capacity' => $capacityRemote['capacity'],
+                'local_active' => $capacityLocal['active'],
+            ]);
+            $remoteLoadBalanceEnabled = false;
+            $routeShortRequestsToRemote = false;
+            $routeOnLocalSlow = false;
+            $preferRemoteForDeep = false;
+            $remoteImageOffloadEnabled = false;
+        } elseif ($capacityLocal['free'] <= 0 && $capacityShortEligible) {
+            llm_capacity_note('local_saturated_overflow_to_remote', [
+                'local_active' => $capacityLocal['active'],
+                'local_capacity' => $capacityLocal['capacity'],
+                'remote_free' => $capacityRemote['free'],
+                'max_tokens' => $maxTokens,
+            ]);
+            $remoteLoadBalanceEnabled = true;
+            $routeShortRequestsToRemote = true;
+        }
+    }
+
     if ($remoteImageOffloadEnabled) {
         $remoteImageTimeout = max(15, min(35, (int)api_get_secret('REMOTE_LLM_IMAGE_TIMEOUT', '30')));
         $remoteImagePredictCap = max(192, min(384, (int)api_get_secret('REMOTE_LLM_IMAGE_MAX_TOKENS', '256')));
@@ -1215,7 +1485,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
                 : $remoteImageTimeout;
 
             foreach ($remoteImageModelCandidates as $remoteImageModel) {
-                $remoteImageReply = $doRequest(
+                $remoteImageReply = $doRequestGated(
                     $remoteRootUrl . '/api/chat',
                     chat_ollama_headers($remoteImageApiKey),
                     [
@@ -1279,7 +1549,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
             $remoteApiKey = trim((string)api_get_secret('REMOTE_LLM_API_KEY', 'local-ollama'));
 
             foreach ($remoteModelCandidates as $remoteModel) {
-                $remoteRequest = $doRequest(
+                $remoteRequest = $doRequestGated(
                     $remoteRootUrl . '/api/chat',
                     chat_ollama_headers($remoteApiKey),
                     [
@@ -1356,7 +1626,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
                 : (in_array($routeIntent, ['code', 'research', 'reasoning'], true) ? $routeIntent : 'reasoning');
             $remoteModelCandidates = [llm_remote_brain_model_for_intent($remoteIntent, $resolvedModel)];
             foreach ($remoteModelCandidates as $remoteModel) {
-                $remoteRequest = $doRequest(
+                $remoteRequest = $doRequestGated(
                     $remoteRootUrl . '/api/chat',
                     chat_ollama_headers($remoteApiKey),
                     [
@@ -1399,7 +1669,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
     }
 
     $deadlineRemaining = $deadlineTs !== null ? max(1, (int)floor($deadlineTs - microtime(true))) : null;
-    $r = $doRequest(
+    $r = $doRequestGated(
         $localRootUrl . '/api/chat',
         chat_ollama_headers($localApiKey),
         [
@@ -1476,7 +1746,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
                 $fallbackTimeout = min($fallbackTimeout, max(4, $deadlineRemaining));
             }
             $retryMaxTokens = $hasImages ? min($maxTokens, 192) : min($maxTokens, $preferFullReplies ? 320 : 220);
-            $retryResult = $doRequest(
+            $retryResult = $doRequestGated(
                 $localRootUrl . '/api/chat',
                 chat_ollama_headers($localApiKey),
                 [
@@ -1512,7 +1782,7 @@ function callLlm(string $provider, array $messages, int $maxTokens = 1024, float
                 $remoteRootUrl = preg_replace('#/v1$#', '', $remoteBaseUrl) ?: $remoteBaseUrl;
 
                 foreach ($remoteModelCandidates as $remoteModel) {
-                    $remoteResult = $doRequest(
+                    $remoteResult = $doRequestGated(
                         $remoteRootUrl . '/api/chat',
                         chat_ollama_headers($remoteApiKey),
                         [

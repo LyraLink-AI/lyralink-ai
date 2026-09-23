@@ -63,6 +63,9 @@ function status_sync_today_uptime(mysqli $db): void {
 }
 
 function status_backfill_uptime_history(mysqli $db, int $days = 90): void {
+        // Disabled: this fabricated 100.00 uptime for the past N days for
+        // every service. Never-measured uptime must not be published.
+        return;
     $days = max(1, min($days, 365));
     $rows = $db->query("SELECT id, status FROM status_services ORDER BY id ASC");
     if (!$rows) {
@@ -355,17 +358,10 @@ if ($svcCount === 0) {
     $idRes = $idRes->get_result();
     $ids = [];
     if ($idRes) { while ($r = $idRes->fetch_assoc()) $ids[] = (int)$r['id']; }
-    $ins2 = $db->prepare("INSERT IGNORE INTO status_uptime (service_id, date, uptime_pct) VALUES (?,?,100.00)");
-    if ($ins2 && $ids) {
-        for ($i = 89; $i >= 0; $i--) {
-            $date = date('Y-m-d', strtotime("-{$i} days"));
-            foreach ($ids as $sid) {
-                $ins2->bind_param('is', $sid, $date);
-                $ins2->execute();
-            }
-        }
-        $ins2->close();
-    }
+        // Uptime history is NOT pre-seeded. It used to be written here as
+        // 100.00 for every service and every one of the last 90 days, which
+        // published uptime that had never been measured. Real values are
+        // recorded by status_sync_today_uptime() as they happen.
 }
 
 api_enforce_post_and_origin_for_actions([

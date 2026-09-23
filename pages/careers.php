@@ -14,7 +14,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Careers — Lyralink</title>
     <link rel="icon" type="image/x-icon" href="/images/lyralinkai.ico">
-    <meta name="description" content="Join the team building the future of AI. Open roles at Lyralink.">
+    <meta name="description" content="Work on the future of AI. Open roles at Lyralink.">
     <link rel="canonical" href="http://lyralinkai.com/pages/careers/">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
     <style>
@@ -239,9 +239,9 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
             <div class="perk-item"><div class="perk-icon">🌍</div><div class="perk-text"><strong>Fully Remote</strong>Work from anywhere in the world, async-first culture.</div></div>
             <div class="perk-item"><div class="perk-icon">⚡</div><div class="perk-text"><strong>Move Fast</strong>No red tape. Ideas ship in days, not quarters.</div></div>
             <div class="perk-item"><div class="perk-icon">🧠</div><div class="perk-text"><strong>AI-First Workplace</strong>Use the latest AI tools every day — you're building them.</div></div>
-            <div class="perk-item"><div class="perk-icon">📈</div><div class="perk-text"><strong>Equity</strong>Everyone gets a stake in what they're building.</div></div>
-            <div class="perk-item"><div class="perk-icon">🎯</div><div class="perk-text"><strong>Ownership</strong>Small team = massive scope. You own entire product surfaces.</div></div>
-            <div class="perk-item"><div class="perk-icon">💻</div><div class="perk-text"><strong>Top Equipment</strong>Best-in-class hardware and software budget, no questions asked.</div></div>
+            <div class="perk-item"><div class="perk-icon">📈</div><div class="perk-text"><strong>Direct Impact</strong>Your work ships to real users, not into a backlog.</div></div>
+            <div class="perk-item"><div class="perk-icon">🎯</div><div class="perk-text"><strong>Wide Scope</strong>Work across the whole stack, not one narrow slice of it.</div></div>
+            <div class="perk-item"><div class="perk-icon">💻</div><div class="perk-text"><strong>Your Setup</strong>Work with the tools and environment you already use.</div></div>
         </div>
     </div>
 
@@ -270,7 +270,7 @@ if (file_exists(__DIR__ . '/../maintenance.flag') && !lyra_dev_preview()) {
     <a href="/pages/support/">Support</a>
     <a href="/pages/tos/">Terms</a>
     <a href="/pages/status/">Status</a>
-    <div class="footer-copy">© <?= date('Y') ?> Lyralink · An ARXD Hosting Company</div>
+    <div class="footer-copy">© <?= date('Y') ?> Lyralink · An ARXD LLC Company</div>
 </footer>
 
 <!-- APPLICATION MODAL -->
